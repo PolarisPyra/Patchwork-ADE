@@ -473,6 +473,43 @@ pub fn open_in_editor(root: &str, rel: &str) -> Result<(), String> {
     Err(format!("No editor found (tried {})", candidates.join(", ")))
 }
 
+/// Read only model settings, without launching an inference request.
+fn configured_default_model(kind: AgentKind) -> Option<String> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let value = match kind {
+        AgentKind::Claude => {
+            if let Ok(model) = std::env::var("ANTHROPIC_MODEL") {
+                if !model.trim().is_empty() {
+                    return Some(model);
+                }
+            }
+            let dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+                .map(PathBuf::from)
+                .or_else(|| home.map(|h| h.join(".claude")))?;
+            let settings: Value =
+                serde_json::from_str(&std::fs::read_to_string(dir.join("settings.json")).ok()?)
+                    .ok()?;
+            settings.get("model")?.as_str()?.to_owned()
+        }
+        AgentKind::Codex => {
+            let dir = std::env::var_os("CODEX_HOME")
+                .map(PathBuf::from)
+                .or_else(|| home.map(|h| h.join(".codex")))?;
+            let settings: toml::Value =
+                toml::from_str(&std::fs::read_to_string(dir.join("config.toml")).ok()?).ok()?;
+            let profile_model = settings
+                .get("profile")
+                .and_then(toml::Value::as_str)
+                .and_then(|profile| settings.get("profiles")?.get(profile)?.get("model"));
+            profile_model
+                .or_else(|| settings.get("model"))?
+                .as_str()?
+                .to_owned()
+        }
+    };
+    (!value.trim().is_empty()).then_some(value)
+}
+
 /// Models offered for `kind`, starting with the CLI default.
 /// Claude Code aliases always resolve to the newest model of each family;
 /// Codex lists the models its CLI caches in `$CODEX_HOME/models_cache.json`.
@@ -480,6 +517,7 @@ pub fn list_models(kind: AgentKind) -> Vec<ModelOption> {
     let mut models = vec![ModelOption {
         id: None,
         label: "Default".into(),
+        default_model: configured_default_model(kind),
     }];
     match kind {
         AgentKind::Claude => {
@@ -492,6 +530,7 @@ pub fn list_models(kind: AgentKind) -> Vec<ModelOption> {
                 models.push(ModelOption {
                     id: Some(id.into()),
                     label: label.into(),
+                    default_model: None,
                 });
             }
         }
@@ -528,6 +567,7 @@ fn codex_models(json: &str) -> Vec<ModelOption> {
                 ModelOption {
                     id: Some(slug.into()),
                     label: label.into(),
+                    default_model: None,
                 },
             ))
         })

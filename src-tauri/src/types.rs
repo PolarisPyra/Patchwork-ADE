@@ -68,6 +68,8 @@ pub struct AgentStatus {
 pub struct ModelOption {
     pub id: Option<String>,
     pub label: String,
+    /// Configured CLI default; not a claim about a resumed session's runtime model.
+    pub default_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

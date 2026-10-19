@@ -44,6 +44,7 @@ export interface AgentStatus {
 export interface ModelOption {
   id: string | null;
   label: string;
+  defaultModel?: string | null;
 }
 
 export interface ToolCall {
@@ -129,10 +130,31 @@ export const AGENT_LABELS: Record<AgentKind, string> = {
 };
 
 
+const agentStatusCache: Partial<Record<AgentKind, AgentStatus>> = {};
+const pendingDetect: Partial<Record<AgentKind, Promise<AgentStatus>>> = {};
+
 export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
-  detectAgent: (kind: AgentKind) => invoke<AgentStatus>("detect_agent", { kind }),
+  detectAgent: async (kind: AgentKind, forceRefresh = false): Promise<AgentStatus> => {
+    if (!forceRefresh && agentStatusCache[kind]) {
+      return agentStatusCache[kind]!;
+    }
+    if (!pendingDetect[kind]) {
+      pendingDetect[kind] = invoke<AgentStatus>("detect_agent", { kind })
+        .then((status) => {
+          agentStatusCache[kind] = status;
+          delete pendingDetect[kind];
+          return status;
+        })
+        .catch((err) => {
+          delete pendingDetect[kind];
+          throw err;
+        });
+    }
+    return pendingDetect[kind]!;
+  },
+  getCachedAgentStatus: (kind: AgentKind): AgentStatus | undefined => agentStatusCache[kind],
   /** Models for an agent, starting with "Default" (the CLI's own choice). */
   listModels: (kind: AgentKind) => invoke<ModelOption[]>("list_models", { kind }),
 

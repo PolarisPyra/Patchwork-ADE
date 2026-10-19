@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowUp, Check, ChevronDown, Square } from "lucide-react";
-import { api, AGENT_LABELS, type AgentKind, type ModelOption } from "../api";
-import AgentIcon from "../components/AgentIcon";
-import Dropdown from "./Dropdown";
+import { ArrowUp, Square } from "lucide-react";
+import { api, type AgentKind, type ModelOption } from "../api";
+import ModelPicker from "./ModelPicker";
 
 interface ComposerProps {
   value: string;
@@ -53,7 +52,6 @@ export default function Composer({
   onPickModel,
 }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
-
   // Grow with the content; CSS min/max-height keep it between about 3 and 14 rows.
   useLayoutEffect(() => {
     const el = ref.current;
@@ -63,9 +61,6 @@ export default function Composer({
   }, [value]);
 
   const models = useModels(agents);
-  // An unknown id (e.g. a model no longer listed) is still shown by its id.
-  const modelLabel = models[agent]?.find((m) => m.id === model)?.label ?? model ?? "Default";
-
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -85,44 +80,7 @@ export default function Composer({
         onKeyDown={onKeyDown}
       />
       <div className="ws-composer-foot">
-        <Dropdown
-          up
-          trigger={({ toggle }) => (
-            <button className="ws-chip-btn" onClick={toggle} title={`${AGENT_LABELS[agent]} · ${modelLabel}`}>
-              <AgentIcon kind={agent} size={14} />
-              {modelLabel}
-              <ChevronDown size={12} />
-            </button>
-          )}
-        >
-          {(close) => (
-            <div className="ws-model-menu">
-              {agents.map((kind) => (
-                <div key={kind} role="group" aria-label={AGENT_LABELS[kind]}>
-                  <div className="ws-menu-group">
-                    <AgentIcon kind={kind} size={12} />
-                    {AGENT_LABELS[kind]}
-                  </div>
-                  {(models[kind] ?? []).map((m) => (
-                    <button
-                      key={m.id ?? "default"}
-                      className="ws-menu-item"
-                      onClick={() => {
-                        close();
-                        onPickModel(kind, m.id);
-                      }}
-                    >
-                      <span className="ws-check">
-                        {kind === agent && m.id === model && <Check size={13} />}
-                      </span>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-        </Dropdown>
+        <ModelPicker agent={agent} model={model} agents={agents} models={models} onPick={onPickModel} />
         <span className="ws-spacer" />
         {working ? (
           <button className="ws-send ws-stop" onClick={onStop} title="Stop" aria-label="Stop">

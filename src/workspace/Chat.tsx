@@ -142,7 +142,7 @@ export default function Chat({
             {!project && (
               <>
                 <p className="ws-muted">This chat has no project; the agent works in a private scratch folder.</p>
-                <button className="btn" onClick={onOpenFolder}>
+                <button className="btn ws-open-project-btn" onClick={onOpenFolder}>
                   <FolderPlus size={14} />
                   Open a project
                 </button>

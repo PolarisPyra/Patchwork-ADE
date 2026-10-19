@@ -99,9 +99,9 @@ export default function Sidebar(props: SidebarProps) {
   return (
     <aside className="ws-sidebar">
       {props.view === "tasks" ? <TasksView {...props} /> : <ChangesView {...props} />}
-      <div className="ws-agent-cards">
+      <div className="ws-agent-logos-bar">
         {props.agents.map((kind) => (
-          <AgentCard key={kind} agent={kind} />
+          <AgentLogoBadge key={kind} agent={kind} />
         ))}
       </div>
     </aside>
@@ -262,10 +262,9 @@ function ChangesView({ changes, onRefreshChanges, onOpenChange }: SidebarProps) 
   );
 }
 
-function AgentCard({ agent }: { agent: AgentKind }) {
-  const [status, setStatus] = useState<AgentStatus | null | undefined>(undefined);
+function AgentLogoBadge({ agent }: { agent: AgentKind }) {
+  const [status, setStatus] = useState<AgentStatus | null | undefined>(() => api.getCachedAgentStatus(agent));
 
-  // Detect once per agent kind (on mount, and if the default agent changes).
   useEffect(() => {
     let cancelled = false;
     api.detectAgent(agent).then(
@@ -281,13 +280,13 @@ function AgentCard({ agent }: { agent: AgentKind }) {
     };
   }, [agent]);
 
+  const desc = describeAgent(status);
+  const title = `${AGENT_LABELS[agent]} · ${desc}`;
+
   return (
-    <div className="ws-agent-card">
-      <AgentIcon kind={agent} size={24} />
-      <div className="ws-agent-text">
-        <div className="ws-agent-name">{AGENT_LABELS[agent]}</div>
-        <div className="ws-agent-sub">{describeAgent(status)}</div>
-      </div>
+    <div className="ws-agent-logo-badge" title={title} aria-label={title}>
+      <AgentIcon kind={agent} size={20} />
+      {status?.installed && status?.signedIn && <span className="ws-agent-dot-ready" />}
     </div>
   );
 }
