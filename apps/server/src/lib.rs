@@ -49,6 +49,7 @@ pub fn title_from(text: &str) -> String {
 impl Server {
     /// `config_dir` holds the database and config files; `data_dir` holds chat scratch folders.
     pub fn open(config_dir: PathBuf, data_dir: &Path, sink: EventSink) -> Res<Arc<Self>> {
+        provider::model_manifest::start(&config_dir);
         Ok(Arc::new(Self {
             store: Store::open(config_dir)?,
             usage: usage::UsageCache::default(),

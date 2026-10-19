@@ -55,9 +55,9 @@ pub fn configured_model() -> Option<String> {
         .map(String::from)
 }
 
-/// Current Gemini models, from the bundled model manifest.
+/// Current Gemini models, from the fetched model manifest.
 pub fn models() -> Vec<ModelOption> {
-    manifest_models("gemini")
+    model_manifest::models("gemini")
 }
 
 /// Gemini runs headless, so "default" cannot ask: actions that need approval are refused.

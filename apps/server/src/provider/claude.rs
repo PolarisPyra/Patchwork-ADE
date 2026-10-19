@@ -44,9 +44,9 @@ pub fn configured_model() -> Option<String> {
     Some(settings.get("model")?.as_str()?.to_owned())
 }
 
-/// Current Claude models, from the bundled model manifest.
+/// Current Claude models, from the fetched model manifest.
 pub fn models() -> Vec<ModelOption> {
-    manifest_models("claude")
+    model_manifest::models("claude")
 }
 
 /// The prompt is sent on stdin (`user_message`), so approvals can be answered there too.
