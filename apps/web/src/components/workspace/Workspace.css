@@ -371,6 +371,9 @@
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
 }
+.ws-sidebar .ws-muted-note {
+  color: var(--text-muted);
+}
 
 .ws-sidebar-search {
   flex: none;
@@ -422,7 +425,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 6px 4px;
-  color: var(--text-subtle);
+  color: var(--text-muted);
   font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
