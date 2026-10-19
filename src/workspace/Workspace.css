@@ -112,6 +112,10 @@
   font-size: 10px;
   font-weight: 700;
 }
+.ws-project-tile-chats {
+  background: var(--bg-accent-soft);
+  color: var(--accent-text);
+}
 
 .ws-project-label {
   max-width: 180px;
@@ -266,6 +270,12 @@
 .ws-menu-item:hover {
   background: var(--bg-hover);
 }
+.ws-menu-hint {
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--text-subtle);
+  font-size: var(--fs-xs);
+}
 
 .ws-menu-sep {
   height: 1px;
@@ -394,6 +404,10 @@
   font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+.ws-section-actions {
+  display: flex;
+  gap: 2px;
 }
 
 .ws-row {

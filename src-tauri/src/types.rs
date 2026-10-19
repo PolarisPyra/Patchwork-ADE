@@ -129,7 +129,8 @@ pub struct Message {
 #[serde(rename_all = "camelCase")]
 pub struct Thread {
     pub id: String,
-    pub project_id: String,
+    /// None for a chat without a project; it runs in a private scratch folder.
+    pub project_id: Option<String>,
     pub title: String,
     pub agent: AgentKind,
     pub model: Option<String>,

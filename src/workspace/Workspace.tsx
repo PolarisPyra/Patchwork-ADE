@@ -40,7 +40,8 @@ const CANVAS_MIN_PX = 340;
 const CANVAS_MAX_FRACTION = 0.7;
 
 export default function Workspace({ settings, updateSettings, resolvedTheme, toggleTheme }: WorkspaceProps) {
-  const project = settings.projects.find((p) => p.id === settings.activeProjectId) ?? settings.projects[0] ?? null;
+  // No active project means the "Chats" scope: conversations without a project.
+  const project = settings.projects.find((p) => p.id === settings.activeProjectId) ?? null;
   const projectId = project?.id ?? null;
   const defaultAgent = defaultAgentOf(settings);
   // Display order stays fixed; `settings.agents` order only marks the default.
@@ -86,11 +87,19 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
 
   const openFolder = () => attempt(() => openFolderAsProject(updateSettings));
 
-  const selectProject = (id: string) =>
+  const selectProject = (id: string | null) =>
     attempt(() => updateSettings((s) => ({ ...s, activeProjectId: id })));
 
-  const newTask = () => {
-    if (project) attempt(() => createThread({ agent: defaultAgent, model: null }));
+  const newTask = () => attempt(() => createThread({ agent: defaultAgent, model: null }));
+
+  /** Starts a project-less chat, switching to the Chats scope if needed. */
+  const newChat = () => {
+    if (!projectId) return newTask();
+    // Create first so the Chats list loaded after the switch already includes it.
+    attempt(async () => {
+      await api.createThread(null, defaultAgent, null);
+      await updateSettings((s) => ({ ...s, activeProjectId: null }));
+    });
   };
 
   const openCanvasAt = (path: string, message: Message | null, tab: CanvasTab) => {
@@ -140,19 +149,21 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
   });
 
   const paletteItems: PaletteItem[] = [
-    { id: "new-task", group: "Actions", label: "New task", hint: "Ctrl T", run: newTask },
+    { id: "new-task", group: "Actions", label: project ? "New task" : "New chat", hint: "Ctrl T", run: newTask },
+    { id: "new-chat", group: "Actions", label: "New chat without a project", run: newChat },
     { id: "toggle-theme", group: "Actions", label: "Toggle theme", run: toggleTheme },
     { id: "settings", group: "Actions", label: "Open settings", hint: "Ctrl ,", run: () => setSettingsOpen(true) },
     { id: "open-folder", group: "Actions", label: "Open folder…", run: openFolder },
     ...threads.map((t) => ({
       id: `task-${t.id}`,
-      group: "Tasks",
+      group: project ? "Tasks" : "Chats",
       label: t.title,
       run: () => {
         setView("tasks");
         select(t.id);
       },
     })),
+    { id: "chats", group: "Projects", label: "Chats", hint: "No project", run: () => selectProject(null) },
     ...settings.projects.map((p) => ({
       id: `project-${p.id}`,
       group: "Projects",
@@ -192,6 +203,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
             selectedId={selected?.id ?? null}
             changes={changes}
             onNewTask={newTask}
+            onNewChat={newChat}
             onSelectThread={select}
             onDeleteThread={(id) => attempt(() => deleteThread(id))}
             onSelectProject={selectProject}

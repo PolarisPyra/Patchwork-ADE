@@ -14,6 +14,12 @@ const SUGGESTIONS = [
   { label: "Write tests for…", prefill: "Write tests for " },
 ];
 
+const CHAT_SUGGESTIONS = [
+  { label: "Explain a concept", prefill: "Explain " },
+  { label: "Draft a script", prefill: "Write a script that " },
+  { label: "Review a snippet", prefill: "Review this code:\n" },
+];
+
 interface ChatProps {
   project: Project | null;
   thread: Thread | null;
@@ -94,7 +100,7 @@ export default function Chat({
 
   function submit() {
     const text = draft.trim();
-    if (!text || working || !project) return;
+    if (!text || working) return;
     setDraft("");
     void dispatch(text, true);
   }
@@ -124,23 +130,6 @@ export default function Chat({
     onSetModel(thread.id, next).catch((e: unknown) => setError(errorText(e)));
   }
 
-  if (!project) {
-    return (
-      <div className="ws-chat">
-        <div className="ws-chat-scroll">
-          <div className="ws-chat-empty">
-            <FolderPlus size={36} className="ws-icon-muted" />
-            <h2>Open a project to get started</h2>
-            <p className="ws-muted">Patchwork runs agents inside a project folder.</p>
-            <button className="btn btn-primary btn-lg" onClick={onOpenFolder}>
-              Open folder…
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="ws-chat">
       <div className="ws-chat-scroll" ref={scrollRef} onScroll={onScroll}>
@@ -149,15 +138,24 @@ export default function Chat({
             thread={thread}
             changes={changes}
             busy={working}
-            onOpenCanvas={onOpenCanvas}
+            onOpenCanvas={project ? onOpenCanvas : undefined}
             onRetry={retry}
           />
         ) : (
           <div className="ws-chat-empty">
             <AgentIcon kind={agent} size={40} />
-            <h2>What should we build in {project.name}?</h2>
+            <h2>{project ? `What should we build in ${project.name}?` : "What's on your mind?"}</h2>
+            {!project && (
+              <>
+                <p className="ws-muted">This chat has no project; the agent works in a private scratch folder.</p>
+                <button className="btn" onClick={onOpenFolder}>
+                  <FolderPlus size={14} />
+                  Open a project
+                </button>
+              </>
+            )}
             <div className="ws-suggestions">
-              {SUGGESTIONS.map((s) => (
+              {(project ? SUGGESTIONS : CHAT_SUGGESTIONS).map((s) => (
                 <button key={s.label} className="ws-chip" onClick={() => setDraft(s.prefill)}>
                   {s.label}
                 </button>

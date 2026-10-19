@@ -30,7 +30,8 @@ interface MessagesProps {
   thread: Thread;
   changes: FileChange[];
   busy: boolean;
-  onOpenCanvas: OpenCanvas;
+  /** Omitted for chats without a project: file cards are hidden. */
+  onOpenCanvas?: OpenCanvas;
   onRetry: (text: string) => void;
 }
 
@@ -73,7 +74,7 @@ interface AssistantProps {
   changes: FileChange[];
   retryText: string | null;
   busy: boolean;
-  onOpenCanvas: OpenCanvas;
+  onOpenCanvas?: OpenCanvas;
   onRetry: (text: string) => void;
 }
 
@@ -97,14 +98,15 @@ function AssistantMessage({
       {message.text && <Markdown text={message.text} />}
       {message.plan.length > 0 && <PlanList steps={message.plan} />}
       {message.tools.length > 0 && <ToolActivity tools={message.tools} />}
-      {message.files.map((path) => (
-        <FileCard
-          key={path}
-          path={path}
-          change={changes.find((c) => c.path === path)}
-          onOpen={() => onOpenCanvas(path, message, "code")}
-        />
-      ))}
+      {onOpenCanvas &&
+        message.files.map((path) => (
+          <FileCard
+            key={path}
+            path={path}
+            change={changes.find((c) => c.path === path)}
+            onOpen={() => onOpenCanvas(path, message, "code")}
+          />
+        ))}
       {message.error && <div className="ws-error-box">{message.error}</div>}
       {!streaming && (
         <div className="ws-actions">

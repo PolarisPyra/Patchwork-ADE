@@ -66,7 +66,8 @@ export interface Message {
 
 export interface Thread {
   id: string;
-  projectId: string;
+  /** null for a chat without a project (runs in a private scratch folder). */
+  projectId: string | null;
   title: string;
   agent: AgentKind;
   model: string | null;
@@ -144,9 +145,9 @@ export const api = {
     invoke<Project>("create_project", { parent, name }),
   removeProject: (id: string) => invoke<void>("remove_project", { id }),
 
-  /** Newest first. */
-  listThreads: (projectId: string) => invoke<Thread[]>("list_threads", { projectId }),
-  createThread: (projectId: string, agent: AgentKind, model: string | null) =>
+  /** Newest first. `null` lists the chats that have no project. */
+  listThreads: (projectId: string | null) => invoke<Thread[]>("list_threads", { projectId }),
+  createThread: (projectId: string | null, agent: AgentKind, model: string | null) =>
     invoke<Thread>("create_thread", { projectId, agent, model }),
   deleteThread: (id: string) => invoke<void>("delete_thread", { id }),
   setThreadModel: (id: string, model: string | null) =>

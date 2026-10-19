@@ -9,8 +9,6 @@ import {
   type Thread,
 } from "../api";
 
-export const NEW_TASK_TITLE = "New task";
-
 export interface NewThreadOptions {
   agent: AgentKind;
   model: string | null;
@@ -85,7 +83,8 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
 }
 
 /**
- * Threads for one project plus the selection. `select(null)` means no thread is
+ * Threads for one project (or, when `projectId` is null, the project-less
+ * chats) plus the selection. `select(null)` means no thread is
  * selected (the composer then creates one on send). `onTurnCompleted` fires after
  * any turn ends so the caller can refresh git state.
  */
@@ -98,9 +97,8 @@ export function useThreads(projectId: string | null, onTurnCompleted: () => void
     turnDone.current = onTurnCompleted;
   });
 
-  // Load the project's threads; the most recent one is selected by default.
+  // Load the project's threads (or the chats); the most recent one is selected by default.
   useEffect(() => {
-    if (!projectId) return;
     let cancelled = false;
     api.listThreads(projectId).then(
       (list) => {
@@ -142,7 +140,6 @@ export function useThreads(projectId: string | null, onTurnCompleted: () => void
   const selected = visible.find((t) => t.id === selectedId) ?? null;
 
   async function createThread(opts: NewThreadOptions): Promise<Thread> {
-    if (!projectId) throw new Error("No project is open");
     const thread = await api.createThread(projectId, opts.agent, opts.model);
     setThreads((prev) => [thread, ...prev]);
     setSelectedId(thread.id);
@@ -171,7 +168,8 @@ export function useThreads(projectId: string | null, onTurnCompleted: () => void
           ? t
           : {
               ...t,
-              title: t.title === NEW_TASK_TITLE ? titleFrom(text) : t.title,
+              // Mirrors the backend: the first message names the thread.
+              title: t.messages.length === 0 ? titleFrom(text) : t.title,
               messages: upsertMessage(t.messages, message),
             },
       ),

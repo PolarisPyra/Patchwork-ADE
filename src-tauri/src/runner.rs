@@ -49,12 +49,19 @@ impl Runner {
             let store = app.state::<Store>();
             let thread = store.thread(&thread_id).ok_or("Task not found")?;
             let settings = store.settings();
-            let root = settings
-                .projects
-                .iter()
-                .find(|p| p.id == thread.project_id)
-                .map(|p| p.path.clone())
-                .ok_or("Project not found")?;
+            let root = match &thread.project_id {
+                Some(id) => settings
+                    .projects
+                    .iter()
+                    .find(|p| &p.id == id)
+                    .map(|p| p.path.clone())
+                    .ok_or("Project not found")?,
+                None => {
+                    let dir = chat_dir(&app, &thread_id)?;
+                    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                    dir.to_string_lossy().into_owned()
+                }
+            };
             (
                 thread.agent,
                 root,
@@ -134,6 +141,12 @@ impl Runner {
             workspace::signal_process_group(turn.pid, libc::SIGTERM);
         }
     }
+}
+
+/// Scratch working directory for a chat that has no project.
+pub fn chat_dir(app: &AppHandle, thread_id: &str) -> Result<std::path::PathBuf, String> {
+    let base = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    Ok(base.join("chats").join(thread_id))
 }
 
 /// Everything the stdout reader needs to persist and publish one turn's events.

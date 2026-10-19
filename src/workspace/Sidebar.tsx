@@ -3,6 +3,7 @@ import {
   FolderPlus,
   GitCompareArrows,
   Loader2,
+  MessageSquarePlus,
   MessagesSquare,
   Plus,
   RefreshCw,
@@ -81,9 +82,12 @@ interface SidebarProps {
   selectedId: string | null;
   changes: FileChange[];
   onNewTask: () => void;
+  /** Starts a chat without a project (switches to the Chats scope). */
+  onNewChat: () => void;
   onSelectThread: (id: string) => void;
   onDeleteThread: (id: string) => void;
-  onSelectProject: (id: string) => void;
+  /** `null` selects the Chats scope (no project). */
+  onSelectProject: (id: string | null) => void;
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
@@ -117,6 +121,7 @@ function TasksView({
   threads,
   selectedId,
   onNewTask,
+  onNewChat,
   onSelectThread,
   onDeleteThread,
   onSelectProject,
@@ -124,14 +129,16 @@ function TasksView({
 }: SidebarProps) {
   return (
     <div className="ws-sidebar-scroll">
-      <button className="ws-new-task" onClick={onNewTask} disabled={!project}>
+      <button className="ws-new-task" onClick={onNewTask}>
         <Plus size={14} />
-        New task
+        {project ? "New task" : "New chat"}
         <kbd className="kbd">Ctrl T</kbd>
       </button>
 
-      <SectionLabel>Tasks</SectionLabel>
-      {threads.length === 0 && <div className="ws-muted-note">No tasks yet</div>}
+      <SectionLabel>{project ? "Tasks" : "Chats"}</SectionLabel>
+      {threads.length === 0 && (
+        <div className="ws-muted-note">{project ? "No tasks yet" : "No chats yet"}</div>
+      )}
       {threads.map((t) => {
         const last = t.messages[t.messages.length - 1];
         return (
@@ -162,13 +169,23 @@ function TasksView({
 
       <SectionLabel
         action={
-          <button className="btn-icon" title="Open folder…" aria-label="Open folder" onClick={onOpenFolder}>
-            <FolderPlus size={14} />
-          </button>
+          <span className="ws-section-actions">
+            <button className="btn-icon" title="New chat without a project" aria-label="New chat" onClick={onNewChat}>
+              <MessageSquarePlus size={14} />
+            </button>
+            <button className="btn-icon" title="Open folder…" aria-label="Open folder" onClick={onOpenFolder}>
+              <FolderPlus size={14} />
+            </button>
+          </span>
         }
       >
         Projects
       </SectionLabel>
+      <div className="ws-row" title="Conversations without a project" onClick={() => onSelectProject(null)}>
+        <span className={`ws-dot${project ? "" : " active"}`} />
+        <span className="ws-row-title">Chats</span>
+        <span className="ws-row-time">No project</span>
+      </div>
       {projects.map((p) => (
         <div key={p.id} className="ws-row" title={p.path} onClick={() => onSelectProject(p.id)}>
           <span className={`ws-dot${p.id === project?.id ? " active" : ""}`} />

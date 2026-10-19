@@ -1,4 +1,4 @@
-import { ChevronDown, FolderPlus, GitBranch, Moon, Search, Sun } from "lucide-react";
+import { ChevronDown, FolderPlus, GitBranch, MessagesSquare, Moon, Search, Sun } from "lucide-react";
 import { AGENT_LABELS, type Project, type Thread } from "../api";
 import Dropdown from "./Dropdown";
 
@@ -27,7 +27,8 @@ interface ToolbarProps {
   branch: string | null;
   thread: Thread | null;
   resolvedTheme: "light" | "dark";
-  onSelectProject: (id: string) => void;
+  /** `null` selects the Chats scope (no project). */
+  onSelectProject: (id: string | null) => void;
   onOpenFolder: () => void;
   onOpenPalette: () => void;
   toggleTheme: () => void;
@@ -56,16 +57,34 @@ export default function Toolbar({
       <Dropdown
         trigger={({ toggle }) => (
           <button className="ws-project-btn" onClick={toggle}>
-            <span className="ws-project-tile" style={{ background: tileColor(name) }}>
-              {initials(name)}
-            </span>
-            <span className="ws-project-label">{project?.name ?? "No project"}</span>
+            {project ? (
+              <span className="ws-project-tile" style={{ background: tileColor(name) }}>
+                {initials(name)}
+              </span>
+            ) : (
+              <span className="ws-project-tile ws-project-tile-chats">
+                <MessagesSquare size={12} />
+              </span>
+            )}
+            <span className="ws-project-label">{project?.name ?? "Chats"}</span>
             <ChevronDown size={14} />
           </button>
         )}
       >
         {(close) => (
           <>
+            <button
+              className="ws-menu-item"
+              onClick={() => {
+                close();
+                onSelectProject(null);
+              }}
+            >
+              <span className={`ws-dot${project ? "" : " active"}`} />
+              Chats
+              <span className="ws-menu-hint">No project</span>
+            </button>
+            <div className="ws-menu-sep" />
             {projects.map((p) => (
               <button
                 key={p.id}

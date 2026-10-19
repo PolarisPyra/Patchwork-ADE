@@ -80,13 +80,14 @@ fn remove_project(store: State<Store>, id: String) -> Res<()> {
             s.active_project_id = s.projects.first().map(|p| p.id.clone());
         }
     })?;
-    store.update_threads(|ts| ts.retain(|t| t.project_id != id))
+    store.update_threads(|ts| ts.retain(|t| t.project_id.as_deref() != Some(&id)))
 }
 
 // ---- threads & turns -----------------------------------------------------
 
 #[tauri::command]
-fn list_threads(store: State<Store>, project_id: String) -> Vec<Thread> {
+/// Threads of one project, or project-less chats when `project_id` is None.
+fn list_threads(store: State<Store>, project_id: Option<String>) -> Vec<Thread> {
     let mut ts: Vec<Thread> = store
         .threads()
         .into_iter()
@@ -99,15 +100,22 @@ fn list_threads(store: State<Store>, project_id: String) -> Vec<Thread> {
 #[tauri::command]
 fn create_thread(
     store: State<Store>,
-    project_id: String,
+    project_id: Option<String>,
     agent: AgentKind,
     model: Option<String>,
 ) -> Res<Thread> {
-    project_root(&store, &project_id)?;
+    if let Some(id) = &project_id {
+        project_root(&store, id)?;
+    }
+    let title = if project_id.is_some() {
+        "New task"
+    } else {
+        "New chat"
+    };
     let thread = Thread {
         id: new_id(),
         project_id,
-        title: "New task".into(),
+        title: title.into(),
         agent,
         model,
         session_id: None,
@@ -120,8 +128,16 @@ fn create_thread(
 }
 
 #[tauri::command]
-fn delete_thread(store: State<Store>, runner: State<Runner>, id: String) -> Res<()> {
+fn delete_thread(
+    app: tauri::AppHandle,
+    store: State<Store>,
+    runner: State<Runner>,
+    id: String,
+) -> Res<()> {
     runner.cancel(&id);
+    if store.thread(&id).is_some_and(|t| t.project_id.is_none()) {
+        let _ = std::fs::remove_dir_all(runner::chat_dir(&app, &id)?);
+    }
     store.update_threads(|ts| ts.retain(|t| t.id != id))
 }
 
