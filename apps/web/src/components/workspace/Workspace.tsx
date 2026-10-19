@@ -226,7 +226,6 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         project={project}
         projects={settings.projects}
         branch={branch}
-        thread={selected}
         onSelectProject={selectProject}
         onOpenFolder={openFolder}
       />

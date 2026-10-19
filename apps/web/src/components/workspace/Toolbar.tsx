@@ -1,7 +1,6 @@
 import { CaretDownIcon, ChatsIcon, FolderPlusIcon, GitBranchIcon } from "@phosphor-icons/react";
-import { AGENT_LABELS, type Project, type Thread } from "~/api";
+import type { Project } from "~/api";
 import Dropdown from "~/components/workspace/Dropdown";
-import { displayTitle } from "~/lib/util";
 
 const TILE_COLORS = [
   "var(--accent)",
@@ -26,7 +25,6 @@ interface ToolbarProps {
   project: Project | null;
   projects: Project[];
   branch: string | null;
-  thread: Thread | null;
   onSelectProject: (id: string) => void;
   onOpenFolder: () => void;
 }
@@ -35,7 +33,6 @@ export default function Toolbar({
   project,
   projects,
   branch,
-  thread,
   onSelectProject,
   onOpenFolder,
 }: ToolbarProps) {
@@ -98,15 +95,6 @@ export default function Toolbar({
               <GitBranchIcon size={14} />
               {branch}
             </span>
-          </>
-        )}
-      </div>
-
-      <div className="ws-toolbar-center">
-        {thread && (
-          <>
-            <span className="ws-title">{displayTitle(thread.title)}</span>
-            <span className="badge badge-accent">{AGENT_LABELS[thread.agent]}</span>
           </>
         )}
       </div>

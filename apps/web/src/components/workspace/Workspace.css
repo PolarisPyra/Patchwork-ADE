@@ -71,9 +71,7 @@
 /* ---- toolbar ------------------------------------------------------------ */
 
 .ws-toolbar {
-  /* Equal side columns keep the title centred on the whole header. */
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+  display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
@@ -149,23 +147,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.ws-toolbar-center {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  overflow: hidden;
-}
-
-.ws-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
 }
 
 .ws-segmented {
@@ -509,8 +490,15 @@
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   padding: 8px 10px;
+  background: color-mix(in srgb, var(--bg-hover) 40%, transparent);
+}
+.ws-thread-card:hover {
+  background: var(--bg-hover);
+}
+.ws-thread-card.selected {
+  background: var(--bg-selected);
 }
 .ws-card-line {
   min-width: 0;
@@ -521,12 +509,7 @@
 }
 .ws-card-logo {
   flex: none;
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  border-radius: 5px;
-  background: var(--bg-selected-muted);
+  display: inline-flex;
 }
 .ws-card-foot {
   justify-content: flex-end;

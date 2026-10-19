@@ -250,7 +250,7 @@ function ThreadRow({
           )
         )}
         <span className="ws-card-logo" title={AGENT_LABELS[thread.agent]}>
-          <ProviderLogos kind={thread.agent} size={12} />
+          <ProviderLogos kind={thread.agent} size={14} />
         </span>
       </div>
     </div>
