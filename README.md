@@ -4,7 +4,7 @@ An agentic development environment in the spirit of [t3code](https://github.com/
 
 Patchwork drives the **Claude Code** and **Codex** CLIs already installed and signed in on your machine. Each task is a conversation with one agent; edits land directly in your project, and you review them in the canvas (Plan / Code / Diff) where **Apply** stages a file (`git add`) and **Reject** restores it.
 
-You can also start a **chat without a project** (the Chats entry in the project switcher or sidebar). Those run in a private scratch folder under the app's data directory, which is deleted with the chat.
+The sidebar is a tree: **chats** without a project are top-level threads, and each project lists its own tasks (use its **+** to start one). Chats run in a private scratch folder under the app's data directory, which is deleted with the chat.
 
 ## Develop
 

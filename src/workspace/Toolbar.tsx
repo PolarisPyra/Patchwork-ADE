@@ -27,8 +27,7 @@ interface ToolbarProps {
   branch: string | null;
   thread: Thread | null;
   resolvedTheme: "light" | "dark";
-  /** `null` selects the Chats scope (no project). */
-  onSelectProject: (id: string | null) => void;
+  onSelectProject: (id: string) => void;
   onOpenFolder: () => void;
   onOpenPalette: () => void;
   toggleTheme: () => void;
@@ -66,25 +65,13 @@ export default function Toolbar({
                 <MessagesSquare size={12} />
               </span>
             )}
-            <span className="ws-project-label">{project?.name ?? "Chats"}</span>
+            <span className="ws-project-label">{project?.name ?? "No project"}</span>
             <ChevronDown size={14} />
           </button>
         )}
       >
         {(close) => (
           <>
-            <button
-              className="ws-menu-item"
-              onClick={() => {
-                close();
-                onSelectProject(null);
-              }}
-            >
-              <span className={`ws-dot${project ? "" : " active"}`} />
-              Chats
-              <span className="ws-menu-hint">No project</span>
-            </button>
-            <div className="ws-menu-sep" />
             {projects.map((p) => (
               <button
                 key={p.id}

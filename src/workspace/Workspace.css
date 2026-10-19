@@ -270,12 +270,6 @@
 .ws-menu-item:hover {
   background: var(--bg-hover);
 }
-.ws-menu-hint {
-  margin-left: auto;
-  padding-left: 16px;
-  color: var(--text-subtle);
-  font-size: var(--fs-xs);
-}
 
 .ws-menu-sep {
   height: 1px;
@@ -405,10 +399,6 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.ws-section-actions {
-  display: flex;
-  gap: 2px;
-}
 
 .ws-row {
   width: 100%;
@@ -469,6 +459,26 @@
 }
 .ws-row-delete:hover {
   color: var(--danger);
+}
+
+/* project rows in the task tree; their tasks are indented beneath */
+.ws-project-row-tree {
+  gap: 6px;
+}
+.ws-project-row-tree .ws-row-title {
+  font-weight: 500;
+}
+.ws-row-action {
+  display: none;
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.ws-row:hover .ws-row-action {
+  display: inline-flex;
+}
+.ws-tree-children {
+  padding-left: 14px;
 }
 
 .ws-change-name {
@@ -888,8 +898,8 @@ h5.ws-md-heading {
 .ws-composer {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 10px 8px 12px;
+  gap: 8px;
+  padding: 14px 12px 10px 16px;
   background: var(--bg-editor);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
@@ -899,8 +909,8 @@ h5.ws-md-heading {
 }
 
 .ws-composer-input {
-  min-height: 20px;
-  max-height: 200px;
+  min-height: 64px; /* about three lines */
+  max-height: 280px;
   padding: 0;
   overflow-y: auto;
   resize: none;

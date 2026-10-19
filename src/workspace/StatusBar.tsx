@@ -23,7 +23,7 @@ export default function StatusBar({
   return (
     <footer className="ws-statusbar">
       <div className="ws-crumbs">
-        <span>{project?.name ?? "Chats"}</span>
+        <span>{project?.name ?? "No project"}</span>
         {branch && (
           <>
             <ChevronRight size={12} />

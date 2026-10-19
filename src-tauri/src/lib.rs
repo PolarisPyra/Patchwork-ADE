@@ -86,13 +86,9 @@ fn remove_project(store: State<Store>, id: String) -> Res<()> {
 // ---- threads & turns -----------------------------------------------------
 
 #[tauri::command]
-/// Threads of one project, or project-less chats when `project_id` is None.
-fn list_threads(store: State<Store>, project_id: Option<String>) -> Vec<Thread> {
-    let mut ts: Vec<Thread> = store
-        .threads()
-        .into_iter()
-        .filter(|t| t.project_id == project_id)
-        .collect();
+/// Every thread (project tasks and project-less chats), newest first.
+fn list_threads(store: State<Store>) -> Vec<Thread> {
+    let mut ts = store.threads();
     ts.sort_by_key(|t| std::cmp::Reverse(t.created_at));
     ts
 }

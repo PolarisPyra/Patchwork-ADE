@@ -36,7 +36,7 @@ export default function Composer({
 }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  // Grow with the content; CSS max-height caps it at about 10 rows.
+  // Grow with the content; CSS min/max-height keep it between about 3 and 14 rows.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;

@@ -40,8 +40,14 @@ const CANVAS_MIN_PX = 340;
 const CANVAS_MAX_FRACTION = 0.7;
 
 export default function Workspace({ settings, updateSettings, resolvedTheme, toggleTheme }: WorkspaceProps) {
-  // No active project means the "Chats" scope: conversations without a project.
-  const project = settings.projects.find((p) => p.id === settings.activeProjectId) ?? null;
+  const { threads, selected, select, createThread, deleteThread, setModel, send } = useThreads(
+    settings.activeProjectId,
+    () => void refreshGit(),
+  );
+  // The selected thread decides the project (null: a chat without a project);
+  // with nothing selected, the last active project does.
+  const project =
+    settings.projects.find((p) => p.id === (selected ? selected.projectId : settings.activeProjectId)) ?? null;
   const projectId = project?.id ?? null;
   const defaultAgent = defaultAgentOf(settings);
   // Display order stays fixed; `settings.agents` order only marks the default.
@@ -75,11 +81,6 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
     void refreshGit();
   }, [refreshGit]);
 
-  const { threads, selected, select, createThread, deleteThread, setModel, send } = useThreads(
-    projectId,
-    () => void refreshGit(),
-  );
-
   function attempt(fn: () => Promise<unknown>) {
     setError(null);
     fn().catch((e: unknown) => setError(errorText(e)));
@@ -87,20 +88,29 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
 
   const openFolder = () => attempt(() => openFolderAsProject(updateSettings));
 
-  const selectProject = (id: string | null) =>
-    attempt(() => updateSettings((s) => ({ ...s, activeProjectId: id })));
-
-  const newTask = () => attempt(() => createThread({ agent: defaultAgent, model: null }));
-
-  /** Starts a project-less chat, switching to the Chats scope if needed. */
-  const newChat = () => {
-    if (!projectId) return newTask();
-    // Create first so the Chats list loaded after the switch already includes it.
-    attempt(async () => {
-      await api.createThread(null, defaultAgent, null);
-      await updateSettings((s) => ({ ...s, activeProjectId: null }));
-    });
+  /** Remembers the current project so the next launch reopens it. */
+  const rememberProject = async (id: string | null) => {
+    if (settings.activeProjectId !== id) await updateSettings((s) => ({ ...s, activeProjectId: id }));
   };
+
+  const selectThread = (id: string) => {
+    select(id);
+    const thread = threads.find((t) => t.id === id);
+    if (thread) attempt(() => rememberProject(thread.projectId));
+  };
+
+  const selectProject = (id: string) => {
+    select(threads.find((t) => t.projectId === id)?.id ?? null);
+    attempt(() => rememberProject(id));
+  };
+
+  /** New thread in a project, or a chat without a project when `id` is null. */
+  const newThreadIn = (id: string | null) =>
+    attempt(async () => {
+      await createThread(id, { agent: defaultAgent, model: null });
+      await rememberProject(id);
+    });
+  const newChat = () => newThreadIn(null);
 
   const openCanvasAt = (path: string, message: Message | null, tab: CanvasTab) => {
     if (!projectId) return;
@@ -136,7 +146,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
       } else if (mod && key === "k") {
         setPaletteOpen((o) => !o);
       } else if (mod && key === "t") {
-        newTask();
+        newThreadIn(projectId);
       } else if (mod && e.key === ",") {
         setSettingsOpen(true);
       } else {
@@ -149,21 +159,22 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
   });
 
   const paletteItems: PaletteItem[] = [
-    { id: "new-task", group: "Actions", label: project ? "New task" : "New chat", hint: "Ctrl T", run: newTask },
-    { id: "new-chat", group: "Actions", label: "New chat without a project", run: newChat },
+    { id: "new-chat", group: "Actions", label: "New chat", hint: project ? undefined : "Ctrl T", run: newChat },
+    ...(project
+      ? [{ id: "new-task", group: "Actions", label: `New task in ${project.name}`, hint: "Ctrl T", run: () => newThreadIn(project.id) }]
+      : []),
     { id: "toggle-theme", group: "Actions", label: "Toggle theme", run: toggleTheme },
     { id: "settings", group: "Actions", label: "Open settings", hint: "Ctrl ,", run: () => setSettingsOpen(true) },
     { id: "open-folder", group: "Actions", label: "Open folder…", run: openFolder },
     ...threads.map((t) => ({
       id: `task-${t.id}`,
-      group: project ? "Tasks" : "Chats",
+      group: settings.projects.find((p) => p.id === t.projectId)?.name ?? "Chats",
       label: t.title,
       run: () => {
         setView("tasks");
-        select(t.id);
+        selectThread(t.id);
       },
     })),
-    { id: "chats", group: "Projects", label: "Chats", hint: "No project", run: () => selectProject(null) },
     ...settings.projects.map((p) => ({
       id: `project-${p.id}`,
       group: "Projects",
@@ -202,11 +213,10 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
             threads={threads}
             selectedId={selected?.id ?? null}
             changes={changes}
-            onNewTask={newTask}
+            onNewTask={newThreadIn}
             onNewChat={newChat}
-            onSelectThread={select}
+            onSelectThread={selectThread}
             onDeleteThread={(id) => attempt(() => deleteThread(id))}
-            onSelectProject={selectProject}
             onOpenFolder={openFolder}
             onRefreshChanges={() => attempt(refreshGit)}
             onOpenChange={(path) => openCanvasAt(path, null, "diff")}
@@ -222,7 +232,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
             agents={connectedAgents}
             onOpenFolder={openFolder}
             onOpenCanvas={openCanvasAt}
-            onSend={send}
+            onSend={(text, draft) => send(text, draft, projectId)}
             onCancel={(id) => api.cancelTurn(id)}
             onSetModel={setModel}
             onDeselect={() => select(null)}

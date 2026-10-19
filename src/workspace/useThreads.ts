@@ -83,28 +83,29 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
 }
 
 /**
- * Threads for one project (or, when `projectId` is null, the project-less
- * chats) plus the selection. `select(null)` means no thread is
- * selected (the composer then creates one on send). `onTurnCompleted` fires after
- * any turn ends so the caller can refresh git state.
+ * Every thread (project tasks and project-less chats) plus the selection.
+ * `select(null)` means no thread is selected (the composer then creates one on
+ * send). `initialProjectId` picks the default selection after loading.
+ * `onTurnCompleted` fires after any turn ends so the caller can refresh git state.
  */
-export function useThreads(projectId: string | null, onTurnCompleted: () => void) {
+export function useThreads(initialProjectId: string | null, onTurnCompleted: () => void) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const turnDone = useRef(onTurnCompleted);
+  const initialProject = useRef(initialProjectId);
 
   useEffect(() => {
     turnDone.current = onTurnCompleted;
   });
 
-  // Load the project's threads (or the chats); the most recent one is selected by default.
+  // Load once; select the newest thread of the initial project (or chat).
   useEffect(() => {
     let cancelled = false;
-    api.listThreads(projectId).then(
+    api.listThreads().then(
       (list) => {
         if (cancelled) return;
         setThreads(list);
-        setSelectedId(list[0]?.id ?? null);
+        setSelectedId(list.find((t) => t.projectId === initialProject.current)?.id ?? null);
       },
       () => {
         if (!cancelled) setThreads([]);
@@ -113,7 +114,7 @@ export function useThreads(projectId: string | null, onTurnCompleted: () => void
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, []);
 
   // Subscribe once for the app's lifetime; events for unknown threads are ignored.
   useEffect(() => {
@@ -136,10 +137,10 @@ export function useThreads(projectId: string | null, onTurnCompleted: () => void
     };
   }, []);
 
-  const visible = threads.filter((t) => t.projectId === projectId);
-  const selected = visible.find((t) => t.id === selectedId) ?? null;
+  const selected = threads.find((t) => t.id === selectedId) ?? null;
 
-  async function createThread(opts: NewThreadOptions): Promise<Thread> {
+  /** Creates a thread in `projectId` (null: a chat without a project) and selects it. */
+  async function createThread(projectId: string | null, opts: NewThreadOptions): Promise<Thread> {
     const thread = await api.createThread(projectId, opts.agent, opts.model);
     setThreads((prev) => [thread, ...prev]);
     setSelectedId(thread.id);
@@ -148,9 +149,8 @@ export function useThreads(projectId: string | null, onTurnCompleted: () => void
 
   async function deleteThread(id: string): Promise<void> {
     await api.deleteThread(id);
-    const next = visible.find((t) => t.id !== id)?.id ?? null;
     setThreads((prev) => prev.filter((t) => t.id !== id));
-    setSelectedId((cur) => (cur === id ? next : cur));
+    setSelectedId((cur) => (cur === id ? null : cur));
   }
 
   async function setModel(id: string, model: string | null): Promise<void> {
@@ -158,9 +158,9 @@ export function useThreads(projectId: string | null, onTurnCompleted: () => void
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, model } : t)));
   }
 
-  /** Sends a message, creating a thread first when none is selected. */
-  async function send(text: string, draft: NewThreadOptions): Promise<void> {
-    const thread = selected ?? (await createThread(draft));
+  /** Sends a message, creating a thread in `projectId` first when none is selected. */
+  async function send(text: string, draft: NewThreadOptions, projectId: string | null): Promise<void> {
+    const thread = selected ?? (await createThread(projectId, draft));
     const message = await api.sendMessage(thread.id, text);
     setThreads((prev) =>
       prev.map((t) =>
@@ -177,7 +177,7 @@ export function useThreads(projectId: string | null, onTurnCompleted: () => void
   }
 
   return {
-    threads: visible,
+    threads,
     selected,
     select: setSelectedId,
     createThread,

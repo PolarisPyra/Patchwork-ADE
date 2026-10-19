@@ -2,8 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   FolderPlus,
   GitCompareArrows,
+  ChevronRight,
+  Folder,
   Loader2,
-  MessageSquarePlus,
   MessagesSquare,
   Plus,
   RefreshCw,
@@ -76,18 +77,19 @@ interface SidebarProps {
   view: SidebarView;
   /** Connected agents, shown as status cards at the bottom. */
   agents: AgentKind[];
+  /** Project of the current context (null: a chat without a project). */
   project: Project | null;
   projects: Project[];
+  /** Every thread; chats without a project and each project's tasks are grouped here. */
   threads: Thread[];
   selectedId: string | null;
   changes: FileChange[];
-  onNewTask: () => void;
-  /** Starts a chat without a project (switches to the Chats scope). */
+  /** Starts a new task in the given project. */
+  onNewTask: (projectId: string) => void;
+  /** Starts a chat without a project. */
   onNewChat: () => void;
   onSelectThread: (id: string) => void;
   onDeleteThread: (id: string) => void;
-  /** `null` selects the Chats scope (no project). */
-  onSelectProject: (id: string | null) => void;
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
@@ -116,7 +118,6 @@ function SectionLabel({ children, action }: { children: ReactNode; action?: Reac
 }
 
 function TasksView({
-  project,
   projects,
   threads,
   selectedId,
@@ -124,74 +125,112 @@ function TasksView({
   onNewChat,
   onSelectThread,
   onDeleteThread,
-  onSelectProject,
   onOpenFolder,
 }: SidebarProps) {
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  const chats = threads.filter((t) => t.projectId === null);
+  const rowProps = { selectedId, onSelectThread, onDeleteThread };
+
   return (
     <div className="ws-sidebar-scroll">
-      <button className="ws-new-task" onClick={onNewTask}>
+      <button className="ws-new-task" onClick={onNewChat}>
         <Plus size={14} />
-        {project ? "New task" : "New chat"}
-        <kbd className="kbd">Ctrl T</kbd>
+        New chat
       </button>
 
-      <SectionLabel>{project ? "Tasks" : "Chats"}</SectionLabel>
-      {threads.length === 0 && (
-        <div className="ws-muted-note">{project ? "No tasks yet" : "No chats yet"}</div>
-      )}
-      {threads.map((t) => {
-        const last = t.messages[t.messages.length - 1];
-        return (
-          <div
-            key={t.id}
-            className={`ws-row${t.id === selectedId ? " selected" : ""}`}
-            onClick={() => onSelectThread(t.id)}
-          >
-            <span className="ws-slot">
-              {isWorking(t) && <Loader2 size={13} className="spin ws-icon-accent" />}
-            </span>
-            <span className="ws-row-title">{t.title}</span>
-            <span className="ws-row-time">{formatRelative(last?.createdAt ?? t.createdAt)}</span>
-            <button
-              className="btn-icon ws-row-delete"
-              title="Delete task"
-              aria-label="Delete task"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteThread(t.id);
-              }}
-            >
-              <Trash2 size={13} />
-            </button>
-          </div>
-        );
-      })}
+      <SectionLabel>Chats</SectionLabel>
+      {chats.length === 0 && <div className="ws-muted-note">No chats yet</div>}
+      {chats.map((t) => (
+        <ThreadRow key={t.id} thread={t} {...rowProps} />
+      ))}
 
       <SectionLabel
         action={
-          <span className="ws-section-actions">
-            <button className="btn-icon" title="New chat without a project" aria-label="New chat" onClick={onNewChat}>
-              <MessageSquarePlus size={14} />
-            </button>
-            <button className="btn-icon" title="Open folder…" aria-label="Open folder" onClick={onOpenFolder}>
-              <FolderPlus size={14} />
-            </button>
-          </span>
+          <button className="btn-icon" title="Open folder…" aria-label="Open folder" onClick={onOpenFolder}>
+            <FolderPlus size={14} />
+          </button>
         }
       >
         Projects
       </SectionLabel>
-      <div className="ws-row" title="Conversations without a project" onClick={() => onSelectProject(null)}>
-        <span className={`ws-dot${project ? "" : " active"}`} />
-        <span className="ws-row-title">Chats</span>
-        <span className="ws-row-time">No project</span>
-      </div>
-      {projects.map((p) => (
-        <div key={p.id} className="ws-row" title={p.path} onClick={() => onSelectProject(p.id)}>
-          <span className={`ws-dot${p.id === project?.id ? " active" : ""}`} />
-          <span className="ws-row-title">{p.name}</span>
-        </div>
-      ))}
+      {projects.length === 0 && <div className="ws-muted-note">No projects yet</div>}
+      {projects.map((p) => {
+        const open = !collapsed.has(p.id);
+        const tasks = threads.filter((t) => t.projectId === p.id);
+        return (
+          <div key={p.id}>
+            <div className="ws-row ws-project-row-tree" title={p.path} onClick={() => toggle(p.id)}>
+              <span className="ws-slot">
+                <ChevronRight size={13} className={open ? "ws-rotated" : undefined} />
+              </span>
+              <Folder size={13} className="ws-icon-muted" />
+              <span className="ws-row-title">{p.name}</span>
+              <button
+                className="btn-icon ws-row-action"
+                title={`New task in ${p.name}`}
+                aria-label={`New task in ${p.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNewTask(p.id);
+                }}
+              >
+                <Plus size={13} />
+              </button>
+            </div>
+            {open && (
+              <div className="ws-tree-children">
+                {tasks.length === 0 && <div className="ws-muted-note">No tasks yet</div>}
+                {tasks.map((t) => (
+                  <ThreadRow key={t.id} thread={t} {...rowProps} />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ThreadRow({
+  thread,
+  selectedId,
+  onSelectThread,
+  onDeleteThread,
+}: {
+  thread: Thread;
+  selectedId: string | null;
+  onSelectThread: (id: string) => void;
+  onDeleteThread: (id: string) => void;
+}) {
+  const last = thread.messages[thread.messages.length - 1];
+  return (
+    <div
+      className={`ws-row${thread.id === selectedId ? " selected" : ""}`}
+      onClick={() => onSelectThread(thread.id)}
+    >
+      <span className="ws-slot">
+        {isWorking(thread) && <Loader2 size={13} className="spin ws-icon-accent" />}
+      </span>
+      <span className="ws-row-title">{thread.title}</span>
+      <span className="ws-row-time">{formatRelative(last?.createdAt ?? thread.createdAt)}</span>
+      <button
+        className="btn-icon ws-row-delete"
+        title="Delete"
+        aria-label="Delete"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDeleteThread(thread.id);
+        }}
+      >
+        <Trash2 size={13} />
+      </button>
     </div>
   );
 }
