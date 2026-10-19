@@ -21,7 +21,7 @@ import {
   type Project,
   type Thread,
 } from "../api";
-import AgentIcon from "../components/AgentIcon";
+import ProviderLogos from "../components/ProviderLogos";
 import { isWorking } from "./useThreads";
 import { baseName, describeAgent, dirName, formatRelative } from "./util";
 
@@ -285,7 +285,7 @@ function AgentLogoBadge({ agent }: { agent: AgentKind }) {
 
   return (
     <div className="ws-agent-logo-badge" title={title} aria-label={title}>
-      <AgentIcon kind={agent} size={20} />
+      <ProviderLogos kind={agent} size={20} />
       {status?.installed && status?.signedIn && <span className="ws-agent-dot-ready" />}
     </div>
   );

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { createPortal } from "react-dom";
 import { ChevronDown, Search, Star } from "lucide-react";
 import { AGENT_LABELS, type AgentKind, type ModelOption } from "../api";
-import AgentIcon from "../components/AgentIcon";
+import ProviderLogos from "../components/ProviderLogos";
 
 interface Props {
   agent: AgentKind;
@@ -27,7 +27,7 @@ export default function ModelPicker(props: Props) {
   return <>
     <button ref={trigger} className="ws-chip-btn" aria-haspopup="dialog" aria-expanded={open}
       aria-label={`Choose model: ${label}`} onClick={() => setOpen(!open)}>
-      <AgentIcon kind={props.agent} size={14} /><span>{label}</span><ChevronDown size={12} />
+      <ProviderLogos kind={props.agent} size={14} /><span>{label}</span><ChevronDown size={12} />
     </button>
     {open && createPortal(<PickerPopup {...props} anchor={trigger.current!} close={close} />, document.body)}
   </>;
@@ -113,7 +113,7 @@ function PickerPopup({ agent, model, agents, models, onPick, anchor, close }: Pr
     }}>
       <button className="ws-model-rail-btn" aria-label="Favorites" title="Favorites" aria-pressed={provider === "favorites"} onClick={() => selectProvider("favorites")}><Star size={20} fill="currentColor" /></button>
       <span className="ws-model-rail-divider" />
-      {agents.map((kind) => <button key={kind} className="ws-model-rail-btn" title={AGENT_LABELS[kind]} aria-label={AGENT_LABELS[kind]} aria-pressed={provider === kind} onClick={() => selectProvider(kind)}><AgentIcon kind={kind} size={20} /></button>)}
+      {agents.map((kind) => <button key={kind} className="ws-model-rail-btn" title={AGENT_LABELS[kind]} aria-label={AGENT_LABELS[kind]} aria-pressed={provider === kind} onClick={() => selectProvider(kind)}><ProviderLogos kind={kind} size={20} /></button>)}
     </nav>}
     <div className="ws-model-content">
       <label className="ws-model-search"><Search size={16} /><input ref={input} role="combobox" aria-expanded="true" aria-controls="ws-model-options" aria-activedescendant={rows[highlight] ? `ws-model-option-${highlight}` : undefined}
@@ -121,7 +121,7 @@ function PickerPopup({ agent, model, agents, models, onPick, anchor, close }: Pr
       <div ref={list} id="ws-model-options" className="ws-model-results" role="listbox" aria-label="Models">
         {rows.map(({ kind, item, key }, index) => <div key={key} id={`ws-model-option-${index}`} role="option" aria-selected={kind === agent && item.id === model}
           className={`ws-model-row${highlight === index ? " highlighted" : ""}`} onMouseMove={() => setHighlight(index)} onClick={() => choose(index)}>
-          <span className="ws-model-row-copy"><span className="ws-model-row-name">{item.label}</span><span className="ws-model-row-provider" title={item.id === null ? "Configured CLI default; session or project settings may override it" : undefined}><AgentIcon kind={kind} size={12} /><span className="ws-model-row-subtitle">{item.id === null ? item.defaultModel ?? "CLI default — unresolved" : kind === "claude" ? "Claude" : "Codex"}</span></span></span>
+          <span className="ws-model-row-copy"><span className="ws-model-row-name">{item.label}</span><span className="ws-model-row-provider" title={item.id === null ? "Configured CLI default; session or project settings may override it" : undefined}><ProviderLogos kind={kind} size={12} /><span className="ws-model-row-subtitle">{item.id === null ? item.defaultModel ?? "CLI default — unresolved" : kind === "claude" ? "Claude" : "Codex"}</span></span></span>
           {index < 9 && <kbd>{navigator.platform.includes("Mac") ? "Cmd" : "Ctrl"}+{index + 1}</kbd>}
           <button className={`ws-model-star${favorites.includes(key) ? " favorited" : ""}`} aria-label={favorites.includes(key) ? `Remove ${item.label} from favorites` : `Add ${item.label} to favorites`}
             onKeyDown={(event) => event.stopPropagation()} onClick={(event) => {

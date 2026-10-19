@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type UIEvent } from "react";
 import { FolderPlus } from "lucide-react";
 import type { AgentKind, FileChange, Message, Project, Thread } from "../api";
-import AgentIcon from "../components/AgentIcon";
+import ProviderLogos from "../components/ProviderLogos";
 import type { CanvasTab } from "./canvas/Canvas";
 import Composer from "./Composer";
 import Messages from "./Messages";
@@ -137,7 +137,7 @@ export default function Chat({
           />
         ) : (
           <div className="ws-chat-empty">
-            <AgentIcon kind={agent} size={40} />
+            <ProviderLogos kind={agent} size={40} />
             <h2>{project ? `What should we build in ${project.name}?` : "What's on your mind?"}</h2>
             {!project && (
               <>

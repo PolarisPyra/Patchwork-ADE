@@ -1,6 +1,6 @@
 import { Check, LoaderCircle, RotateCw } from "lucide-react";
 import { AGENT_LABELS, type AgentKind } from "../api";
-import AgentIcon from "../components/AgentIcon";
+import ProviderLogos from "../components/ProviderLogos";
 import { cx } from "./classNames";
 import { AGENT_KINDS, isReady, type AgentProbe, type AgentProbes } from "./agentProbes";
 
@@ -59,7 +59,7 @@ function AgentRow({
       onClick={() => onToggle(kind)}
     >
       <span className="ob-tile ob-tile-lg">
-        <AgentIcon kind={kind} size={26} />
+        <ProviderLogos kind={kind} size={26} />
       </span>
       <span className="ob-option-text">
         <span className="ob-option-name">{AGENT_LABELS[kind]}</span>

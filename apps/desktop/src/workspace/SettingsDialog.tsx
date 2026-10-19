@@ -21,7 +21,7 @@ import {
   type Settings,
   type Theme,
 } from "../api";
-import AgentIcon from "../components/AgentIcon";
+import ProviderLogos from "../components/ProviderLogos";
 import type { UpdateSettings } from "../App";
 import { syncProjects } from "./projects";
 import { AGENT_KINDS, describeAgent, errorText } from "./util";
@@ -30,7 +30,7 @@ type Section = "appearance" | "agent" | "integrations" | "projects";
 
 const SECTIONS: { id: Section; label: string; Icon: LucideIcon }[] = [
   { id: "appearance", label: "Appearance", Icon: Palette },
-  { id: "agent", label: "Agent", Icon: Bot },
+  { id: "agent", label: "Providers", Icon: Bot },
   { id: "integrations", label: "Integrations", Icon: Plug },
   { id: "projects", label: "Projects", Icon: FolderGit2 },
 ];
@@ -156,7 +156,7 @@ function AgentPane({ settings, updateSettings }: PaneProps) {
         const locked = on ? connected.length === 1 : !s?.installed;
         return (
           <div key={kind} className="ws-setting-row">
-            <AgentIcon kind={kind} size={20} />
+            <ProviderLogos kind={kind} size={20} />
             <div className="ws-setting-text">
               <div className="ws-setting-title">{AGENT_LABELS[kind]}</div>
               <div className="ws-setting-desc">{describeAgent(s)}</div>
