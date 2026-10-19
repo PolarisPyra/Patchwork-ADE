@@ -226,6 +226,7 @@ export const api = {
   /** Creates `parent/name`, runs `git init`, registers it as the active project. */
   createProject: (parent: string, name: string) =>
     invoke<Project>("create_project", { parent, name }),
+  renameProject: (id: string, name: string) => invoke<void>("rename_project", { id, name }),
   removeProject: (id: string) => invoke<void>("remove_project", { id }),
 
   /** All threads (project tasks and project-less chats), newest first. */
@@ -237,6 +238,7 @@ export const api = {
     accessMode: AccessMode,
   ) => invoke<Thread>("create_thread", { projectId, agent, model, accessMode }),
   deleteThread: (id: string) => invoke<void>("delete_thread", { id }),
+  renameThread: (id: string, title: string) => invoke<void>("rename_thread", { id, title }),
   /** Sets agent + model; the agent can only change before the first message. */
   setThreadModel: (id: string, agent: AgentKind, model: string | null) =>
     invoke<void>("set_thread_model", { id, agent, model }),

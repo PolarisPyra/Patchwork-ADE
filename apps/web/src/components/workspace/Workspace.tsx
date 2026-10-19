@@ -12,7 +12,7 @@ import Canvas, { type CanvasTab } from "~/components/canvas/Canvas";
 import { lastAccessMode } from "~/components/chat/AccessPicker";
 import Chat from "~/components/chat/Chat";
 import CommandPalette, { type PaletteItem } from "~/components/workspace/CommandPalette";
-import { openFolderAsProject } from "~/lib/projects";
+import { openFolderAsProject, syncProjects } from "~/lib/projects";
 import SettingsDialog from "~/components/settings/SettingsDialog";
 import Sidebar, { ToolStripe, type SidebarView } from "~/components/sidebar/Sidebar";
 import StatusBar from "~/components/workspace/StatusBar";
@@ -53,6 +53,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     select,
     createThread,
     deleteThread,
+    renameThread,
     setModel,
     setAccessMode,
     send,
@@ -102,6 +103,18 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
   }
 
   const openFolder = () => attempt(() => openFolderAsProject(updateSettings));
+  const renameProjectTo = (id: string, name: string) =>
+    attempt(async () => {
+      await api.renameProject(id, name);
+      await syncProjects(updateSettings);
+    });
+  // The backend also deletes the project's tasks, so the thread list is reloaded.
+  const removeProjectNow = (id: string) =>
+    attempt(async () => {
+      await api.removeProject(id);
+      await syncProjects(updateSettings);
+      await reload();
+    });
 
   /** Remembers the current project so the next launch reopens it. */
   const rememberProject = async (id: string | null) => {
@@ -249,6 +262,9 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             onNewChat={newChat}
             onSelectThread={selectThread}
             onDeleteThread={(id) => attempt(() => deleteThread(id))}
+            onRenameThread={(id, title) => attempt(() => renameThread(id, title))}
+            onRenameProject={renameProjectTo}
+            onRemoveProject={removeProjectNow}
             onOpenFolder={openFolder}
             onRefreshChanges={() => attempt(refreshGit)}
             onOpenChange={(path) => openCanvasAt(path, null, "diff")}

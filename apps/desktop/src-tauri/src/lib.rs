@@ -64,6 +64,16 @@ fn create_project(server: Srv, parent: String, name: String) -> Res<Project> {
 }
 
 #[tauri::command]
+fn rename_project(server: Srv, id: String, name: String) -> Res<()> {
+    server.rename_project(&id, &name)
+}
+
+#[tauri::command]
+fn rename_thread(server: Srv, id: String, title: String) -> Res<()> {
+    server.rename_thread(&id, &title)
+}
+
+#[tauri::command]
 fn remove_project(server: Srv, id: String) -> Res<()> {
     server.remove_project(&id)
 }
@@ -201,6 +211,8 @@ pub fn run() {
             get_usage,
             add_project,
             create_project,
+            rename_project,
+            rename_thread,
             remove_project,
             list_threads,
             create_thread,

@@ -227,6 +227,14 @@
 .ws-menu-item:hover {
   background: var(--bg-hover);
 }
+.ws-menu-danger {
+  color: var(--danger);
+}
+/* Right-click menus float at the pointer, above the sidebar's scroll area. */
+.ws-context-menu {
+  position: fixed;
+  min-width: 160px;
+}
 
 /* Access modes: label with a description below, like T3 Code. */
 .ws-access-item {
@@ -467,6 +475,19 @@
   flex: none;
   color: var(--text-subtle);
   font-size: var(--fs-xs);
+}
+
+.ws-inline-name {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  outline: none;
 }
 
 .ws-row-delete {

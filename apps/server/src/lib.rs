@@ -31,6 +31,15 @@ pub struct Server {
     sink: EventSink,
 }
 
+/// Trims a user-entered name; blank names are refused.
+fn clean_name(name: &str) -> Res<String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Name can't be empty".into());
+    }
+    Ok(name.chars().take(120).collect())
+}
+
 /// A thread title from the first line of a message.
 pub fn title_from(text: &str) -> String {
     let line = text.lines().next().unwrap_or("").trim();
@@ -99,6 +108,15 @@ impl Server {
         self.register_project(workspace::create_project_dir(parent, name)?, true)
     }
 
+    pub fn rename_project(&self, id: &str, name: &str) -> Res<()> {
+        let name = clean_name(name)?;
+        self.store.update_settings(|s| {
+            let project = s.projects.iter_mut().find(|p| p.id == id);
+            project.ok_or_else(|| format!("unknown project {id}"))?.name = name;
+            Ok::<_, String>(())
+        })?
+    }
+
     pub fn remove_project(&self, id: &str) -> Res<()> {
         self.store.update_settings(|s| {
             s.projects.retain(|p| p.id != id);
@@ -146,6 +164,12 @@ impl Server {
         };
         self.store.insert_threads(vec![thread.clone()])?;
         Ok(thread)
+    }
+
+    pub fn rename_thread(&self, id: &str, title: &str) -> Res<()> {
+        let title = clean_name(title)?;
+        self.store.thread(id).ok_or("Task not found")?;
+        self.store.update_thread(id, |t| t.title = title)
     }
 
     pub fn delete_thread(&self, id: &str) {

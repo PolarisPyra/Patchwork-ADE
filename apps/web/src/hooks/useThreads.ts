@@ -174,6 +174,11 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     setSelectedId((cur) => (cur === id ? null : cur));
   }
 
+  async function renameThread(id: string, title: string): Promise<void> {
+    await api.renameThread(id, title);
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)));
+  }
+
   async function setModel(id: string, agent: AgentKind, model: string | null): Promise<void> {
     await api.setThreadModel(id, agent, model);
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, agent, model } : t)));
@@ -209,6 +214,7 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     select: setSelectedId,
     createThread,
     deleteThread,
+    renameThread,
     setModel,
     setAccessMode,
     send,

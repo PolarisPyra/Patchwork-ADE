@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import {
   ArrowsClockwiseIcon,
   CaretRightIcon,
@@ -9,6 +9,7 @@ import {
   GearSixIcon,
   GitDiffIcon,
   MagnifyingGlassIcon,
+  PencilSimpleIcon,
   PlusIcon,
   ShieldWarningIcon,
   TrashIcon,
@@ -16,6 +17,7 @@ import {
 } from "@phosphor-icons/react";
 import { AGENT_LABELS, type AgentKind, type FileChange, type Project, type Thread } from "~/api";
 import ProviderLogos from "~/components/ProviderLogos";
+import ContextMenu, { type MenuItem } from "~/components/sidebar/ContextMenu";
 import UsagePopover from "~/components/usage/UsagePopover";
 import { isWorking } from "~/hooks/useThreads";
 import { baseName, dirName, displayTitle, formatRelative } from "~/lib/util";
@@ -85,11 +87,20 @@ interface SidebarProps {
   onNewChat: () => void;
   onSelectThread: (id: string) => void;
   onDeleteThread: (id: string) => void;
+  onRenameThread: (id: string, title: string) => void;
+  onRenameProject: (id: string, name: string) => void;
+  onRemoveProject: (id: string) => void;
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
   /** Opens the command palette. */
   onOpenPalette: () => void;
+}
+
+/** A row a context menu acts on: a project, or a task or chat. */
+interface Target {
+  kind: "project" | "thread";
+  id: string;
 }
 
 export default function Sidebar(props: SidebarProps) {
@@ -123,9 +134,14 @@ function TasksView({
   onNewChat,
   onSelectThread,
   onDeleteThread,
+  onRenameThread,
+  onRenameProject,
+  onRemoveProject,
   onOpenFolder,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [menu, setMenu] = useState<{ x: number; y: number; target: Target } | null>(null);
+  const [renaming, setRenaming] = useState<Target | null>(null);
   const toggle = (id: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -133,7 +149,46 @@ function TasksView({
       return next;
     });
   const chats = threads.filter((t) => t.projectId === null);
-  const rowProps = { selectedId, onSelectThread, onDeleteThread };
+
+  const openMenu = (e: MouseEvent, target: Target) => {
+    e.preventDefault();
+    setMenu({ x: e.clientX, y: e.clientY, target });
+  };
+  const menuItems = (target: Target): MenuItem[] => [
+    { label: "Rename", Icon: PencilSimpleIcon, onSelect: () => setRenaming(target) },
+    {
+      label: "Remove",
+      Icon: TrashIcon,
+      danger: true,
+      onSelect: () => {
+        if (target.kind === "thread") {
+          onDeleteThread(target.id);
+          return;
+        }
+        const name = projects.find((p) => p.id === target.id)?.name ?? "this project";
+        if (window.confirm(`Remove ${name} and its tasks? Its files are not deleted.`)) {
+          onRemoveProject(target.id);
+        }
+      },
+    },
+  ];
+  /** Saves a new name, unless it is blank or unchanged. */
+  const commitRename = (target: Target, name: string, current: string) => {
+    setRenaming(null);
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === current) return;
+    if (target.kind === "thread") onRenameThread(target.id, trimmed);
+    else onRenameProject(target.id, trimmed);
+  };
+  const rowProps = {
+    selectedId,
+    onSelectThread,
+    onDeleteThread,
+    renaming,
+    onContextMenu: openMenu,
+    onCommitRename: commitRename,
+    onCancelRename: () => setRenaming(null),
+  };
 
   return (
     <div className="ws-sidebar-scroll">
@@ -150,6 +205,14 @@ function TasksView({
       {chats.map((t) => (
         <ThreadRow key={t.id} thread={t} {...rowProps} />
       ))}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems(menu.target)}
+          onClose={() => setMenu(null)}
+        />
+      )}
 
       <SectionLabel
         action={
@@ -171,12 +234,25 @@ function TasksView({
         const tasks = threads.filter((t) => t.projectId === p.id);
         return (
           <div key={p.id}>
-            <div className="ws-row ws-project-row-tree" title={p.path} onClick={() => toggle(p.id)}>
+            <div
+              className="ws-row ws-project-row-tree"
+              title={p.path}
+              onClick={() => toggle(p.id)}
+              onContextMenu={(e) => openMenu(e, { kind: "project", id: p.id })}
+            >
               <span className="ws-slot">
                 <CaretRightIcon size={15} className={open ? "ws-rotated" : undefined} />
               </span>
               <FolderIcon size={15} className="ws-icon-muted" />
-              <span className="ws-row-title">{p.name}</span>
+              {renaming?.kind === "project" && renaming.id === p.id ? (
+                <InlineName
+                  initial={p.name}
+                  onCommit={(name) => commitRename({ kind: "project", id: p.id }, name, p.name)}
+                  onCancel={() => setRenaming(null)}
+                />
+              ) : (
+                <span className="ws-row-title">{p.name}</span>
+              )}
               <button
                 className="btn-icon ws-row-action"
                 title={`New task in ${p.name}`}
@@ -204,26 +280,82 @@ function TasksView({
   );
 }
 
+/** Name field shown in place of a title while renaming. Commits once, on Enter or blur. */
+function InlineName({
+  initial,
+  onCommit,
+  onCancel,
+}: {
+  initial: string;
+  onCommit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  // Enter, Escape and the blur that follows them must not each act.
+  const done = useRef(false);
+  const finish = (action: () => void) => {
+    if (done.current) return;
+    done.current = true;
+    action();
+  };
+  const keyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    if (e.key === "Enter") finish(() => onCommit(e.currentTarget.value));
+    else if (e.key === "Escape") finish(onCancel);
+  };
+  return (
+    <input
+      className="ws-inline-name"
+      aria-label="Name"
+      defaultValue={initial}
+      autoFocus
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.stopPropagation()}
+      onKeyDown={keyDown}
+      onBlur={(e) => finish(() => onCommit(e.currentTarget.value))}
+    />
+  );
+}
+
 function ThreadRow({
   thread,
   selectedId,
   onSelectThread,
   onDeleteThread,
+  renaming,
+  onContextMenu,
+  onCommitRename,
+  onCancelRename,
 }: {
   thread: Thread;
   selectedId: string | null;
   onSelectThread: (id: string) => void;
   onDeleteThread: (id: string) => void;
+  renaming: Target | null;
+  onContextMenu: (e: MouseEvent, target: Target) => void;
+  onCommitRename: (target: Target, name: string, current: string) => void;
+  onCancelRename: () => void;
 }) {
+  const editing = renaming?.kind === "thread" && renaming.id === thread.id;
   const last = thread.messages[thread.messages.length - 1];
   const needsApproval = last?.approvals.some((a) => a.status === "pending") ?? false;
   return (
     <div
       className={`ws-row ws-thread-card${thread.id === selectedId ? " selected" : ""}`}
       onClick={() => onSelectThread(thread.id)}
+      onContextMenu={(e) => onContextMenu(e, { kind: "thread", id: thread.id })}
     >
       <div className="ws-card-line">
-        <span className="ws-row-title">{displayTitle(thread.title)}</span>
+        {editing ? (
+          <InlineName
+            initial={thread.title}
+            onCommit={(name) =>
+              onCommitRename({ kind: "thread", id: thread.id }, name, thread.title)
+            }
+            onCancel={onCancelRename}
+          />
+        ) : (
+          <span className="ws-row-title">{displayTitle(thread.title)}</span>
+        )}
         <span className="ws-row-time">{formatRelative(last?.createdAt ?? thread.createdAt)}</span>
         <button
           className="btn-icon ws-row-delete"
