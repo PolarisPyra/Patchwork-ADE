@@ -618,9 +618,6 @@
 .ws-chat-new .ws-chat-empty {
   height: auto;
 }
-.ws-chat-new .ws-composer-wrap {
-  padding-bottom: 10vh;
-}
 
 .ws-chat-empty h2 {
   margin: 0;
@@ -1007,7 +1004,7 @@ h5.ws-md-heading {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px 12px 10px 16px;
+  padding: 14px 12px 10px;
   background: var(--bg-editor);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
@@ -1019,7 +1016,8 @@ h5.ws-md-heading {
 .ws-composer-input {
   min-height: 64px; /* about three lines */
   max-height: 280px;
-  padding: 0;
+  /* Lines the text up with the content of the chips below. */
+  padding: 0 6px;
   overflow-y: auto;
   resize: none;
   border: none;
