@@ -1,6 +1,6 @@
-import { useLayoutEffect, useRef, type KeyboardEvent } from "react";
-import { ArrowUp, Check, ChevronDown, Cpu, Square } from "lucide-react";
-import { AGENT_LABELS, AGENT_MODELS, type AgentKind } from "../api";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { ArrowUp, Check, ChevronDown, Square } from "lucide-react";
+import { api, AGENT_LABELS, type AgentKind, type ModelOption } from "../api";
 import AgentIcon from "../components/AgentIcon";
 import Dropdown from "./Dropdown";
 
@@ -13,11 +13,31 @@ interface ComposerProps {
   error: string | null;
   agent: AgentKind;
   model: string | null;
-  /** The agent can only be changed before the first message. */
-  canPickAgent: boolean;
+  /** Agents whose models are offered (only the thread's own once it has started). */
   agents: AgentKind[];
-  onAgentChange: (agent: AgentKind) => void;
-  onModelChange: (model: string | null) => void;
+  /** Picking another agent's model switches the agent too. */
+  onPickModel: (agent: AgentKind, model: string | null) => void;
+}
+
+/** Models per agent, fetched once per agent kind. */
+function useModels(agents: AgentKind[]): Partial<Record<AgentKind, ModelOption[]>> {
+  const [models, setModels] = useState<Partial<Record<AgentKind, ModelOption[]>>>({});
+  const wanted = agents.join(",");
+  useEffect(() => {
+    let cancelled = false;
+    for (const kind of wanted.split(",") as AgentKind[]) {
+      api.listModels(kind).then(
+        (list) => {
+          if (!cancelled) setModels((prev) => (prev[kind] ? prev : { ...prev, [kind]: list }));
+        },
+        () => {},
+      );
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [wanted]);
+  return models;
 }
 
 export default function Composer({
@@ -29,10 +49,8 @@ export default function Composer({
   error,
   agent,
   model,
-  canPickAgent,
   agents,
-  onAgentChange,
-  onModelChange,
+  onPickModel,
 }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -44,7 +62,9 @@ export default function Composer({
     el.style.height = `${el.scrollHeight}px`;
   }, [value]);
 
-  const modelLabel = AGENT_MODELS[agent].find((m) => m.id === model)?.label ?? "Default";
+  const models = useModels(agents);
+  // An unknown id (e.g. a model no longer listed) is still shown by its id.
+  const modelLabel = models[agent]?.find((m) => m.id === model)?.label ?? model ?? "Default";
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -65,59 +85,43 @@ export default function Composer({
         onKeyDown={onKeyDown}
       />
       <div className="ws-composer-foot">
-        {canPickAgent && agents.length > 1 && (
-          <Dropdown
-            up
-            trigger={({ toggle }) => (
-              <button className="ws-chip-btn" onClick={toggle}>
-                <AgentIcon kind={agent} size={14} />
-                {AGENT_LABELS[agent]}
-                <ChevronDown size={12} />
-              </button>
-            )}
-          >
-            {(close) =>
-              agents.map((kind) => (
-                <button
-                  key={kind}
-                  className="ws-menu-item"
-                  onClick={() => {
-                    close();
-                    onAgentChange(kind);
-                  }}
-                >
-                  <span className="ws-check">{kind === agent && <Check size={13} />}</span>
-                  {AGENT_LABELS[kind]}
-                </button>
-              ))
-            }
-          </Dropdown>
-        )}
         <Dropdown
           up
           trigger={({ toggle }) => (
-            <button className="ws-chip-btn" onClick={toggle}>
-              <Cpu size={14} />
+            <button className="ws-chip-btn" onClick={toggle} title={`${AGENT_LABELS[agent]} · ${modelLabel}`}>
+              <AgentIcon kind={agent} size={14} />
               {modelLabel}
               <ChevronDown size={12} />
             </button>
           )}
         >
-          {(close) =>
-            AGENT_MODELS[agent].map((m) => (
-              <button
-                key={m.label}
-                className="ws-menu-item"
-                onClick={() => {
-                  close();
-                  onModelChange(m.id);
-                }}
-              >
-                <span className="ws-check">{m.id === model && <Check size={13} />}</span>
-                {m.label}
-              </button>
-            ))
-          }
+          {(close) => (
+            <div className="ws-model-menu">
+              {agents.map((kind) => (
+                <div key={kind} role="group" aria-label={AGENT_LABELS[kind]}>
+                  <div className="ws-menu-group">
+                    <AgentIcon kind={kind} size={12} />
+                    {AGENT_LABELS[kind]}
+                  </div>
+                  {(models[kind] ?? []).map((m) => (
+                    <button
+                      key={m.id ?? "default"}
+                      className="ws-menu-item"
+                      onClick={() => {
+                        close();
+                        onPickModel(kind, m.id);
+                      }}
+                    >
+                      <span className="ws-check">
+                        {kind === agent && m.id === model && <Check size={13} />}
+                      </span>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </Dropdown>
         <span className="ws-spacer" />
         {working ? (

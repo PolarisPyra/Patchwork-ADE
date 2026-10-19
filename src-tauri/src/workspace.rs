@@ -473,6 +473,69 @@ pub fn open_in_editor(root: &str, rel: &str) -> Result<(), String> {
     Err(format!("No editor found (tried {})", candidates.join(", ")))
 }
 
+/// Models offered for `kind`, starting with the CLI default.
+/// Claude Code aliases always resolve to the newest model of each family;
+/// Codex lists the models its CLI caches in `$CODEX_HOME/models_cache.json`.
+pub fn list_models(kind: AgentKind) -> Vec<ModelOption> {
+    let mut models = vec![ModelOption {
+        id: None,
+        label: "Default".into(),
+    }];
+    match kind {
+        AgentKind::Claude => {
+            for (id, label) in [
+                ("fable", "Fable"),
+                ("opus", "Opus"),
+                ("sonnet", "Sonnet"),
+                ("haiku", "Haiku"),
+            ] {
+                models.push(ModelOption {
+                    id: Some(id.into()),
+                    label: label.into(),
+                });
+            }
+        }
+        AgentKind::Codex => {
+            let home = std::env::var_os("CODEX_HOME")
+                .map(PathBuf::from)
+                .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")));
+            if let Some(json) =
+                home.and_then(|h| std::fs::read_to_string(h.join("models_cache.json")).ok())
+            {
+                models.extend(codex_models(&json));
+            }
+        }
+    }
+    models
+}
+
+/// Visible models from Codex's model cache, in the CLI's priority order.
+fn codex_models(json: &str) -> Vec<ModelOption> {
+    let Ok(v) = serde_json::from_str::<Value>(json) else {
+        return vec![];
+    };
+    let mut listed: Vec<(i64, ModelOption)> = v["models"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|m| m["visibility"] == "list")
+        .filter_map(|m| {
+            let slug = m["slug"].as_str()?;
+            let label = m["display_name"].as_str().unwrap_or(slug);
+            let priority = m["priority"].as_i64().unwrap_or(i64::MAX);
+            Some((
+                priority,
+                ModelOption {
+                    id: Some(slug.into()),
+                    label: label.into(),
+                },
+            ))
+        })
+        .collect();
+    listed.sort_by_key(|(priority, _)| *priority);
+    listed.into_iter().map(|(_, m)| m).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -562,5 +625,20 @@ mod tests {
         assert_eq!(read_file(&root, "a.txt").unwrap(), "one\ntwo\n");
         std::fs::remove_file(&outside).unwrap();
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn codex_models_lists_visible_models_by_priority() {
+        let json = r#"{"models":[
+            {"slug":"b","display_name":"B","visibility":"list","priority":2},
+            {"slug":"hidden","display_name":"H","visibility":"hide","priority":0},
+            {"slug":"a","display_name":"A","visibility":"list","priority":1}
+        ]}"#;
+        let ids: Vec<_> = codex_models(json)
+            .into_iter()
+            .map(|m| m.id.unwrap())
+            .collect();
+        assert_eq!(ids, ["a", "b"]);
+        assert!(codex_models("not json").is_empty());
     }
 }

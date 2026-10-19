@@ -31,8 +31,7 @@ interface ChatProps {
   onOpenCanvas: (path: string, message: Message | null, tab: CanvasTab) => void;
   onSend: (text: string, draft: NewThreadOptions) => Promise<void>;
   onCancel: (threadId: string) => Promise<void>;
-  onSetModel: (threadId: string, model: string | null) => Promise<void>;
-  onDeselect: () => void;
+  onSetModel: (threadId: string, agent: AgentKind, model: string | null) => Promise<void>;
 }
 
 export default function Chat({
@@ -46,7 +45,6 @@ export default function Chat({
   onSend,
   onCancel,
   onSetModel,
-  onDeselect,
 }: ChatProps) {
   // Drafts are kept per thread ("new" when nothing is selected).
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -66,6 +64,8 @@ export default function Chat({
   const agent = thread?.agent ?? newOpts.agent;
   const model = thread ? thread.model : newOpts.model;
   const working = sending || isWorking(thread);
+  // Before the first message any connected agent's models are offered.
+  const offered = agents.includes(agent) ? agents : [agent, ...agents];
 
   useEffect(() => {
     stickToBottom.current = true;
@@ -115,19 +115,13 @@ export default function Chat({
     onCancel(thread.id).catch((e: unknown) => setError(errorText(e)));
   }
 
-  function changeAgent(next: AgentKind) {
-    setPick({ agent: next, model: null });
-    // Only empty threads reach here; deselect so the next send creates one with this agent.
-    if (thread) onDeselect();
-  }
-
-  function changeModel(next: string | null) {
+  function pickModel(nextAgent: AgentKind, nextModel: string | null) {
     if (!thread) {
-      setPick({ agent: newOpts.agent, model: next });
+      setPick({ agent: nextAgent, model: nextModel });
       return;
     }
     setError(null);
-    onSetModel(thread.id, next).catch((e: unknown) => setError(errorText(e)));
+    onSetModel(thread.id, nextAgent, nextModel).catch((e: unknown) => setError(errorText(e)));
   }
 
   return (
@@ -174,10 +168,8 @@ export default function Chat({
           error={error}
           agent={agent}
           model={model}
-          canPickAgent={empty}
-          agents={agents}
-          onAgentChange={changeAgent}
-          onModelChange={changeModel}
+          agents={empty ? offered : [agent]}
+          onPickModel={pickModel}
         />
       </div>
     </div>

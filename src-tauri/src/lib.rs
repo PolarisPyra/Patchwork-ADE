@@ -34,6 +34,11 @@ fn save_settings(store: State<Store>, settings: Settings) -> Res<()> {
 }
 
 #[tauri::command]
+fn list_models(kind: AgentKind) -> Vec<ModelOption> {
+    workspace::list_models(kind)
+}
+
+#[tauri::command]
 async fn detect_agent(kind: AgentKind) -> AgentStatus {
     tauri::async_runtime::spawn_blocking(move || workspace::detect_agent(kind))
         .await
@@ -138,8 +143,22 @@ fn delete_thread(
 }
 
 #[tauri::command]
-fn set_thread_model(store: State<Store>, id: String, model: Option<String>) -> Res<()> {
-    store.update_thread(&id, |t| t.model = model)
+/// Sets the thread's model. The agent can only change before the first message,
+/// since the conversation session belongs to one CLI.
+fn set_thread_model(
+    store: State<Store>,
+    id: String,
+    agent: AgentKind,
+    model: Option<String>,
+) -> Res<()> {
+    let thread = store.thread(&id).ok_or("Task not found")?;
+    if thread.agent != agent && !thread.messages.is_empty() {
+        return Err("The agent can't change after the conversation has started".into());
+    }
+    store.update_thread(&id, |t| {
+        t.agent = agent;
+        t.model = model;
+    })
 }
 
 /// Appends the user message, then starts the agent turn in the background.
@@ -241,6 +260,7 @@ pub fn run() {
             get_settings,
             save_settings,
             detect_agent,
+            list_models,
             add_project,
             create_project,
             remove_project,

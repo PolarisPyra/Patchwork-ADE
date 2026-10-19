@@ -40,6 +40,12 @@ export interface AgentStatus {
   detail: string;
 }
 
+/** A model the user can pick for an agent. `id: null` is the CLI's own default. */
+export interface ModelOption {
+  id: string | null;
+  label: string;
+}
+
 export interface ToolCall {
   id: string;
   name: string;
@@ -122,21 +128,13 @@ export const AGENT_LABELS: Record<AgentKind, string> = {
   codex: "Codex",
 };
 
-/** Model choices per agent. `null` means the CLI's own default. */
-export const AGENT_MODELS: Record<AgentKind, { id: string | null; label: string }[]> = {
-  claude: [
-    { id: null, label: "Default" },
-    { id: "opus", label: "Opus" },
-    { id: "sonnet", label: "Sonnet" },
-    { id: "haiku", label: "Haiku" },
-  ],
-  codex: [{ id: null, label: "Default" }],
-};
 
 export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
   detectAgent: (kind: AgentKind) => invoke<AgentStatus>("detect_agent", { kind }),
+  /** Models for an agent, starting with "Default" (the CLI's own choice). */
+  listModels: (kind: AgentKind) => invoke<ModelOption[]>("list_models", { kind }),
 
   /** Registers an existing folder; also makes it the active project. */
   addProject: (path: string) => invoke<Project>("add_project", { path }),
@@ -150,8 +148,9 @@ export const api = {
   createThread: (projectId: string | null, agent: AgentKind, model: string | null) =>
     invoke<Thread>("create_thread", { projectId, agent, model }),
   deleteThread: (id: string) => invoke<void>("delete_thread", { id }),
-  setThreadModel: (id: string, model: string | null) =>
-    invoke<void>("set_thread_model", { id, model }),
+  /** Sets agent + model; the agent can only change before the first message. */
+  setThreadModel: (id: string, agent: AgentKind, model: string | null) =>
+    invoke<void>("set_thread_model", { id, agent, model }),
   /** Returns the stored user message; assistant output streams via onAgentEvent. */
   sendMessage: (threadId: string, text: string) =>
     invoke<Message>("send_message", { threadId, text }),

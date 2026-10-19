@@ -153,9 +153,9 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     setSelectedId((cur) => (cur === id ? null : cur));
   }
 
-  async function setModel(id: string, model: string | null): Promise<void> {
-    await api.setThreadModel(id, model);
-    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, model } : t)));
+  async function setModel(id: string, agent: AgentKind, model: string | null): Promise<void> {
+    await api.setThreadModel(id, agent, model);
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, agent, model } : t)));
   }
 
   /** Sends a message, creating a thread in `projectId` first when none is selected. */

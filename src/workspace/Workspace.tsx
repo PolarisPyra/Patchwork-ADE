@@ -235,7 +235,6 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
             onSend={(text, draft) => send(text, draft, projectId)}
             onCancel={(id) => api.cancelTurn(id)}
             onSetModel={setModel}
-            onDeselect={() => select(null)}
           />
         </main>
 

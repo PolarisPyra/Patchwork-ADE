@@ -62,6 +62,14 @@ pub struct AgentStatus {
     pub detail: String,
 }
 
+/// A model the user can pick for an agent. `id: None` is the CLI's own default.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelOption {
+    pub id: Option<String>,
+    pub label: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
