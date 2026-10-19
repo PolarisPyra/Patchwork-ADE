@@ -5,6 +5,7 @@
  */
 
 /* Tailwind without preflight, so existing base element styles stay as they are. */
+@layer theme, base, components, utilities;
 @import "tailwindcss/theme" layer(theme);
 @import "tailwindcss/utilities" layer(utilities);
 
@@ -149,42 +150,45 @@
 
 /* ---- base -------------------------------------------------------------- */
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+/* Element base rules sit in the base layer, so Tailwind utilities override them. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-}
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
 
-body {
-  background: var(--bg-app);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: var(--fs-md);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden;
-  user-select: none;
-}
+  body {
+    background: var(--bg-app);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: var(--fs-md);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
+  }
 
-input,
-textarea,
-button,
-select {
-  font: inherit;
-  color: inherit;
-}
+  input,
+  textarea,
+  button,
+  select {
+    font: inherit;
+    color: inherit;
+  }
 
-code,
-pre,
-.mono {
-  font-family: var(--font-mono);
+  code,
+  pre,
+  .mono {
+    font-family: var(--font-mono);
+  }
 }
 
 ::selection {
