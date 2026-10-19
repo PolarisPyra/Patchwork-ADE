@@ -73,10 +73,11 @@ fn push_merged(messages: &mut Vec<SessionMessage>, role: Role, text: String, at:
     }
 }
 
-/// T3 Code keeps its chats that have no project in a scratch folder. Those are
-/// chats for Patchwork too, not projects.
-pub fn is_t3_chat_folder(cwd: &Path) -> bool {
-    provider::home_dir().is_some_and(|home| cwd.starts_with(home.join(".t3/scratch")))
+/// A conversation becomes a chat rather than a project when its folder is gone
+/// or is one of T3 Code's chat scratch folders (`~/.t3/scratch`).
+pub fn is_chat_folder(cwd: &Path) -> bool {
+    !cwd.is_dir()
+        || provider::home_dir().is_some_and(|home| cwd.starts_with(home.join(".t3/scratch")))
 }
 
 /// Converts an imported session into a stored thread.

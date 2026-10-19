@@ -266,9 +266,7 @@ impl Server {
                     .iter()
                     .any(|(a, id)| *a == s.agent && *id == s.session_id)
             })
-            .filter(|s| {
-                !Path::new(&s.cwd).starts_with(&self.chats_dir) && Path::new(&s.cwd).is_dir()
-            })
+            .filter(|s| !Path::new(&s.cwd).starts_with(&self.chats_dir))
             .collect();
         (found, new)
     }
@@ -298,7 +296,7 @@ impl Server {
                     continue;
                 }
                 known.push((session.agent, session.session_id.clone()));
-                let project_id = if import::is_t3_chat_folder(Path::new(&session.cwd)) {
+                let project_id = if import::is_chat_folder(Path::new(&session.cwd)) {
                     None
                 } else {
                     let project =
