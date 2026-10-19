@@ -249,6 +249,8 @@ pub struct ImportScan {
     pub found: u32,
     /// Sessions not yet in Patchwork.
     pub new: u32,
+    /// Helper runs inside other conversations; not offered for import.
+    pub subagents: u32,
 }
 
 /// Emitted on the Tauri event channel `"agent-event"`.

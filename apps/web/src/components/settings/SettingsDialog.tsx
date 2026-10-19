@@ -277,6 +277,12 @@ function ImportsPane({
             <div className="ws-setting-text">
               <div className="ws-setting-title">{SOURCE_LABELS[kind]}</div>
               <div className="ws-setting-desc">{desc}</div>
+              {s && s.subagents > 0 && (
+                <div className="ws-setting-desc">
+                  {s.subagents} sub-agent {s.subagents === 1 ? "conversation" : "conversations"}{" "}
+                  hidden
+                </div>
+              )}
             </div>
             <button
               className="btn"

@@ -256,8 +256,10 @@ impl Server {
         &self,
         source: ImportSource,
         known: &[(AgentKind, String)],
-    ) -> (u32, Vec<import::Session>) {
+    ) -> (u32, u32, Vec<import::Session>) {
         let all = import::sessions(source);
+        let subagents = all.iter().filter(|s| s.subagent).count() as u32;
+        let all: Vec<_> = all.into_iter().filter(|s| !s.subagent).collect();
         let found = all.len() as u32;
         let new = all
             .into_iter()
@@ -268,15 +270,16 @@ impl Server {
             })
             .filter(|s| !Path::new(&s.cwd).starts_with(&self.chats_dir))
             .collect();
-        (found, new)
+        (found, subagents, new)
     }
 
     pub fn scan_imports(&self, source: ImportSource) -> ImportScan {
-        let (found, new) = self.importable(source, &self.store.session_keys());
+        let (found, subagents, new) = self.importable(source, &self.store.session_keys());
         ImportScan {
             kind: source,
             found,
             new: new.len() as u32,
+            subagents,
         }
     }
 
@@ -288,7 +291,7 @@ impl Server {
         let mut known = self.store.session_keys();
         let mut threads = Vec::new();
         for &source in sources {
-            for session in self.importable(source, &known).1 {
+            for session in self.importable(source, &known).2 {
                 if known
                     .iter()
                     .any(|(a, id)| *a == session.agent && *id == session.session_id)

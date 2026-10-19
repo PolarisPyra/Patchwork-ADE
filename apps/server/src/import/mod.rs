@@ -25,6 +25,9 @@ pub struct Session {
     pub model: Option<String>,
     pub created_at: u64,
     pub messages: Vec<SessionMessage>,
+    /// A helper run inside another conversation (Claude sub-agents, Codex guardian
+    /// reviews). Counted, but never offered for import.
+    pub subagent: bool,
 }
 
 #[derive(Debug, Clone)]

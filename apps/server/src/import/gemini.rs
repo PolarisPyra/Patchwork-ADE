@@ -110,6 +110,7 @@ fn session(meta: &Value, cwd: &str, messages: Vec<SessionMessage>) -> Option<Ses
             .and_then(parse_rfc3339_ms)
             .unwrap_or(0),
         messages,
+        subagent: false,
     })
 }
 

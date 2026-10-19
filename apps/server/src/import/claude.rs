@@ -12,10 +12,35 @@ pub fn sessions() -> Vec<Session> {
         return vec![];
     };
     let dirs = std::fs::read_dir(projects).into_iter().flatten().flatten();
-    dirs.flat_map(|d| std::fs::read_dir(d.path()).into_iter().flatten().flatten())
-        .map(|f| f.path())
+    // Conversations are `<project>/<session>.jsonl`; sub-agent runs are
+    // `<project>/<session>/subagents/*.jsonl`.
+    let files = dirs.flat_map(|d| {
+        let entries = std::fs::read_dir(d.path()).into_iter().flatten().flatten();
+        entries.flat_map(|e| {
+            let p = e.path();
+            let subagents = p.join("subagents");
+            let mut paths = vec![p];
+            if subagents.is_dir() {
+                paths.extend(
+                    std::fs::read_dir(subagents)
+                        .into_iter()
+                        .flatten()
+                        .flatten()
+                        .map(|f| f.path()),
+                );
+            }
+            paths
+        })
+    });
+    files
         .filter(|p| p.extension().is_some_and(|e| e == "jsonl"))
-        .filter_map(|p| parse(&std::fs::read_to_string(p).ok()?))
+        .filter_map(|p| {
+            // Every line of a sub-agent run is a sidechain.
+            let subagent = p.parent().is_some_and(|d| d.ends_with("subagents"));
+            let mut session = parse(&std::fs::read_to_string(p).ok()?, subagent)?;
+            session.subagent = subagent;
+            Some(session)
+        })
         .collect()
 }
 
@@ -48,7 +73,7 @@ fn assistant_text(content: &Value) -> String {
 }
 
 /// Parses one transcript. Subagent (sidechain) and meta entries are skipped.
-fn parse(text: &str) -> Option<Session> {
+fn parse(text: &str, sidechain: bool) -> Option<Session> {
     let (mut session_id, mut cwd, mut created_at) = (None, None, None);
     let (mut custom_title, mut ai_title) = (None, None);
     let mut messages: Vec<SessionMessage> = Vec::new();
@@ -60,7 +85,7 @@ fn parse(text: &str) -> Option<Session> {
             Some("custom-title") => custom_title = v["customTitle"].as_str().map(String::from),
             Some("ai-title") => ai_title = v["aiTitle"].as_str().map(String::from),
             Some(kind @ ("user" | "assistant")) => {
-                if v["isSidechain"] == true || v["isMeta"] == true {
+                if (v["isSidechain"] == true && !sidechain) || v["isMeta"] == true {
                     continue;
                 }
                 let at = v["timestamp"]
@@ -90,6 +115,7 @@ fn parse(text: &str) -> Option<Session> {
         model: None,
         created_at: created_at.unwrap_or(0),
         messages,
+        subagent: false,
     })
 }
 
@@ -113,7 +139,7 @@ mod tests {
             json!({"type": "ai-title", "aiTitle": "Add a test"}),
         ];
         let text: Vec<String> = lines.iter().map(Value::to_string).collect();
-        let s = parse(&text.join("\n")).unwrap();
+        let s = parse(&text.join("\n"), false).unwrap();
         assert_eq!(
             (s.session_id.as_str(), s.cwd.as_str(), s.created_at),
             ("s", "/p", 1000)

@@ -135,6 +135,8 @@ export interface ImportScan {
   found: number;
   /** Not yet in Patchwork. */
   new: number;
+  /** Sub-agent runs, which are not offered for import. */
+  subagents: number;
 }
 
 export type AgentEvent =

@@ -119,6 +119,7 @@ fn read(conn: &Connection) -> rusqlite::Result<Vec<Session>> {
                 .map(String::from),
             created_at,
             messages: msgs,
+            subagent: false,
         });
     }
     Ok(out)

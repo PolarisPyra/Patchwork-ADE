@@ -48,7 +48,7 @@ fn joined_text(content: &Value, block_type: &str) -> String {
         .join("\n")
 }
 
-/// Parses one rollout file. Subagent sessions (e.g. guardian reviews) are skipped.
+/// Parses one rollout file. Subagent sessions (e.g. guardian reviews) are flagged.
 fn parse(text: &str) -> Option<Session> {
     let mut lines = text
         .lines()
@@ -58,9 +58,7 @@ fn parse(text: &str) -> Option<Session> {
     let user_thread = payload["thread_source"]
         .as_str()
         .is_none_or(|s| s == "user");
-    if !user_thread || payload["source"].is_object() {
-        return None;
-    }
+    let subagent = !user_thread || payload["source"].is_object();
     let session_id = payload["id"].as_str()?.to_string();
     let cwd = payload["cwd"].as_str()?.to_string();
     let created_at = payload["timestamp"]
@@ -115,6 +113,7 @@ fn parse(text: &str) -> Option<Session> {
         model: None,
         created_at,
         messages,
+        subagent,
     })
 }
 
@@ -165,9 +164,9 @@ mod tests {
     }
 
     #[test]
-    fn skips_subagent_sessions() {
+    fn flags_subagent_sessions() {
         let sub = json!({"type": "session_meta", "payload": {"id": "s", "cwd": "/p",
             "source": {"subagent": {"other": "guardian"}}, "thread_source": "guardian_review"}});
-        assert!(parse(&sub.to_string()).is_none());
+        assert!(parse(&sub.to_string()).is_some_and(|s| s.subagent));
     }
 }
