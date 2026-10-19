@@ -1,242 +1,157 @@
-mod runner;
-mod store;
-mod types;
-mod workspace;
+//! Tauri shell: exposes `patchwork_server::Server` as commands and forwards
+//! agent events to the web UI on the `"agent-event"` channel.
 
-use tauri::{Manager, State};
+use std::sync::Arc;
 
-use runner::Runner;
-use store::Store;
-use types::*;
+use patchwork_server::types::*;
+use patchwork_server::{Res, Server, persistence, provider, usage};
+use tauri::{Emitter, Manager, State};
 
-type Res<T> = Result<T, String>;
+type Srv<'a> = State<'a, Arc<Server>>;
 
-fn project_root(store: &Store, project_id: &str) -> Res<String> {
-    store
-        .settings()
-        .projects
-        .into_iter()
-        .find(|p| p.id == project_id)
-        .map(|p| p.path)
-        .ok_or_else(|| format!("unknown project {project_id}"))
+/// Runs blocking work (CLI probes, network, disk scans) off the main thread.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Res<T> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ---- settings & projects -------------------------------------------------
 
 #[tauri::command]
-fn get_settings(store: State<Store>) -> Settings {
-    store.settings()
+fn get_settings(server: Srv) -> Settings {
+    server.store.settings()
 }
 
 #[tauri::command]
-fn save_settings(store: State<Store>, settings: Settings) -> Res<()> {
-    store.update_settings(|s| *s = settings)
+fn save_settings(server: Srv, settings: Settings) -> Res<()> {
+    server.save_settings(settings)
 }
 
 #[tauri::command]
 fn list_models(kind: AgentKind) -> Vec<ModelOption> {
-    workspace::list_models(kind)
+    provider::list_models(kind)
 }
 
 #[tauri::command]
 async fn detect_agent(kind: AgentKind) -> AgentStatus {
-    tauri::async_runtime::spawn_blocking(move || workspace::detect_agent(kind))
+    blocking(move || provider::detect_agent(kind))
         .await
         .unwrap_or_else(|e| AgentStatus {
             kind,
             installed: false,
             version: None,
             signed_in: false,
-            detail: e.to_string(),
+            detail: e,
         })
 }
 
-fn register_project(store: &Store, project: Project) -> Res<Project> {
-    store.update_settings(|s| {
-        let p = match s.projects.iter().find(|p| p.path == project.path) {
-            Some(existing) => existing.clone(),
-            None => {
-                s.projects.push(project.clone());
-                project
-            }
-        };
-        s.active_project_id = Some(p.id.clone());
-        p
-    })
+#[tauri::command]
+async fn get_usage(kind: AgentKind) -> Res<ProviderUsage> {
+    blocking(move || usage::usage(kind)).await
 }
 
 #[tauri::command]
-fn add_project(store: State<Store>, path: String) -> Res<Project> {
-    let project = workspace::make_project(&path)?;
-    register_project(&store, project)
+fn add_project(server: Srv, path: String) -> Res<Project> {
+    server.add_project(&path)
 }
 
 #[tauri::command]
-fn create_project(store: State<Store>, parent: String, name: String) -> Res<Project> {
-    let project = workspace::create_project_dir(&parent, &name)?;
-    register_project(&store, project)
+fn create_project(server: Srv, parent: String, name: String) -> Res<Project> {
+    server.create_project(&parent, &name)
 }
 
 #[tauri::command]
-fn remove_project(store: State<Store>, id: String) -> Res<()> {
-    store.update_settings(|s| {
-        s.projects.retain(|p| p.id != id);
-        if s.active_project_id.as_deref() == Some(&id) {
-            s.active_project_id = s.projects.first().map(|p| p.id.clone());
-        }
-    })?;
-    store.update_threads(|ts| ts.retain(|t| t.project_id.as_deref() != Some(&id)))
+fn remove_project(server: Srv, id: String) -> Res<()> {
+    server.remove_project(&id)
 }
 
 // ---- threads & turns -----------------------------------------------------
 
 #[tauri::command]
-/// Every thread (project tasks and project-less chats), newest first.
-fn list_threads(store: State<Store>) -> Vec<Thread> {
-    let mut ts = store.threads();
-    ts.sort_by_key(|t| std::cmp::Reverse(t.created_at));
-    ts
+fn list_threads(server: Srv) -> Vec<Thread> {
+    server.list_threads()
 }
 
 #[tauri::command]
 fn create_thread(
-    store: State<Store>,
+    server: Srv,
     project_id: Option<String>,
     agent: AgentKind,
     model: Option<String>,
 ) -> Res<Thread> {
-    if let Some(id) = &project_id {
-        project_root(&store, id)?;
-    }
-    let title = if project_id.is_some() {
-        "New task"
-    } else {
-        "New chat"
-    };
-    let thread = Thread {
-        id: new_id(),
-        project_id,
-        title: title.into(),
-        agent,
-        model,
-        session_id: None,
-        created_at: now_ms(),
-        messages: vec![],
-    };
-    let t = thread.clone();
-    store.update_threads(|ts| ts.push(t))?;
-    Ok(thread)
+    server.create_thread(project_id, agent, model)
 }
 
 #[tauri::command]
-fn delete_thread(
-    app: tauri::AppHandle,
-    store: State<Store>,
-    runner: State<Runner>,
-    id: String,
-) -> Res<()> {
-    runner.cancel(&id);
-    if store.thread(&id).is_some_and(|t| t.project_id.is_none()) {
-        let _ = std::fs::remove_dir_all(runner::chat_dir(&app, &id)?);
-    }
-    store.update_threads(|ts| ts.retain(|t| t.id != id))
+fn delete_thread(server: Srv, id: String) {
+    server.delete_thread(&id)
 }
 
 #[tauri::command]
-/// Sets the thread's model. The agent can only change before the first message,
-/// since the conversation session belongs to one CLI.
-fn set_thread_model(
-    store: State<Store>,
-    id: String,
-    agent: AgentKind,
-    model: Option<String>,
-) -> Res<()> {
-    let thread = store.thread(&id).ok_or("Task not found")?;
-    if thread.agent != agent && !thread.messages.is_empty() {
-        return Err("The agent can't change after the conversation has started".into());
-    }
-    store.update_thread(&id, |t| {
-        t.agent = agent;
-        t.model = model;
-    })
-}
-
-/// Appends the user message, then starts the agent turn in the background.
-/// Returns the stored user message; assistant output arrives via `agent-event`.
-#[tauri::command]
-fn send_message(
-    app: tauri::AppHandle,
-    store: State<Store>,
-    runner: State<Runner>,
-    thread_id: String,
-    text: String,
-) -> Res<Message> {
-    if runner.is_running(&thread_id) {
-        return Err("A turn is already running in this task".into());
-    }
-    let msg = Message {
-        id: new_id(),
-        role: Role::User,
-        text: text.clone(),
-        created_at: now_ms(),
-        status: MessageStatus::Complete,
-        tools: vec![],
-        plan: vec![],
-        files: vec![],
-        error: None,
-    };
-    let m = msg.clone();
-    store.update_thread(&thread_id, |t| {
-        if t.messages.is_empty() {
-            let line = text.lines().next().unwrap_or("").trim();
-            t.title = line.chars().take(60).collect();
-        }
-        t.messages.push(m);
-    })?;
-    runner.start_turn(app, thread_id, text)?;
-    Ok(msg)
+fn set_thread_model(server: Srv, id: String, agent: AgentKind, model: Option<String>) -> Res<()> {
+    server.set_thread_model(&id, agent, model)
 }
 
 #[tauri::command]
-fn cancel_turn(runner: State<Runner>, thread_id: String) {
-    runner.cancel(&thread_id);
+fn send_message(server: Srv, thread_id: String, text: String) -> Res<Message> {
+    server.send_message(thread_id, text)
+}
+
+#[tauri::command]
+fn cancel_turn(server: Srv, thread_id: String) {
+    server.cancel_turn(&thread_id)
+}
+
+#[tauri::command]
+async fn scan_imports(server: Srv<'_>, kind: AgentKind) -> Res<ImportScan> {
+    let server = server.inner().clone();
+    blocking(move || server.scan_imports(kind)).await
+}
+
+#[tauri::command]
+async fn import_threads(server: Srv<'_>, kinds: Vec<AgentKind>) -> Res<u32> {
+    let server = server.inner().clone();
+    blocking(move || server.import_threads(&kinds)).await?
 }
 
 // ---- files & git ---------------------------------------------------------
 
+use patchwork_server::workspace;
+
 #[tauri::command]
-fn read_file(store: State<Store>, project_id: String, path: String) -> Res<String> {
-    workspace::read_file(&project_root(&store, &project_id)?, &path)
+fn read_file(server: Srv, project_id: String, path: String) -> Res<String> {
+    workspace::read_file(&server.project_root(&project_id)?, &path)
 }
 
 #[tauri::command]
-fn git_branch(store: State<Store>, project_id: String) -> Res<Option<String>> {
-    Ok(workspace::git_branch(&project_root(&store, &project_id)?))
+fn git_branch(server: Srv, project_id: String) -> Res<Option<String>> {
+    Ok(workspace::git_branch(&server.project_root(&project_id)?))
 }
 
 #[tauri::command]
-fn git_changes(store: State<Store>, project_id: String) -> Res<Vec<FileChange>> {
-    workspace::git_changes(&project_root(&store, &project_id)?)
+fn git_changes(server: Srv, project_id: String) -> Res<Vec<FileChange>> {
+    workspace::git_changes(&server.project_root(&project_id)?)
 }
 
 #[tauri::command]
-fn git_file_diff(store: State<Store>, project_id: String, path: String) -> Res<String> {
-    workspace::git_file_diff(&project_root(&store, &project_id)?, &path)
+fn git_file_diff(server: Srv, project_id: String, path: String) -> Res<String> {
+    workspace::git_file_diff(&server.project_root(&project_id)?, &path)
 }
 
 #[tauri::command]
-fn accept_file(store: State<Store>, project_id: String, path: String) -> Res<()> {
-    workspace::accept_file(&project_root(&store, &project_id)?, &path)
+fn accept_file(server: Srv, project_id: String, path: String) -> Res<()> {
+    workspace::accept_file(&server.project_root(&project_id)?, &path)
 }
 
 #[tauri::command]
-fn revert_file(store: State<Store>, project_id: String, path: String) -> Res<()> {
-    workspace::revert_file(&project_root(&store, &project_id)?, &path)
+fn revert_file(server: Srv, project_id: String, path: String) -> Res<()> {
+    workspace::revert_file(&server.project_root(&project_id)?, &path)
 }
 
 #[tauri::command]
-fn open_in_editor(store: State<Store>, project_id: String, path: String) -> Res<()> {
-    workspace::open_in_editor(&project_root(&store, &project_id)?, &path)
+fn open_in_editor(server: Srv, project_id: String, path: String) -> Res<()> {
+    workspace::open_in_editor(&server.project_root(&project_id)?, &path)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -251,9 +166,18 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            let dir = app.path().app_config_dir()?;
-            app.manage(Store::open(dir));
-            app.manage(Runner::default());
+            // Config lives in `~/.config/patchwork` rather than the app-identifier folder.
+            let config_dir = app.path().config_dir()?.join("patchwork");
+            persistence::adopt_old_dir(&app.path().app_config_dir()?, &config_dir)?;
+            let handle = app.handle().clone();
+            let server = Server::open(
+                config_dir,
+                &app.path().app_local_data_dir()?,
+                Box::new(move |event| {
+                    let _ = handle.emit("agent-event", event);
+                }),
+            )?;
+            app.manage(server);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -261,6 +185,7 @@ pub fn run() {
             save_settings,
             detect_agent,
             list_models,
+            get_usage,
             add_project,
             create_project,
             remove_project,
@@ -270,6 +195,8 @@ pub fn run() {
             set_thread_model,
             send_message,
             cancel_turn,
+            scan_imports,
+            import_threads,
             read_file,
             git_branch,
             git_changes,

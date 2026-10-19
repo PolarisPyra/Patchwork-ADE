@@ -1,0 +1,299 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  ArrowSquareOutIcon,
+  CheckIcon,
+  CircleNotchIcon,
+  CodeIcon,
+  CopyIcon,
+  XIcon,
+} from "@phosphor-icons/react";
+import { api, type FileChange, type Message } from "~/api";
+import CodeView from "~/components/canvas/CodeView";
+import DiffView from "~/components/canvas/DiffView";
+import PlanView from "~/components/canvas/PlanView";
+import { describeFile, splitLines } from "~/components/canvas/highlight";
+import "./Canvas.css";
+
+export type CanvasTab = "plan" | "code" | "diff";
+
+export interface CanvasProps {
+  projectId: string;
+  /** Project-relative file path to show in Code/Diff tabs. */
+  path: string | null;
+  /** Assistant message whose plan (Plan tab) and files are shown; null if none. */
+  message: Message | null;
+  initialTab?: CanvasTab;
+  onClose: () => void;
+  /** Called after Apply/Reject succeeds so the parent can refresh git state. */
+  onChangesUpdated: () => void;
+}
+
+/** A load result tagged with the project+path it belongs to, so stale results are ignored. */
+interface Loaded<T> {
+  key: string;
+  value?: T;
+  error?: string;
+}
+
+interface ChangesState {
+  projectId: string;
+  items: FileChange[];
+}
+
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+export default function Canvas({
+  projectId,
+  path,
+  message,
+  initialTab,
+  onClose,
+  onChangesUpdated,
+}: CanvasProps) {
+  const [tab, setTab] = useState<CanvasTab>(initialTab ?? (path ? "code" : "plan"));
+  const [file, setFile] = useState<Loaded<string> | null>(null);
+  const [diffResult, setDiffResult] = useState<Loaded<string> | null>(null);
+  const [changesState, setChangesState] = useState<ChangesState | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const key = `${projectId}\u0000${path ?? ""}`;
+  const activeTab: CanvasTab = path === null ? "plan" : tab;
+
+  useEffect(() => {
+    setTab(initialTab ?? (path ? "code" : "plan"));
+  }, [path, initialTab]);
+
+  // Reload content, diff and git state whenever the file changes or a reload is requested.
+  useEffect(() => {
+    let live = true;
+    if (path) {
+      api.readFile(projectId, path).then(
+        (value) => {
+          if (live) setFile({ key, value });
+        },
+        (e: unknown) => {
+          if (live) setFile({ key, error: errorMessage(e) });
+        },
+      );
+      api.gitFileDiff(projectId, path).then(
+        (value) => {
+          if (live) setDiffResult({ key, value });
+        },
+        (e: unknown) => {
+          if (live) setDiffResult({ key, error: errorMessage(e) });
+        },
+      );
+    }
+    api.gitChanges(projectId).then(
+      (items) => {
+        if (live) setChangesState({ projectId, items });
+      },
+      (e: unknown) => {
+        if (live) {
+          setChangesState({ projectId, items: [] });
+          setActionError(errorMessage(e));
+        }
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [key, projectId, path, reloadToken]);
+
+  // The agent may have edited the file while it was streaming.
+  const status = message?.status;
+  const prevStatus = useRef(status);
+  useEffect(() => {
+    if (prevStatus.current === "streaming" && status !== "streaming") {
+      setReloadToken((n) => n + 1);
+    }
+    prevStatus.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  const code = file?.key === key ? file : null;
+  const diff = diffResult?.key === key ? diffResult : null;
+  const change =
+    changesState?.projectId === projectId
+      ? changesState.items.find((c) => c.path === path)
+      : undefined;
+
+  const name = path ? (path.split("/").pop() ?? path) : "No file selected";
+  const kind = path ? describeFile(path) : null;
+  const content = code?.value;
+  const lineCount = content === undefined ? null : splitLines(content).length;
+  const planCount = message?.plan.length ?? 0;
+  const diffCount = change ? change.additions + change.deletions : 0;
+
+  const tabs: { id: CanvasTab; label: string; count: number }[] = path
+    ? [
+        { id: "plan", label: "Plan", count: planCount },
+        { id: "code", label: "Code", count: 0 },
+        { id: "diff", label: "Diff", count: diffCount },
+      ]
+    : [{ id: "plan", label: "Plan", count: planCount }];
+
+  async function runAction(action: () => Promise<void>) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await action();
+      onChangesUpdated();
+      setReloadToken((n) => n + 1);
+    } catch (e) {
+      setActionError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openInEditor() {
+    if (!path) return;
+    setActionError(null);
+    api.openInEditor(projectId, path).catch((e: unknown) => setActionError(errorMessage(e)));
+  }
+
+  async function copyContent() {
+    if (content === undefined) return;
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+    } catch (e) {
+      setActionError(errorMessage(e));
+    }
+  }
+
+  function apply() {
+    if (!path) return;
+    void runAction(() => api.acceptFile(projectId, path));
+  }
+
+  function reject() {
+    if (!path || !window.confirm(`Discard changes to ${name}?`)) return;
+    void runAction(() => api.revertFile(projectId, path));
+  }
+
+  function renderBody(): ReactNode {
+    if (activeTab === "plan" || !path) {
+      return <PlanView message={message} />;
+    }
+    const result = activeTab === "code" ? code : diff;
+    if (!result || (result.value === undefined && result.error === undefined)) {
+      return (
+        <div className="cv-center">
+          <CircleNotchIcon size={18} className="spin" />
+        </div>
+      );
+    }
+    if (result.error !== undefined) {
+      return (
+        <div className="cv-center cv-muted" title={result.error}>
+          {activeTab === "code"
+            ? "This file can't be displayed. It may have been deleted or is binary."
+            : "The diff for this file could not be loaded."}
+        </div>
+      );
+    }
+    return activeTab === "code" ? (
+      <CodeView path={path} content={result.value ?? ""} />
+    ) : (
+      <DiffView diff={result.value ?? ""} />
+    );
+  }
+
+  return (
+    <aside className="cv-root">
+      <header className="cv-header">
+        <div className="cv-file-icon">
+          <CodeIcon size={18} />
+        </div>
+        <div className="cv-title">
+          <div className="cv-name" title={path ?? undefined}>
+            {name}
+          </div>
+          {kind && (
+            <div className="cv-sub">
+              {lineCount === null ? kind.label : `${kind.label} · ${lineCount} lines`}
+            </div>
+          )}
+        </div>
+        <div className="cv-actions">
+          {path && (
+            <>
+              <button className="btn" onClick={openInEditor}>
+                <ArrowSquareOutIcon size={14} />
+                Open in editor
+              </button>
+              <button className="btn" onClick={() => void copyContent()} disabled={content === undefined}>
+                {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </>
+          )}
+          <button className="btn btn-icon" onClick={onClose} aria-label="Close canvas" title="Close">
+            <XIcon size={16} />
+          </button>
+        </div>
+      </header>
+
+      <nav className="cv-tabs" role="tablist">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={activeTab === t.id}
+            className="cv-tab"
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+            {t.count > 0 && <span className="badge cv-count">{t.count}</span>}
+          </button>
+        ))}
+      </nav>
+
+      <div className="cv-body selectable">{renderBody()}</div>
+
+      {actionError && (
+        <div className="cv-error" role="alert">
+          {actionError}
+        </div>
+      )}
+
+      {path && change && (
+        <footer className="cv-footer">
+          <div className="cv-footer-status">
+            {change.staged ? (
+              <>
+                <CheckIcon size={14} className="cv-applied-icon" />
+                <span className="cv-applied">Changes applied</span>
+              </>
+            ) : (
+              <span className="cv-muted">
+                Unapplied changes · +{change.additions} −{change.deletions}
+              </span>
+            )}
+          </div>
+          <div className="cv-footer-actions">
+            <button className="btn" onClick={reject} disabled={busy}>
+              Reject
+            </button>
+            <button className="btn btn-primary" onClick={apply} disabled={busy}>
+              <CheckIcon size={14} />
+              Apply changes
+            </button>
+          </div>
+        </footer>
+      )}
+    </aside>
+  );
+}

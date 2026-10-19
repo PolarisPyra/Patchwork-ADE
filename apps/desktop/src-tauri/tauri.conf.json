@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "dev.patchwork.ade",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "../../web/dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeDevCommand": "pnpm --filter patchwork-web dev",
+    "beforeBuildCommand": "pnpm --filter patchwork-web build"
   },
   "app": {
     "windows": [

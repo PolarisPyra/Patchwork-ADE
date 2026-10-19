@@ -1,0 +1,269 @@
+import { useEffect, useState } from "react";
+import { ArrowRightIcon, MoonIcon, SunIcon } from "@phosphor-icons/react";
+import { api, type AgentKind, type Settings } from "~/api";
+import type { UpdateSettings } from "~/app/App";
+import AgentStep from "~/components/onboarding/AgentStep";
+import DevicesStep from "~/components/onboarding/DevicesStep";
+import ImportsStep, { useImportScans } from "~/components/onboarding/ImportsStep";
+import PluginsStep from "~/components/onboarding/PluginsStep";
+import ProjectsStep from "~/components/onboarding/ProjectsStep";
+import Stepper from "~/components/onboarding/Stepper";
+import { AGENT_KINDS, isReady, useAgentProbes } from "~/components/onboarding/agentProbes";
+import { errorText } from "~/lib/util";
+import "./Onboarding.css";
+
+export interface OnboardingProps {
+  settings: Settings;
+  updateSettings: UpdateSettings;
+  resolvedTheme: "light" | "dark";
+  toggleTheme: () => void;
+}
+
+const STEPS = [
+  {
+    label: "Agent",
+    title: "Connect your coding agents",
+    subtitle:
+      "Connect the agents already installed on this computer. You can pick which one runs each task.",
+    helper: "Connect at least one agent to start your first task.",
+  },
+  {
+    label: "Imports",
+    title: "Import your conversations",
+    subtitle:
+      "Bring in conversations you've had with these agents outside Patchwork. Follow-ups continue the same session.",
+    helper: "Importing is optional. You can import later from Settings.",
+  },
+  {
+    label: "Projects",
+    title: "Set up your projects",
+    subtitle: "Choose where Patchwork should work. You can add and manage projects later.",
+    helper: "Projects are optional. You can add more later.",
+  },
+  {
+    label: "Plugins",
+    title: "Choose your integrations",
+    subtitle: "Enable the tools your workflow needs. Everything here is optional.",
+    helper: "Integrations can be changed at any time in Settings.",
+  },
+  {
+    label: "Devices",
+    title: "Configure your devices",
+    subtitle:
+      "Choose where tasks run and how Patchwork connects to your development environments.",
+    helper: "More devices can be added later.",
+  },
+];
+
+const IMPORTS_STEP = 1;
+const LAST_STEP = STEPS.length - 1;
+
+export default function Onboarding({
+  settings,
+  updateSettings,
+  resolvedTheme,
+  toggleTheme,
+}: OnboardingProps) {
+  const [step, setStep] = useState(0);
+  const [reached, setReached] = useState(0);
+  const [saving, setSaving] = useState(false);
+  // Connected agents, kept in AGENT_KINDS order so the first is the default.
+  const [agents, setAgents] = useState<AgentKind[] | null>(null);
+  const { probes, check, checking } = useAgentProbes();
+  const { scans, scanning } = useImportScans(agents ?? [], step === IMPORTS_STEP);
+  // Providers to import from; defaults to every one with something new.
+  const [importKinds, setImportKinds] = useState<AgentKind[] | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (step !== IMPORTS_STEP || scanning || importKinds !== null) return;
+    setImportKinds((agents ?? []).filter((k) => (scans[k]?.new ?? 0) > 0));
+  }, [step, scanning, scans, agents, importKinds]);
+
+  const toggleImport = (kind: AgentKind) =>
+    setImportKinds((current) => {
+      const set = current ?? [];
+      return set.includes(kind) ? set.filter((k) => k !== kind) : [...set, kind];
+    });
+
+  // Only ready agents can be selected. Start from the saved agents (or every
+  // ready agent on first run), then keep the user's choices while still ready.
+  useEffect(() => {
+    if (checking) return;
+    const ready = AGENT_KINDS.filter((k) => isReady(probes[k]));
+    setAgents((current) => {
+      const saved = settings.agents.filter((k) => ready.includes(k));
+      const base = current ?? (saved.length > 0 ? saved : ready);
+      return ready.filter((k) => base.includes(k));
+    });
+  }, [checking, probes, settings.agents]);
+
+  const toggleAgent = (kind: AgentKind) =>
+    setAgents((current) => {
+      const set = current ?? [];
+      const next = set.includes(kind) ? set.filter((k) => k !== kind) : [...set, kind];
+      return AGENT_KINDS.filter((k) => next.includes(k));
+    });
+
+  const canContinue =
+    !saving && (step !== 0 || (agents?.length ?? 0) > 0) && (step !== IMPORTS_STEP || !scanning);
+  const isLast = step === LAST_STEP;
+  const current = STEPS[step];
+
+  const goTo = (index: number) => {
+    setStep(index);
+    setReached((r) => Math.max(r, index));
+  };
+
+  const complete = () => updateSettings((s) => ({ ...s, onboarded: true }));
+
+  /** Imports the chosen providers' conversations; false if it failed. */
+  const importSelected = async () => {
+    const kinds = (importKinds ?? []).filter((k) => (scans[k]?.new ?? 0) > 0);
+    if (kinds.length === 0) return true;
+    setImportError(null);
+    try {
+      await api.importThreads(kinds);
+      // Importing adds projects on the backend; pick them up before saving settings again.
+      await updateSettings(await api.getSettings());
+      setImportKinds(null);
+      return true;
+    } catch (e) {
+      setImportError(errorText(e));
+      return false;
+    }
+  };
+
+  const next = async () => {
+    if (!canContinue) return;
+    setSaving(true);
+    try {
+      if (isLast) {
+        await complete();
+      } else {
+        if (step === 0 && agents) await updateSettings((s) => ({ ...s, agents }));
+        if (step === IMPORTS_STEP && !(await importSelected())) return;
+        goTo(step + 1);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Enter continues from anywhere that is not a text field or button, so it
+  // never hijacks the project name input or a focused control.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || !canContinue) return;
+      if (!(e.target instanceof HTMLElement)) return;
+      if (e.target.closest("input, textarea, select, button, [contenteditable='true']")) return;
+      e.preventDefault();
+      void next();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const renderStep = () => {
+    switch (step) {
+      case 0:
+        return (
+          <AgentStep
+            probes={probes}
+            checking={checking}
+            selected={agents ?? []}
+            onToggle={toggleAgent}
+            onRecheck={check}
+          />
+        );
+      case IMPORTS_STEP:
+        return (
+          <ImportsStep
+            agents={agents ?? []}
+            scans={scans}
+            selected={importKinds ?? []}
+            onToggle={toggleImport}
+            error={importError}
+          />
+        );
+      case 2:
+        return <ProjectsStep settings={settings} updateSettings={updateSettings} />;
+      case 3:
+        return <PluginsStep settings={settings} updateSettings={updateSettings} />;
+      default:
+        return <DevicesStep />;
+    }
+  };
+
+  return (
+    <div className="ob-root">
+      <header className="ob-header">
+        <div className="ob-brand">
+          <span className="ob-logo">P</span>
+          <span className="ob-app-name">Patchwork</span>
+        </div>
+
+        <Stepper
+          labels={STEPS.map((s) => s.label)}
+          current={step}
+          reached={reached}
+          onSelect={goTo}
+        />
+
+        <div className="ob-header-actions">
+          <button
+            type="button"
+            className="btn btn-icon"
+            onClick={toggleTheme}
+            title={resolvedTheme === "dark" ? "Dark theme (switch to light)" : "Light theme (switch to dark)"}
+            aria-label="Toggle theme"
+          >
+            {resolvedTheme === "dark" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost ob-skip"
+            onClick={() => void complete()}
+          >
+            Skip setup
+          </button>
+        </div>
+      </header>
+
+      <main className="ob-body">
+        <div className="ob-column">
+          <h1 className="ob-title">{current.title}</h1>
+          <p className="ob-subtitle">{current.subtitle}</p>
+          <section className="card ob-card">{renderStep()}</section>
+        </div>
+      </main>
+
+      <footer className="ob-footer">
+        <div className="ob-column ob-footer-inner">
+          <span className="ob-helper">{current.helper}</span>
+          <div className="ob-footer-actions">
+            {step > 0 && (
+              <button type="button" className="btn btn-lg" onClick={() => goTo(step - 1)}>
+                Back
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary btn-lg ob-continue"
+              disabled={!canContinue}
+              onClick={() => void next()}
+            >
+              {isLast ? (
+                "Finish setup"
+              ) : (
+                <>
+                  Continue <ArrowRightIcon size={16} />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}

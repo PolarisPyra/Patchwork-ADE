@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter patchwork-ade dev",
-    "build": "pnpm --filter patchwork-ade build",
-    "typecheck": "pnpm --filter patchwork-ade typecheck",
-    "tauri": "pnpm --filter patchwork-ade tauri"
+    "dev": "pnpm --filter patchwork-desktop dev",
+    "dev:web": "pnpm --filter patchwork-web dev",
+    "build": "pnpm --filter patchwork-desktop build",
+    "typecheck": "pnpm --filter patchwork-web typecheck",
+    "test": "cargo test --workspace",
+    "tauri": "pnpm --filter patchwork-desktop tauri"
   }
 }
