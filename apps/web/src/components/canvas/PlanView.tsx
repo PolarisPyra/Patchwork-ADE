@@ -4,13 +4,13 @@ import type { Message, StepStatus } from "~/api";
 function StepIcon({ status }: { status: StepStatus }) {
   switch (status) {
     case "done":
-      return <CheckIcon size={14} className="cv-step-icon cv-step-done" />;
+      return <CheckIcon size={14} className="mt-1 flex-none text-accent-text" />;
     case "running":
-      return <CircleNotchIcon size={14} className="cv-step-icon cv-step-running spin" />;
+      return <CircleNotchIcon size={14} className="mt-1 flex-none text-accent-text spin" />;
     case "error":
-      return <XIcon size={14} className="cv-step-icon cv-step-error" />;
+      return <XIcon size={14} className="mt-1 flex-none text-danger" />;
     case "pending":
-      return <CircleIcon size={14} className="cv-step-icon cv-step-pending" />;
+      return <CircleIcon size={14} className="mt-1 flex-none text-fg-subtle" />;
   }
 }
 
@@ -19,15 +19,17 @@ export default function PlanView({ message }: { message: Message | null }) {
   const files = message?.files ?? [];
 
   return (
-    <div className="cv-plan">
+    <div className="py-4 px-5">
       {steps.length === 0 ? (
-        <div className="cv-center cv-muted">The agent hasn't shared a plan for this task.</div>
+        <div className="flex items-center justify-center h-full min-h-[120px] p-6 text-center text-fg-muted">
+          The agent hasn't shared a plan for this task.
+        </div>
       ) : (
-        <ol className="cv-steps">
+        <ol className="flex flex-col gap-2 m-0 p-0 list-none">
           {steps.map((step, i) => (
-            <li className="cv-step" key={i}>
+            <li className="flex items-start gap-2" key={i}>
               <StepIcon status={step.status} />
-              <span className="cv-step-text">{step.text}</span>
+              <span className="min-w-0 leading-normal">{step.text}</span>
             </li>
           ))}
         </ol>
@@ -35,10 +37,16 @@ export default function PlanView({ message }: { message: Message | null }) {
 
       {files.length > 0 && (
         <>
-          <div className="cv-section-title">Files changed</div>
-          <ul className="cv-file-list">
+          <div className="mt-6 mb-2 text-[length:var(--fs-xs)] font-semibold tracking-[0.04em] uppercase text-fg-subtle">
+            Files changed
+          </div>
+          <ul className="flex flex-col gap-1 m-0 p-0 list-none">
             {files.map((file) => (
-              <li className="cv-file-row" key={file} title={file}>
+              <li
+                className="py-1 px-2 rounded-[var(--radius-sm)] font-[family-name:var(--font-mono)] text-[length:var(--fs-sm)] whitespace-nowrap overflow-hidden text-ellipsis select-text"
+                key={file}
+                title={file}
+              >
                 {file}
               </li>
             ))}

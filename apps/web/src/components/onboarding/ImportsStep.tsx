@@ -46,10 +46,12 @@ export default function ImportsStep({
 }: ImportsStepProps) {
   return (
     <>
-      <div className="ob-card-header">
-        <span className="ob-card-title">Conversations found on this computer</span>
+      <div className="flex items-center justify-between">
+        <span className="text-[length:var(--fs-md)] font-semibold">
+          Conversations found on this computer
+        </span>
       </div>
-      <div className="ob-option-list" role="group" aria-label="Providers to import from">
+      <div className="flex flex-col gap-2" role="group" aria-label="Providers to import from">
         {sources.map((kind) => {
           const scan = scans[kind];
           // T3 Code is only offered to people who use it.
@@ -63,17 +65,24 @@ export default function ImportsStep({
               role="checkbox"
               aria-checked={isSelected}
               disabled={!importable}
-              className={cx("ob-option", importable && "is-clickable", isSelected && "is-selected")}
+              className={cx(
+                "flex w-full items-center gap-4 rounded-[var(--radius)] border p-4 text-left text-fg transition-[background-color,border-color] duration-[0.12s] ease-[ease] not-disabled:cursor-pointer not-disabled:hover:bg-hover",
+                isSelected ? "border-accent bg-accent-soft" : "border-border bg-transparent",
+              )}
               onClick={() => onToggle(kind)}
             >
-              <span className="ob-tile ob-tile-lg">
+              <span className="inline-flex h-11 w-11 flex-none items-center justify-center rounded-[var(--radius)] bg-selected-muted text-[length:var(--fs-lg)] font-semibold text-accent-text">
                 <ProviderLogos kind={kind} size={26} />
               </span>
-              <span className="ob-option-text">
-                <span className="ob-option-name">{SOURCE_LABELS[kind]}</span>
-                <span className="ob-option-detail">{describeScan(scan)}</span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-[length:var(--fs-lg)] font-semibold">
+                  {SOURCE_LABELS[kind]}
+                </span>
+                <span className="text-[length:var(--fs-sm)] text-fg-muted">
+                  {describeScan(scan)}
+                </span>
               </span>
-              <span className="ob-option-trail">
+              <span className="flex flex-none items-center gap-3">
                 {scan === undefined && (
                   <span className="badge">
                     <CircleNotchIcon size={12} className="spin" />
@@ -81,7 +90,12 @@ export default function ImportsStep({
                   </span>
                 )}
                 {importable && (
-                  <span className={cx("ob-checkbox", isSelected && "is-selected")}>
+                  <span
+                    className={cx(
+                      "inline-flex h-[18px] w-[18px] flex-none items-center justify-center rounded-[var(--radius-sm)] border text-on-accent",
+                      isSelected ? "border-accent bg-accent" : "border-border-strong",
+                    )}
+                  >
                     {isSelected && <CheckIcon size={12} weight="bold" />}
                   </span>
                 )}
@@ -90,7 +104,7 @@ export default function ImportsStep({
           );
         })}
       </div>
-      {error && <p className="ob-error">{error}</p>}
+      {error && <p className="m-0 text-[length:var(--fs-sm)] text-danger">{error}</p>}
     </>
   );
 }

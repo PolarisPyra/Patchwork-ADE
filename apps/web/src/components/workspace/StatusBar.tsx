@@ -19,8 +19,8 @@ export default function StatusBar({
   onOpenChanges,
 }: StatusBarProps) {
   return (
-    <footer className="ws-statusbar">
-      <div className="ws-crumbs">
+    <footer className="flex min-w-0 items-center gap-3 border-t border-border bg-app px-2.5 text-[length:var(--fs-xs)] text-fg-muted">
+      <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap">
         <span>{project?.name ?? "No project"}</span>
         {branch && (
           <>
@@ -30,11 +30,14 @@ export default function StatusBar({
           </>
         )}
       </div>
-      <span className="ws-spacer" />
-      <button className="ws-status-link" onClick={onOpenChanges}>
+      <span className="flex-1" />
+      <button
+        className="inline-flex h-[18px] cursor-pointer items-center gap-1 rounded-[3px] border-none bg-transparent px-1 hover:bg-hover hover:text-fg"
+        onClick={onOpenChanges}
+      >
         {changeCount} changes
       </button>
-      <span className="ws-status-agent">
+      <span className="inline-flex items-center gap-1">
         {working ? (
           <>
             <CircleNotchIcon size={12} className="spin" />

@@ -26,14 +26,14 @@ export default function AgentStep({
 }: AgentStepProps) {
   return (
     <>
-      <div className="ob-card-header">
-        <span className="ob-card-title">Available coding agents</span>
-        <button type="button" className="link ob-recheck" disabled={checking} onClick={onRecheck}>
+      <div className="flex items-center justify-between">
+        <span className="text-[length:var(--fs-md)] font-semibold">Available coding agents</span>
+        <button type="button" className="link disabled:cursor-default disabled:opacity-50 disabled:hover:no-underline" disabled={checking} onClick={onRecheck}>
           <ArrowClockwiseIcon size={14} className={checking ? "spin" : undefined} />
           Check again
         </button>
       </div>
-      <div className="ob-option-list" role="group" aria-label="Coding agents">
+      <div className="flex flex-col gap-2" role="group" aria-label="Coding agents">
         {AGENT_KINDS.map((kind) => (
           <AgentRow
             key={kind}
@@ -66,20 +66,30 @@ function AgentRow({
       role="checkbox"
       aria-checked={selected}
       disabled={!ready}
-      className={cx("ob-option", ready && "is-clickable", selected && "is-selected")}
+      className={cx(
+        "flex w-full items-center gap-4 rounded-[var(--radius)] border p-4 text-left text-fg transition-[background-color,border-color] duration-[0.12s] ease-[ease] not-disabled:cursor-pointer not-disabled:hover:bg-hover",
+        selected ? "border-accent bg-accent-soft" : "border-border bg-transparent",
+      )}
       onClick={() => onToggle(kind)}
     >
-      <span className="ob-tile ob-tile-lg">
+      <span className="inline-flex h-11 w-11 flex-none items-center justify-center rounded-[var(--radius)] bg-selected-muted text-[length:var(--fs-lg)] font-semibold text-accent-text">
         <ProviderLogos kind={kind} size={26} />
       </span>
-      <span className="ob-option-text">
-        <span className="ob-option-name">{AGENT_LABELS[kind]}</span>
-        <span className="ob-option-detail">{probe.status?.detail ?? ""}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-[length:var(--fs-lg)] font-semibold">{AGENT_LABELS[kind]}</span>
+        <span className="text-[length:var(--fs-sm)] text-fg-muted">
+          {probe.status?.detail ?? ""}
+        </span>
       </span>
-      <span className="ob-option-trail">
+      <span className="flex flex-none items-center gap-3">
         <StatusBadge probe={probe} />
         {ready && (
-          <span className={cx("ob-checkbox", selected && "is-selected")}>
+          <span
+            className={cx(
+              "inline-flex h-[18px] w-[18px] flex-none items-center justify-center rounded-[var(--radius-sm)] border text-on-accent",
+              selected ? "border-accent bg-accent" : "border-border-strong",
+            )}
+          >
             {selected && <CheckIcon size={12} weight="bold" />}
           </span>
         )}

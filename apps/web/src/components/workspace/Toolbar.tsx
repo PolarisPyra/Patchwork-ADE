@@ -39,21 +39,27 @@ export default function Toolbar({
   const name = project?.name ?? "";
 
   return (
-    <header className="ws-toolbar">
-      <div className="ws-toolbar-left">
+    <header className="flex min-w-0 items-center gap-1.5 border-b border-border bg-app pr-2 pl-[calc((var(--stripe-w)_-_1px_-_20px)/2_-_4px)]">
+      <div className="flex min-w-0 items-center gap-1.5">
         <Dropdown
           trigger={({ toggle }) => (
-            <button className="ws-project-btn" onClick={toggle}>
+            <button
+              className="inline-flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none bg-transparent py-0 pr-1.5 pl-1 hover:bg-hover"
+              onClick={toggle}
+            >
               {project ? (
-                <span className="ws-project-tile" style={{ background: tileColor(name) }}>
+                <span
+                  className="grid h-5 w-5 flex-none place-items-center rounded-[var(--radius-sm)] text-[10px] font-bold text-on-accent"
+                  style={{ background: tileColor(name) }}
+                >
                   {initials(name)}
                 </span>
               ) : (
-                <span className="ws-project-tile ws-project-tile-chats">
+                <span className="grid h-5 w-5 flex-none place-items-center rounded-[var(--radius-sm)] bg-accent-soft text-[10px] font-bold text-accent-text">
                   <ChatsIcon size={12} />
                 </span>
               )}
-              <span className="ws-project-label">{project?.name ?? "No project"}</span>
+              <span className="max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap font-semibold">{project?.name ?? "No project"}</span>
               <CaretDownIcon size={14} />
             </button>
           )}
@@ -63,19 +69,21 @@ export default function Toolbar({
               {projects.map((p) => (
                 <button
                   key={p.id}
-                  className="ws-menu-item"
+                  className="flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none bg-transparent px-2 text-left text-fg whitespace-nowrap hover:bg-hover"
                   onClick={() => {
                     close();
                     onSelectProject(p.id);
                   }}
                 >
-                  <span className={`ws-dot${p.id === project?.id ? " active" : ""}`} />
+                  <span
+                    className={`h-1.5 w-1.5 flex-none rounded-[50%] ${p.id === project?.id ? "bg-accent" : "bg-border-strong"}`}
+                  />
                   {p.name}
                 </button>
               ))}
-              {projects.length > 0 && <div className="ws-menu-sep" />}
+              {projects.length > 0 && <div className="my-1 h-px bg-border" />}
               <button
-                className="ws-menu-item"
+                className="flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none bg-transparent px-2 text-left text-fg whitespace-nowrap hover:bg-hover"
                 onClick={() => {
                   close();
                   onOpenFolder();
@@ -90,8 +98,11 @@ export default function Toolbar({
 
         {branch && (
           <>
-            <span className="ws-sep" />
-            <span className="ws-branch" title="Current branch">
+            <span className="mx-1 h-4 w-px flex-none bg-border" />
+            <span
+              className="inline-flex min-w-0 max-w-[200px] items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap text-fg-muted text-[length:var(--fs-sm)]"
+              title="Current branch"
+            >
               <GitBranchIcon size={14} />
               {branch}
             </span>

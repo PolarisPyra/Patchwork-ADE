@@ -214,12 +214,15 @@
   }
 }
 
-:focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: 1px;
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 1px;
+  }
 }
 
 /* ---- shared primitives -------------------------------------------------- */
+@layer components {
 
 .btn {
   display: inline-flex;
@@ -399,4 +402,5 @@
 
 .selectable {
   user-select: text;
+}
 }

@@ -40,12 +40,17 @@ export default function ContextMenu({
   }, [onClose]);
 
   return (
-    <div ref={panel} className="ws-menu ws-context-menu" role="menu" style={{ left: x, top: y }}>
+    <div
+      ref={panel}
+      className="fixed z-20 flex min-w-[160px] flex-col rounded-[var(--radius)] border border-border-strong bg-elevated p-1 shadow-[var(--shadow-popup)]"
+      role="menu"
+      style={{ left: x, top: y }}
+    >
       {items.map(({ label, Icon, danger, onSelect }) => (
         <button
           key={label}
           role="menuitem"
-          className={`ws-menu-item${danger ? " ws-menu-danger" : ""}`}
+          className={`flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none bg-transparent px-2 text-left whitespace-nowrap hover:bg-hover ${danger ? "text-danger" : "text-fg"}`}
           onClick={() => {
             onClose();
             onSelect();

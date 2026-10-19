@@ -23,10 +23,13 @@ export default function Dropdown({ trigger, children, up = false }: DropdownProp
   }, [open]);
 
   return (
-    <div className="ws-dropdown" ref={ref}>
+    <div className="relative inline-flex min-w-0" ref={ref}>
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
       {open && (
-        <div className={`ws-menu${up ? " ws-menu-up" : ""}`} role="menu">
+        <div
+          className={`absolute left-0 z-20 flex min-w-[200px] flex-col rounded-[var(--radius)] border border-border-strong bg-elevated p-1 shadow-[var(--shadow-popup)] ${up ? "bottom-[calc(100%_+_4px)]" : "top-[calc(100%_+_4px)]"}`}
+          role="menu"
+        >
           {children(() => setOpen(false))}
         </div>
       )}

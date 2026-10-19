@@ -81,16 +81,25 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
   return (
     <>
       <div>
-        <div className="ob-card-title">Project workspace</div>
-        <div className="ob-card-sub">Start from an existing folder or create a new workspace.</div>
+        <div className="text-[length:var(--fs-md)] font-semibold">Project workspace</div>
+        <div className="text-[length:var(--fs-sm)] text-fg-muted">
+          Start from an existing folder or create a new workspace.
+        </div>
       </div>
 
-      <div className="ob-option-group">
-        <div className={cx("ob-option", action === "open" && "is-selected")}>
-          <span className="ob-option-index">01</span>
-          <span className="ob-option-text">
-            <span className="ob-option-name">Open a local project</span>
-            <span className="ob-option-detail">
+      <div className="flex flex-col gap-2">
+        <div
+          className={cx(
+            "flex w-full items-center gap-4 rounded-[var(--radius)] border p-4 text-left text-fg transition-[background-color,border-color] duration-[0.12s] ease-[ease]",
+            action === "open" ? "border-accent bg-accent-soft" : "border-border bg-transparent",
+          )}
+        >
+          <span className="w-9 flex-none text-[length:var(--fs-xl)] font-semibold tabular-nums text-accent-text">
+            01
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-[length:var(--fs-lg)] font-semibold">Open a local project</span>
+            <span className="text-[length:var(--fs-sm)] text-fg-muted">
               Select a folder from your computer to start working.
             </span>
           </span>
@@ -104,11 +113,18 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
           </button>
         </div>
 
-        <div className={cx("ob-option", action === "create" && "is-selected")}>
-          <span className="ob-option-index">02</span>
-          <span className="ob-option-text">
-            <span className="ob-option-name">Create a new project</span>
-            <span className="ob-option-detail">
+        <div
+          className={cx(
+            "flex w-full items-center gap-4 rounded-[var(--radius)] border p-4 text-left text-fg transition-[background-color,border-color] duration-[0.12s] ease-[ease]",
+            action === "create" ? "border-accent bg-accent-soft" : "border-border bg-transparent",
+          )}
+        >
+          <span className="w-9 flex-none text-[length:var(--fs-xl)] font-semibold tabular-nums text-accent-text">
+            02
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-[length:var(--fs-lg)] font-semibold">Create a new project</span>
+            <span className="text-[length:var(--fs-sm)] text-fg-muted">
               Choose a location and initialize an empty workspace.
             </span>
           </span>
@@ -126,10 +142,19 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
         </div>
 
         {createOpen && (
-          <div className="ob-create">
-            <div className="ob-form-row">
-              <span className="ob-form-label">Location</span>
-              <span className={cx("ob-path", !parent && "is-empty")}>
+          <div className="flex flex-col gap-3 rounded-[var(--radius)] border border-border p-4">
+            <div className="flex items-center gap-3">
+              <span className="w-[72px] flex-none text-[length:var(--fs-sm)] text-fg-muted">
+                Location
+              </span>
+              <span
+                className={cx(
+                  "min-w-0 flex-1 overflow-hidden whitespace-nowrap text-ellipsis text-[length:var(--fs-sm)]",
+                  parent
+                    ? "font-[family-name:var(--font-mono)] text-fg"
+                    : "font-[family-name:var(--font-ui)] text-fg-muted",
+                )}
+              >
                 {parent ?? "No location chosen"}
               </span>
               <button
@@ -141,13 +166,16 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
                 Choose…
               </button>
             </div>
-            <div className="ob-form-row">
-              <label htmlFor="ob-project-name" className="ob-form-label">
+            <div className="flex items-center gap-3">
+              <label
+                htmlFor="ob-project-name"
+                className="w-[72px] flex-none text-[length:var(--fs-sm)] text-fg-muted"
+              >
                 Name
               </label>
               <input
                 id="ob-project-name"
-                className="input ob-name-input"
+                className="input min-w-0 flex-1"
                 value={name}
                 placeholder="my-project"
                 onChange={(e) => setName(e.target.value)}
@@ -156,7 +184,7 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
                 }}
               />
             </div>
-            <div className="ob-create-actions">
+            <div className="flex justify-end">
               <button
                 type="button"
                 className="btn btn-primary"
@@ -171,32 +199,37 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
       </div>
 
       {error && (
-        <p className="ob-error" role="alert">
+        <p className="m-0 text-[length:var(--fs-sm)] text-danger" role="alert">
           {error}
         </p>
       )}
 
       <div>
-        <div className="ob-section-title">Recent projects</div>
+        <div className="mb-2 font-semibold">Recent projects</div>
         {settings.projects.length === 0 ? (
-          <p className="ob-muted">No projects yet.</p>
+          <p className="m-0 text-[length:var(--fs-sm)] text-fg-muted">No projects yet.</p>
         ) : (
-          <ul className="ob-project-list">
+          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {settings.projects.map((p) => {
               const active = p.id === settings.activeProjectId;
               return (
                 <li key={p.id}>
                   <button
                     type="button"
-                    className={cx("ob-project-row", active && "is-active")}
+                    className={cx(
+                      "flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] border-none px-3 py-2 text-left transition-[background-color] duration-[0.12s] ease-[ease]",
+                      active ? "bg-accent-soft" : "bg-transparent hover:bg-hover",
+                    )}
                     aria-pressed={active}
                     onClick={() => setActive(p.id)}
                   >
-                    <span className="ob-project-check">
+                    <span className="inline-flex w-3.5 flex-none text-accent-text">
                       {active && <CheckIcon size={14} weight="bold" />}
                     </span>
-                    <span className="ob-project-name">{p.name}</span>
-                    <span className="ob-project-path">{p.path}</span>
+                    <span className="flex-none font-medium text-fg">{p.name}</span>
+                    <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-right text-ellipsis font-[family-name:var(--font-mono)] text-[length:var(--fs-sm)] text-fg-muted">
+                      {p.path}
+                    </span>
                   </button>
                 </li>
               );

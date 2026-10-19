@@ -157,8 +157,12 @@ export default function Chat({
 
   const isNew = !thread || empty;
   return (
-    <div className={`ws-chat${isNew ? " ws-chat-new" : ""}`}>
-      <div className="ws-chat-scroll" ref={scrollRef} onScroll={onScroll}>
+    <div className={`flex min-h-0 min-w-0 flex-1 flex-col${isNew ? " justify-center" : ""}`}>
+      <div
+        className={`min-h-0 overflow-y-auto ${isNew ? "flex-none" : "flex-1"}`}
+        ref={scrollRef}
+        onScroll={onScroll}
+      >
         {!isNew ? (
           <Messages
             thread={thread}
@@ -169,23 +173,29 @@ export default function Chat({
             onRespond={respond}
           />
         ) : (
-          <div className="ws-chat-empty">
+          <div className="flex h-auto flex-col items-center justify-center gap-4 p-6 text-center">
             <ProviderLogos kind={agent} size={40} />
-            <h2>{project ? `What should we build in ${project.name}?` : "What's on your mind?"}</h2>
+            <h2 className="m-0 text-[length:var(--fs-xl)] font-semibold">
+              {project ? `What should we build in ${project.name}?` : "What's on your mind?"}
+            </h2>
             {!project && (
               <>
-                <p className="ws-muted">
+                <p className="-mt-1.5 mb-0 text-fg-muted">
                   This chat has no project; the agent works in a private scratch folder.
                 </p>
-                <button className="btn ws-open-project-btn" onClick={onOpenFolder}>
+                <button className="btn my-2 h-8 !px-4" onClick={onOpenFolder}>
                   <FolderPlusIcon size={14} />
                   Open a project
                 </button>
               </>
             )}
-            <div className="ws-suggestions">
+            <div className="flex max-w-[560px] flex-wrap justify-center gap-2">
               {(project ? SUGGESTIONS : CHAT_SUGGESTIONS).map((s) => (
-                <button key={s.label} className="ws-chip" onClick={() => setDraft(s.prefill)}>
+                <button
+                  key={s.label}
+                  className="h-7 cursor-pointer rounded-[14px] border border-border-strong bg-panel px-3 text-fg hover:bg-hover"
+                  onClick={() => setDraft(s.prefill)}
+                >
                   {s.label}
                 </button>
               ))}
@@ -193,7 +203,7 @@ export default function Chat({
           </div>
         )}
       </div>
-      <div className="ws-composer-wrap">
+      <div className="mx-auto w-full max-w-[820px] flex-none box-border px-6 pb-4">
         <Composer
           value={draft}
           onChange={setDraft}

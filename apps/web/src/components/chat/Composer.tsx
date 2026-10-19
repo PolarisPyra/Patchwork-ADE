@@ -74,17 +74,17 @@ export default function Composer({
   }
 
   return (
-    <div className="ws-composer">
+    <div className="flex flex-col gap-2 rounded-[var(--radius-lg)] border border-border-strong bg-editor pt-3.5 pr-3 pb-2.5 pl-3 focus-within:border-accent">
       <textarea
         ref={ref}
-        className="ws-composer-input selectable"
+        className="min-h-16 max-h-[280px] resize-none overflow-y-auto border-none bg-transparent px-1.5 py-0 text-fg text-[length:var(--fs-md)] leading-[20px] placeholder:text-fg-subtle outline-none selectable"
         rows={1}
         placeholder="Reply or describe the next change…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
       />
-      <div className="ws-composer-foot">
+      <div className="flex items-center gap-1.5">
         <ModelPicker
           agent={agent}
           model={model}
@@ -93,14 +93,19 @@ export default function Composer({
           onPick={onPickModel}
         />
         <AccessPicker mode={accessMode} onPick={onPickAccess} />
-        <span className="ws-spacer" />
+        <span className="flex-1" />
         {working ? (
-          <button className="ws-send ws-stop" onClick={onStop} title="Stop" aria-label="Stop">
+          <button
+            className="grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-selected-muted text-fg enabled:hover:bg-accent-hover"
+            onClick={onStop}
+            title="Stop"
+            aria-label="Stop"
+          >
             <SquareIcon size={12} weight="fill" />
           </button>
         ) : (
           <button
-            className="ws-send"
+            className="grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-accent text-on-accent enabled:hover:bg-accent-hover disabled:cursor-default disabled:bg-selected-muted disabled:text-fg-subtle"
             onClick={onSubmit}
             disabled={!value.trim()}
             title="Send"
@@ -110,7 +115,7 @@ export default function Composer({
           </button>
         )}
       </div>
-      {error && <div className="ws-composer-error">{error}</div>}
+      {error && <div className="text-[length:var(--fs-sm)] text-danger">{error}</div>}
     </div>
   );
 }

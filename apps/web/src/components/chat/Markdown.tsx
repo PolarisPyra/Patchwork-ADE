@@ -65,7 +65,10 @@ function renderInline(text: string): ReactNode[] {
     if (at > last) out.push(text.slice(last, at));
     if (m[1] !== undefined)
       out.push(
-        <code key={at} className="ws-inline-code">
+        <code
+          key={at}
+          className="rounded-[4px] bg-selected-muted px-[5px] py-px font-[family-name:var(--font-mono)] text-[12px]"
+        >
           {m[1]}
         </code>,
       );
@@ -73,7 +76,7 @@ function renderInline(text: string): ReactNode[] {
     else if (m[3] !== undefined) out.push(<em key={at}>{m[3]}</em>);
     else
       out.push(
-        <span key={at} className="ws-link" title={m[5]}>
+        <span key={at} className="cursor-text text-accent-text" title={m[5]}>
           {m[4]}
         </span>,
       );
@@ -88,7 +91,10 @@ function renderBlock(block: Block, key: number): ReactNode {
     case "heading": {
       const Tag = block.level === 1 ? "h3" : block.level === 2 ? "h4" : "h5";
       return (
-        <Tag key={key} className="ws-md-heading">
+        <Tag
+          key={key}
+          className={`mt-3 mb-1.5 font-semibold ${block.level === 1 ? "text-[length:var(--fs-lg)]" : "text-[length:var(--fs-md)]"}`}
+        >
           {renderInline(block.text)}
         </Tag>
       );
@@ -98,7 +104,7 @@ function renderBlock(block: Block, key: number): ReactNode {
     case "list": {
       const Tag = block.ordered ? "ol" : "ul";
       return (
-        <Tag key={key} className="ws-md-list">
+        <Tag key={key} className="mt-0 mb-2 pl-[22px]">
           {block.items.map((item, j) => (
             <li key={j}>{renderInline(item)}</li>
           ))}
@@ -112,15 +118,18 @@ function renderBlock(block: Block, key: number): ReactNode {
 
 export default function Markdown({ text }: { text: string }) {
   return (
-    <div className="ws-markdown selectable">
+    <div className="min-w-0 leading-[1.6] [word-break:break-word] selectable [&>:last-child]:mb-0 [&_p]:mt-0 [&_p]:mb-2">
       {parseBlocks(text).map((block, i) => renderBlock(block, i))}
     </div>
   );
 }
 
+export const ACTION_CLASS =
+  "inline-flex h-6 cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-[length:var(--fs-xs)] text-fg-muted enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default disabled:opacity-50";
+
 export function CopyButton({
   text,
-  className = "ws-action",
+  className = ACTION_CLASS,
 }: {
   text: string;
   className?: string;
@@ -145,12 +154,12 @@ export function CopyButton({
 
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   return (
-    <div className="ws-code">
-      <div className="ws-code-head">
+    <div className="my-2 overflow-hidden rounded-[var(--radius)] border border-border bg-panel">
+      <div className="flex items-center justify-between border-b border-border py-0.5 pr-1 pl-2.5 text-[length:var(--fs-xs)] text-fg-subtle">
         <span>{lang || "text"}</span>
         <CopyButton text={code} />
       </div>
-      <pre>
+      <pre className="m-0 overflow-x-auto px-3 py-2.5 text-[12px] leading-[1.5]">
         <code>{code}</code>
       </pre>
     </div>

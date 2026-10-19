@@ -16,6 +16,8 @@ const PROVIDER_NAMES: Record<AgentKind, string> = {
   codex: "Codex",
   gemini: "Gemini",
 };
+export const CHIP_CLASS =
+  "inline-flex h-6 cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 py-0 text-[length:var(--fs-sm)] text-fg-muted hover:bg-hover hover:text-fg [&_span]:max-w-[180px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap";
 const favoriteKey = "patchwork-model-favorites";
 /** Favorites saved before model ids came from the model manifest used CLI aliases. */
 const LEGACY_FAVORITES: Record<string, string> = {
@@ -53,7 +55,7 @@ export default function ModelPicker(props: Props) {
     <>
       <button
         ref={trigger}
-        className="ws-chip-btn"
+        className={CHIP_CLASS}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={`Choose model: ${label}`}
@@ -193,7 +195,7 @@ function PickerPopup({
         ? (highlight + (event.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length
         : 0;
       setHighlight(next);
-      list.current?.querySelectorAll(".ws-model-row")[next]?.scrollIntoView({ block: "nearest" });
+      list.current?.querySelectorAll("[data-model-row]")[next]?.scrollIntoView({ block: "nearest" });
     } else if (event.target === input.current && event.key === "Enter") {
       event.preventDefault();
       choose(highlight);
@@ -209,14 +211,14 @@ function PickerPopup({
   return (
     <div
       ref={panel}
-      className="ws-model-popup"
+      className="fixed z-[1000] flex h-[346px] max-h-[346px] w-[360px] max-w-[calc(100vw_-_16px)] overflow-hidden rounded-[8px] border border-border-strong bg-elevated text-fg shadow-[var(--shadow-popup)]"
       role="dialog"
       aria-label="Choose model"
       onKeyDown={keyDown}
     >
       {!searching && (
         <nav
-          className="ws-model-rail"
+          className="flex min-h-0 flex-[0_0_44px] flex-col gap-1 overflow-y-auto bg-[color-mix(in_srgb,var(--bg-app)_30%,transparent)] p-1 [scrollbar-width:none]"
           aria-label="Providers"
           onKeyDown={(event) => {
             const filters: (AgentKind | "favorites")[] = ["favorites", ...agents];
@@ -233,13 +235,14 @@ function PickerPopup({
                 filters.length;
               setProvider(filters[next]);
               panel.current
-                ?.querySelectorAll<HTMLButtonElement>(".ws-model-rail-btn")
+                ?.querySelectorAll<HTMLButtonElement>("[data-model-rail-btn]")
                 [next]?.focus();
             }
           }}
         >
           <button
-            className="ws-model-rail-btn"
+            data-model-rail-btn
+            className="relative grid h-9 w-9 flex-none cursor-pointer place-items-center rounded-[6px] border-0 bg-transparent p-0 text-fg hover:bg-hover focus-visible:bg-hover aria-pressed:after:absolute aria-pressed:after:top-2 aria-pressed:after:-right-1 aria-pressed:after:h-5 aria-pressed:after:w-[3px] aria-pressed:after:rounded-[3px_0_0_3px] aria-pressed:after:bg-accent aria-pressed:after:content-['']"
             aria-label="Favorites"
             title="Favorites"
             aria-pressed={provider === "favorites"}
@@ -247,11 +250,12 @@ function PickerPopup({
           >
             <StarIcon size={20} weight="fill" />
           </button>
-          <span className="ws-model-rail-divider" />
+          <span className="h-px flex-none bg-border" />
           {agents.map((kind) => (
             <button
               key={kind}
-              className="ws-model-rail-btn"
+              data-model-rail-btn
+              className="relative grid h-9 w-9 flex-none cursor-pointer place-items-center rounded-[6px] border-0 bg-transparent p-0 text-fg hover:bg-hover focus-visible:bg-hover aria-pressed:after:absolute aria-pressed:after:top-2 aria-pressed:after:-right-1 aria-pressed:after:h-5 aria-pressed:after:w-[3px] aria-pressed:after:rounded-[3px_0_0_3px] aria-pressed:after:bg-accent aria-pressed:after:content-['']"
               title={AGENT_LABELS[kind]}
               aria-label={AGENT_LABELS[kind]}
               aria-pressed={provider === kind}
@@ -262,8 +266,10 @@ function PickerPopup({
           ))}
         </nav>
       )}
-      <div className="ws-model-content">
-        <label className="ws-model-search">
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${!searching ? "border-l border-border" : ""}`}
+      >
+        <label className="mx-3 mt-[9px] flex h-[34px] flex-none items-center gap-1 border-b border-border pb-1.5 text-fg-subtle focus-within:border-accent [&_svg]:flex-none">
           <MagnifyingGlassIcon size={16} />
           <input
             ref={input}
@@ -271,6 +277,7 @@ function PickerPopup({
             aria-expanded="true"
             aria-controls="ws-model-options"
             aria-activedescendant={rows[highlight] ? `ws-model-option-${highlight}` : undefined}
+            className="h-[26px] w-full min-w-0 border-0 bg-transparent text-fg text-[14px] placeholder:text-fg-subtle outline-none"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search models..."
@@ -280,7 +287,7 @@ function PickerPopup({
         <div
           ref={list}
           id="ws-model-options"
-          className="ws-model-results"
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-1.5 pr-px pb-1.5 pl-2 [scrollbar-gutter:stable]"
           role="listbox"
           aria-label="Models"
         >
@@ -290,14 +297,17 @@ function PickerPopup({
               id={`ws-model-option-${index}`}
               role="option"
               aria-selected={kind === agent && item.id === model}
-              className={`ws-model-row${highlight === index ? " highlighted" : ""}`}
+              data-model-row
+              className={`mb-0.5 flex min-h-11 min-w-0 cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1 ${highlight === index ? "bg-hover" : "aria-selected:bg-[color-mix(in_srgb,var(--text)_8%,transparent)]"}`}
               onMouseMove={() => setHighlight(index)}
               onClick={() => choose(index)}
             >
-              <span className="ws-model-row-copy">
-                <span className="ws-model-row-name">{item.label}</span>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[12px] leading-[16.5px] font-medium">
+                  {item.label}
+                </span>
                 <span
-                  className="ws-model-row-provider"
+                  className="flex items-center gap-1.5 text-[12px] leading-[16.5px] text-fg-subtle [&_svg]:flex-none"
                   title={
                     item.id === null
                       ? "Configured CLI default; session or project settings may override it"
@@ -305,7 +315,7 @@ function PickerPopup({
                   }
                 >
                   <ProviderLogos kind={kind} size={12} />
-                  <span className="ws-model-row-subtitle">
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap">
                     {item.id === null
                       ? (item.defaultModel ?? "CLI default — unresolved")
                       : PROVIDER_NAMES[kind]}
@@ -313,12 +323,12 @@ function PickerPopup({
                 </span>
               </span>
               {index < 9 && (
-                <kbd>
+                <kbd className="flex-none rounded-[4px] bg-[color-mix(in_srgb,var(--text)_6%,transparent)] px-1 py-0.5 text-[12px] leading-4 text-fg-muted [font-family:inherit]">
                   {navigator.platform.includes("Mac") ? "Cmd" : "Ctrl"}+{index + 1}
                 </kbd>
               )}
               <button
-                className={`ws-model-star${favorites.includes(key) ? " favorited" : ""}`}
+                className={`grid h-6 w-6 flex-none cursor-pointer place-items-center rounded-[4px] border-0 bg-transparent p-0 -mr-1 hover:bg-hover focus-visible:bg-hover ${favorites.includes(key) ? "text-accent-text" : "text-fg-subtle hover:text-fg focus-visible:text-fg"}`}
                 aria-label={
                   favorites.includes(key)
                     ? `Remove ${item.label} from favorites`
@@ -342,7 +352,7 @@ function PickerPopup({
               </button>
             </div>
           ))}
-          {!rows.length && <div className="ws-model-empty">No models found</div>}
+          {!rows.length && <div className="p-2 text-center text-[14px] text-fg-subtle">No models found</div>}
         </div>
       </div>
     </div>

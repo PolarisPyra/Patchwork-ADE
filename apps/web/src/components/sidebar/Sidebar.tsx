@@ -38,6 +38,14 @@ const STATUS_LETTER: Record<FileChange["status"], string> = {
   renamed: "R",
 };
 
+const STATUS_COLOR: Record<FileChange["status"], string> = {
+  modified: "text-accent-text",
+  added: "text-success",
+  untracked: "text-success",
+  deleted: "text-danger",
+  renamed: "text-accent-text",
+};
+
 interface StripeProps {
   view: SidebarView | null;
   onSelect: (view: SidebarView) => void;
@@ -46,11 +54,11 @@ interface StripeProps {
 
 export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
   return (
-    <nav className="ws-stripe">
+    <nav className="flex w-[var(--stripe-w)] flex-none flex-col items-center gap-1 border-r border-border bg-app py-1.5">
       {STRIPE.map(({ view: v, label, Icon }) => (
         <button
           key={v}
-          className={`ws-stripe-btn${view === v ? " active" : ""}`}
+          className={`grid h-7 w-7 cursor-pointer place-items-center rounded-[var(--radius)] border-none ${view === v ? "bg-selected text-fg" : "bg-transparent text-fg-muted hover:bg-hover hover:text-fg"}`}
           title={label}
           aria-label={label}
           aria-pressed={view === v}
@@ -60,7 +68,7 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
         </button>
       ))}
       <button
-        className="ws-stripe-btn ws-stripe-bottom"
+        className="mt-auto grid h-7 w-7 cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-transparent text-fg-muted hover:bg-hover hover:text-fg"
         title="Settings"
         aria-label="Settings"
         onClick={onOpenSettings}
@@ -106,11 +114,14 @@ interface Target {
 
 export default function Sidebar(props: SidebarProps) {
   return (
-    <aside className="ws-sidebar">
-      <button className="ws-sidebar-search" onClick={props.onOpenPalette}>
+    <aside className="flex min-h-0 w-[264px] flex-none flex-col border-r border-border bg-panel text-[length:var(--fs-md)] [--fs-xs:12px] [--fs-sm:13px] [--fs-md:14px]">
+      <button
+        className="mx-2 mt-3 mb-0.5 flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none bg-transparent px-2 text-[length:var(--fs-sm)] text-fg-muted hover:bg-hover hover:text-fg"
+        onClick={props.onOpenPalette}
+      >
         <MagnifyingGlassIcon size={16} />
         Search…
-        <kbd className="kbd">Ctrl K</kbd>
+        <kbd className="kbd ml-auto">Ctrl K</kbd>
       </button>
       {props.view === "tasks" ? <TasksView {...props} /> : <ChangesView {...props} />}
       <UsagePopover agents={props.agents} />
@@ -120,7 +131,7 @@ export default function Sidebar(props: SidebarProps) {
 
 function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="ws-section-label">
+    <div className="flex items-center justify-between px-1.5 pt-2.5 pb-1 text-[length:var(--fs-xs)] tracking-[0.06em] text-fg-muted uppercase">
       <span>{children}</span>
       {action}
     </div>
@@ -203,7 +214,7 @@ function TasksView({
   };
 
   return (
-    <div className="ws-sidebar-scroll">
+    <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto p-2">
       <SectionLabel
         action={
           <button className="btn-icon" title="New chat" aria-label="New chat" onClick={onNewChat}>
@@ -213,7 +224,9 @@ function TasksView({
       >
         Chats
       </SectionLabel>
-      {chats.length === 0 && <div className="ws-muted-note">No chats yet</div>}
+      {chats.length === 0 && (
+        <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No chats yet</div>
+      )}
       {chats.map((t) => (
         <ThreadRow key={t.id} thread={t} {...rowProps} />
       ))}
@@ -240,22 +253,24 @@ function TasksView({
       >
         Projects
       </SectionLabel>
-      {projects.length === 0 && <div className="ws-muted-note">No projects yet</div>}
+      {projects.length === 0 && (
+        <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No projects yet</div>
+      )}
       {projects.map((p) => {
         const open = !collapsed.has(p.id);
         const tasks = threads.filter((t) => t.projectId === p.id);
         return (
           <div key={p.id}>
             <div
-              className="ws-row ws-project-row-tree"
+              className="group mt-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-left text-fg hover:bg-hover"
               title={p.path}
               onClick={() => toggle(p.id)}
               onContextMenu={(e) => openMenu(e, { kind: "project", id: p.id })}
             >
-              <span className="ws-slot">
-                <CaretRightIcon size={15} className={open ? "ws-rotated" : undefined} />
+              <span className="inline-flex w-4 flex-none justify-center">
+                <CaretRightIcon size={15} className={open ? "rotate-90" : undefined} />
               </span>
-              <FolderIcon size={15} className="ws-icon-muted" />
+              <FolderIcon size={15} className="text-fg-subtle" />
               {renaming?.kind === "project" && renaming.id === p.id ? (
                 <InlineName
                   initial={p.name}
@@ -263,10 +278,12 @@ function TasksView({
                   onCancel={() => setRenaming(null)}
                 />
               ) : (
-                <span className="ws-row-title">{p.name}</span>
+                <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-medium">
+                  {p.name}
+                </span>
               )}
               <button
-                className="btn-icon ws-row-action"
+                className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex"
                 title={`New task in ${p.name}`}
                 aria-label={`New task in ${p.name}`}
                 onClick={(e) => {
@@ -278,8 +295,10 @@ function TasksView({
               </button>
             </div>
             {open && (
-              <div className="ws-tree-children">
-                {tasks.length === 0 && <div className="ws-muted-note">No tasks yet</div>}
+              <div className="pt-0.5 pb-1.5 pl-3.5">
+                {tasks.length === 0 && (
+                  <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No tasks yet</div>
+                )}
                 {tasks.map((t) => (
                   <ThreadRow key={t.id} thread={t} {...rowProps} />
                 ))}
@@ -316,7 +335,7 @@ function InlineName({
   };
   return (
     <input
-      className="ws-inline-name"
+      className="h-[22px] min-w-0 flex-1 border border-border-focus rounded-[var(--radius-sm)] bg-input px-1 text-fg outline-none"
       aria-label="Name"
       defaultValue={initial}
       autoFocus
@@ -348,15 +367,16 @@ function ThreadRow({
   onCancelRename: () => void;
 }) {
   const editing = renaming?.kind === "thread" && renaming.id === thread.id;
+  const selected = thread.id === selectedId;
   const last = thread.messages[thread.messages.length - 1];
   const needsApproval = last?.approvals.some((a) => a.status === "pending") ?? false;
   return (
     <div
-      className={`ws-row ws-thread-card${thread.id === selectedId ? " selected" : ""}`}
+      className={`group flex min-h-[26px] w-full cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none mb-1 px-2.5 py-2 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"}`}
       onClick={() => onSelectThread(thread.id)}
       onContextMenu={(e) => onContextMenu(e, { kind: "thread", id: thread.id })}
     >
-      <div className="ws-card-line">
+      <div className="flex min-h-5 min-w-0 items-center gap-1.5">
         {editing ? (
           <InlineName
             initial={thread.title}
@@ -366,11 +386,19 @@ function ThreadRow({
             onCancel={onCancelRename}
           />
         ) : (
-          <span className="ws-row-title">{displayTitle(thread.title)}</span>
+          <span
+            className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${selected ? "font-medium text-fg" : ""}`}
+          >
+            {displayTitle(thread.title)}
+          </span>
         )}
-        <span className="ws-row-time">{formatRelative(last?.createdAt ?? thread.createdAt)}</span>
+        <span
+          className={`flex-none text-[length:var(--fs-xs)] group-hover:hidden ${selected ? "text-fg-muted" : "text-fg-subtle"}`}
+        >
+          {formatRelative(last?.createdAt ?? thread.createdAt)}
+        </span>
         <button
-          className="btn-icon ws-row-delete"
+          className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex"
           title="Delete"
           aria-label="Delete"
           onClick={(e) => {
@@ -381,19 +409,19 @@ function ThreadRow({
           <TrashIcon size={14} />
         </button>
       </div>
-      <div className="ws-card-line ws-card-foot">
+      <div className="flex min-h-5 min-w-0 items-center justify-end gap-1.5">
         {needsApproval ? (
-          <span title="Waiting for approval" className="ws-card-status ws-icon-warning">
+          <span title="Waiting for approval" className="inline-flex flex-none text-warning">
             <ShieldWarningIcon size={15} />
           </span>
         ) : (
           isWorking(thread) && (
-            <span title="Working" className="ws-card-status">
-              <CircleNotchIcon size={15} className="spin ws-icon-accent" />
+            <span title="Working" className="inline-flex flex-none">
+              <CircleNotchIcon size={15} className="spin text-accent-text" />
             </span>
           )
         )}
-        <span className="ws-card-logo" title={AGENT_LABELS[thread.agent]}>
+        <span className="inline-flex flex-none" title={AGENT_LABELS[thread.agent]}>
           <ProviderLogos kind={thread.agent} size={14} />
         </span>
       </div>
@@ -404,7 +432,7 @@ function ThreadRow({
 function ChangesView({ changes, onRefreshChanges, onOpenChange }: SidebarProps) {
   return (
     <>
-      <div className="ws-sidebar-head">
+      <div className="flex h-8 flex-none items-center justify-between pr-2 pl-3 text-[length:var(--fs-sm)] font-semibold">
         <span>Changes</span>
         <button
           className="btn-icon"
@@ -415,22 +443,30 @@ function ChangesView({ changes, onRefreshChanges, onOpenChange }: SidebarProps) 
           <ArrowsClockwiseIcon size={16} />
         </button>
       </div>
-      <div className="ws-sidebar-scroll">
-        {changes.length === 0 && <div className="ws-muted-note">No changes</div>}
+      <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto p-2">
+        {changes.length === 0 && (
+          <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No changes</div>
+        )}
         {changes.map((c) => (
           <button
             key={c.path}
-            className="ws-row ws-change"
+            className="flex min-h-[26px] w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-fg text-left hover:bg-hover"
             title={c.path}
             onClick={() => onOpenChange(c.path)}
           >
-            <span className={`ws-status ws-status-${c.status}`}>{STATUS_LETTER[c.status]}</span>
-            <span className="ws-change-name">
-              <span>{baseName(c.path)}</span>
-              <span className="ws-change-dir">{dirName(c.path)}</span>
+            <span
+              className={`w-3.5 flex-none text-center font-[family-name:var(--font-mono)] text-[length:var(--fs-xs)] font-bold ${STATUS_COLOR[c.status]}`}
+            >
+              {STATUS_LETTER[c.status]}
             </span>
-            <span className="ws-add">+{c.additions}</span>
-            <span className="ws-del">−{c.deletions}</span>
+            <span className="flex min-w-0 flex-1 gap-1.5 overflow-hidden whitespace-nowrap">
+              <span className="flex-none">{baseName(c.path)}</span>
+              <span className="min-w-0 overflow-hidden text-ellipsis text-fg-subtle">
+                {dirName(c.path)}
+              </span>
+            </span>
+            <span className="text-success">+{c.additions}</span>
+            <span className="text-danger">−{c.deletions}</span>
           </button>
         ))}
       </div>

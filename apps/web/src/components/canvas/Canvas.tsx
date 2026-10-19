@@ -12,7 +12,6 @@ import CodeView from "~/components/canvas/CodeView";
 import DiffView from "~/components/canvas/DiffView";
 import PlanView from "~/components/canvas/PlanView";
 import { describeFile, splitLines } from "~/components/canvas/highlight";
-import "./Canvas.css";
 
 export type CanvasTab = "plan" | "code" | "diff";
 
@@ -190,14 +189,14 @@ export default function Canvas({
     const result = activeTab === "code" ? code : diff;
     if (!result || (result.value === undefined && result.error === undefined)) {
       return (
-        <div className="cv-center">
+        <div className="flex items-center justify-center h-full min-h-[120px] p-6 text-center text-fg-subtle">
           <CircleNotchIcon size={18} className="spin" />
         </div>
       );
     }
     if (result.error !== undefined) {
       return (
-        <div className="cv-center cv-muted" title={result.error}>
+        <div className="flex items-center justify-center h-full min-h-[120px] p-6 text-center text-fg-muted" title={result.error}>
           {activeTab === "code"
             ? "This file can't be displayed. It may have been deleted or is binary."
             : "The diff for this file could not be loaded."}
@@ -212,22 +211,25 @@ export default function Canvas({
   }
 
   return (
-    <aside className="cv-root">
-      <header className="cv-header">
-        <div className="cv-file-icon">
+    <aside className="flex flex-col h-full min-h-0 bg-editor border-l border-border">
+      <header className="flex items-center gap-3 flex-none py-3.5 px-5 border-b border-border">
+        <div className="flex items-center justify-center flex-none size-9 rounded-[8px] bg-accent-soft text-accent-text">
           <CodeIcon size={18} />
         </div>
-        <div className="cv-title">
-          <div className="cv-name" title={path ?? undefined}>
+        <div className="flex-1 min-w-0">
+          <div
+            className="text-[length:var(--fs-lg)] font-semibold whitespace-nowrap overflow-hidden text-ellipsis select-text"
+            title={path ?? undefined}
+          >
             {name}
           </div>
           {kind && (
-            <div className="cv-sub">
+            <div className="text-[length:var(--fs-sm)] text-fg-muted tabular-nums select-text">
               {lineCount === null ? kind.label : `${kind.label} · ${lineCount} lines`}
             </div>
           )}
         </div>
-        <div className="cv-actions">
+        <div className="flex items-center gap-2 flex-none">
           {path && (
             <>
               <button className="btn" onClick={openInEditor}>
@@ -255,44 +257,44 @@ export default function Canvas({
         </div>
       </header>
 
-      <nav className="cv-tabs" role="tablist">
+      <nav className="flex items-center gap-1 flex-none h-10 px-3 border-b border-border overflow-x-auto" role="tablist">
         {tabs.map((t) => (
           <button
             key={t.id}
             role="tab"
             aria-selected={activeTab === t.id}
-            className="cv-tab"
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 border-none rounded-[var(--radius)] bg-transparent text-fg-muted! hover:text-fg! cursor-pointer whitespace-nowrap aria-selected:text-accent-text! aria-selected:bg-accent-soft"
             onClick={() => setTab(t.id)}
           >
             {t.label}
-            {t.count > 0 && <span className="badge cv-count">{t.count}</span>}
+            {t.count > 0 && <span className="badge tabular-nums">{t.count}</span>}
           </button>
         ))}
       </nav>
 
-      <div className="cv-body selectable">{renderBody()}</div>
+      <div className="flex-1 min-h-0 overflow-auto selectable">{renderBody()}</div>
 
       {actionError && (
-        <div className="cv-error" role="alert">
+        <div className="flex-none py-2 px-5 border-t border-border text-danger text-[length:var(--fs-sm)] select-text" role="alert">
           {actionError}
         </div>
       )}
 
       {path && change && (
-        <footer className="cv-footer">
-          <div className="cv-footer-status">
+        <footer className="flex items-center justify-between gap-2 flex-none py-3 px-5 border-t border-border bg-panel">
+          <div className="flex items-center gap-1.5 min-w-0 text-[length:var(--fs-sm)] tabular-nums">
             {change.staged ? (
               <>
-                <CheckIcon size={14} className="cv-applied-icon" />
-                <span className="cv-applied">Changes applied</span>
+                <CheckIcon size={14} className="text-success" />
+                <span className="font-semibold text-success">Changes applied</span>
               </>
             ) : (
-              <span className="cv-muted">
+              <span className="text-fg-muted">
                 Unapplied changes · +{change.additions} −{change.deletions}
               </span>
             )}
           </div>
-          <div className="cv-footer-actions">
+          <div className="flex gap-2 flex-none">
             <button className="btn" onClick={reject} disabled={busy}>
               Reject
             </button>

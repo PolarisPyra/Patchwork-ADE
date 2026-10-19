@@ -46,26 +46,40 @@ const MARKERS: Record<Exclude<DiffRow["kind"], "hunk">, string> = {
   ctx: " ",
 };
 
+const ROW_BG: Record<Exclude<DiffRow["kind"], "hunk">, string> = {
+  add: "bg-[color:var(--diff-add-bg)]",
+  del: "bg-[color:var(--diff-del-bg)]",
+  ctx: "",
+};
+
 export default function DiffView({ diff }: { diff: string }) {
   const rows = useMemo(() => parseDiff(diff), [diff]);
 
   if (rows.length === 0) {
-    return <div className="cv-center cv-muted">No changes in this file.</div>;
+    return (
+      <div className="flex items-center justify-center h-full min-h-[120px] p-6 text-center text-fg-muted">
+        No changes in this file.
+      </div>
+    );
   }
 
   return (
-    <div className="cv-diff">
+    <div className="w-max min-w-full py-3 font-[family-name:var(--font-mono)] text-[length:var(--fs-md)] leading-[1.65] text-fg tab-2 select-text">
       {rows.map((row, i) =>
         row.kind === "hunk" ? (
-          <div className="cv-diff-hunk" key={i}>
+          <div className="py-1 px-4 bg-panel text-fg-subtle whitespace-pre" key={i}>
             {row.text}
           </div>
         ) : (
-          <div className={`cv-diff-row cv-diff-${row.kind}`} key={i}>
-            <span className="cv-gutter">{row.oldNo ?? ""}</span>
-            <span className="cv-gutter">{row.newNo ?? ""}</span>
-            <span className="cv-marker">{MARKERS[row.kind]}</span>
-            <span className="cv-text">{row.text}</span>
+          <div className={`flex ${ROW_BG[row.kind]}`} key={i}>
+            <span className="flex-none min-w-[48px] pr-2 text-right text-fg-subtle select-none tabular-nums">
+              {row.oldNo ?? ""}
+            </span>
+            <span className="flex-none min-w-[48px] pr-2 text-right text-fg-subtle select-none tabular-nums">
+              {row.newNo ?? ""}
+            </span>
+            <span className="flex-none w-5 text-center text-fg-subtle select-none">{MARKERS[row.kind]}</span>
+            <span className="flex-[1_0_auto] whitespace-pre">{row.text}</span>
           </div>
         ),
       )}

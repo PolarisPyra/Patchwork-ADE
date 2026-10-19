@@ -3,7 +3,6 @@ import { ArrowsClockwiseIcon, ChartBarIcon } from "@phosphor-icons/react";
 import { api, AGENT_LABELS, type AgentKind, type AgentStatus, type ProviderUsage } from "~/api";
 import ProviderLogos from "~/components/ProviderLogos";
 import { describeAgent, errorText } from "~/lib/util";
-import "./Usage.css";
 
 /** "in 3h 12m", "in 2d 4h", "in 5m". */
 function resetsIn(at: number): string {
@@ -17,9 +16,9 @@ function resetsIn(at: number): string {
 }
 
 function level(percent: number): string {
-  if (percent >= 90) return " is-danger";
-  if (percent >= 70) return " is-warning";
-  return "";
+  if (percent >= 90) return "bg-danger";
+  if (percent >= 70) return "bg-warning";
+  return "bg-accent";
 }
 
 type Entry = { usage?: ProviderUsage; error?: string; status?: AgentStatus | null };
@@ -69,9 +68,9 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
   }, [open, load]);
 
   return (
-    <div className="usage" ref={ref}>
+    <div className="relative flex-none py-1.5 px-2 border-t border-border" ref={ref}>
       <button
-        className={`usage-trigger${open ? " active" : ""}`}
+        className={`flex items-center gap-1.5 w-full h-7 px-2 border-none rounded-[var(--radius-sm)] bg-transparent text-fg-muted text-[length:var(--fs-sm)] cursor-pointer hover:bg-hover hover:text-fg${open ? " bg-hover text-fg" : ""}`}
         title="Usage"
         aria-label="Usage"
         aria-expanded={open}
@@ -81,8 +80,12 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
         <span>Usage</span>
       </button>
       {open && (
-        <div className="usage-popup" role="dialog" aria-label="Usage">
-          <div className="usage-head">
+        <div
+          className="absolute left-2 right-2 bottom-[calc(100%_+_4px)] z-20 min-w-[240px] max-h-[420px] overflow-y-auto pt-2 px-2.5 pb-2.5 flex flex-col gap-3 bg-elevated border border-border-strong rounded-[var(--radius)]"
+          role="dialog"
+          aria-label="Usage"
+        >
+          <div className="flex items-center justify-between font-semibold">
             <span>Usage</span>
             <button
               className="btn-icon"
@@ -94,7 +97,9 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
               <ArrowsClockwiseIcon size={14} className={loading ? "spin" : undefined} />
             </button>
           </div>
-          {agents.length === 0 && <div className="usage-note">No agents connected</div>}
+          {agents.length === 0 && (
+            <div className="text-fg-muted text-[length:var(--fs-sm)]">No agents connected</div>
+          )}
           {agents.map((kind) => (
             <AgentUsage key={kind} kind={kind} entry={entries[kind]} />
           ))}
@@ -115,26 +120,30 @@ function AgentUsage({ kind, entry }: { kind: AgentKind; entry: Entry | undefined
         usage?.error ??
         (usage?.windows.length === 0 ? "No limits reported" : null));
   return (
-    <section className="usage-agent">
-      <div className="usage-agent-head">
+    <section className="flex flex-col gap-2">
+      <div className="flex items-center gap-1.5">
         <ProviderLogos kind={kind} size={14} />
-        <span className="usage-agent-name">{AGENT_LABELS[kind]}</span>
+        <span className="flex-1 font-medium">{AGENT_LABELS[kind]}</span>
         {usage?.plan && <span className="badge">{usage.plan}</span>}
       </div>
-      {note && <div className="usage-note">{note}</div>}
+      {note && <div className="text-fg-muted text-[length:var(--fs-sm)]">{note}</div>}
       {usage?.windows.map((w) => (
-        <div key={w.label} className="usage-window">
-          <div className="usage-window-row">
+        <div key={w.label} className="flex flex-col gap-1 text-[length:var(--fs-sm)]">
+          <div className="flex justify-between">
             <span>{w.label}</span>
-            <span className="usage-percent">{Math.round(w.usedPercent)}%</span>
+            <span className="tabular-nums text-fg-muted">{Math.round(w.usedPercent)}%</span>
           </div>
-          <div className="usage-bar">
+          <div className="h-1.5 rounded-[3px] bg-selected-muted overflow-hidden">
             <div
-              className={`usage-bar-fill${level(w.usedPercent)}`}
+              className={`h-full rounded-[3px] ${level(w.usedPercent)}`}
               style={{ width: `${Math.min(100, w.usedPercent)}%` }}
             />
           </div>
-          {w.resetsAt && <div className="usage-reset">Resets {resetsIn(w.resetsAt)}</div>}
+          {w.resetsAt && (
+            <div className="text-fg-subtle text-[length:var(--fs-xs)]">
+              Resets {resetsIn(w.resetsAt)}
+            </div>
+          )}
         </div>
       ))}
     </section>

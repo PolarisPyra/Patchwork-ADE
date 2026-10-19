@@ -38,8 +38,8 @@ export default function PluginsStep({ settings, updateSettings }: PluginsStepPro
 
   return (
     <>
-      <div className="ob-card-title">Optional integrations</div>
-      <div className="ob-option-list">
+      <div className="text-[length:var(--fs-md)] font-semibold">Optional integrations</div>
+      <div className="flex flex-col gap-2">
         {PLUGINS.map((p) => {
           const on = settings.integrations[p.key];
           // The whole row toggles. The switch inside has no handler of its own, so
@@ -47,13 +47,18 @@ export default function PluginsStep({ settings, updateSettings }: PluginsStepPro
           return (
             <div
               key={p.key}
-              className={cx("ob-option is-clickable", on && "is-selected")}
+              className={cx(
+                "flex w-full items-center gap-4 rounded-[var(--radius)] border p-4 text-left text-fg transition-[background-color,border-color] duration-[0.12s] ease-[ease] not-disabled:cursor-pointer not-disabled:hover:bg-hover",
+                on ? "border-accent bg-accent-soft" : "border-border bg-transparent",
+              )}
               onClick={() => toggle(p.key)}
             >
-              <span className="ob-tile">{p.letter}</span>
-              <span className="ob-option-text">
-                <span className="ob-option-name">{p.name}</span>
-                <span className="ob-option-detail">{p.description}</span>
+              <span className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-[var(--radius)] bg-selected-muted text-[length:var(--fs-lg)] font-semibold text-accent-text">
+                {p.letter}
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-[length:var(--fs-lg)] font-semibold">{p.name}</span>
+                <span className="text-[length:var(--fs-sm)] text-fg-muted">{p.description}</span>
               </span>
               <button
                 type="button"
@@ -66,7 +71,9 @@ export default function PluginsStep({ settings, updateSettings }: PluginsStepPro
           );
         })}
       </div>
-      <p className="ob-card-note">You can change integration permissions in Settings.</p>
+      <p className="mt-auto mb-0 text-[length:var(--fs-sm)] text-fg-muted">
+        You can change integration permissions in Settings.
+      </p>
     </>
   );
 }

@@ -19,7 +19,6 @@ import StatusBar from "~/components/workspace/StatusBar";
 import Toolbar from "~/components/workspace/Toolbar";
 import { isWorking, useThreads } from "~/hooks/useThreads";
 import { AGENT_KINDS, displayTitle, errorText } from "~/lib/util";
-import "./Workspace.css";
 
 export interface WorkspaceProps {
   settings: Settings;
@@ -234,7 +233,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
   ];
 
   return (
-    <div className="ws-root">
+    <div className="grid h-full grid-rows-[var(--toolbar-h)_minmax(0,1fr)_var(--statusbar-h)] bg-app text-fg">
       <Toolbar
         project={project}
         projects={settings.projects}
@@ -243,7 +242,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         onOpenFolder={openFolder}
       />
 
-      <div className="ws-body" ref={bodyRef}>
+      <div className="flex min-h-0 min-w-0" ref={bodyRef}>
         <ToolStripe
           view={view}
           onSelect={(v) => setView(view === v ? null : v)}
@@ -272,8 +271,8 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
           />
         )}
 
-        <div className="ws-content">
-          <main className="ws-main">
+        <div className="flex min-h-0 min-w-0 flex-1">
+          <main className="flex min-w-0 flex-1 bg-editor">
             <Chat
               project={project}
               thread={selected}
@@ -291,9 +290,12 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
 
           {openCanvas && (
             <>
-              <div className="ws-splitter" onMouseDown={startResize} />
               <div
-                className="ws-canvas-slot"
+                className="relative w-1 flex-none cursor-col-resize after:absolute after:top-0 after:bottom-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-border after:content-['']"
+                onMouseDown={startResize}
+              />
+              <div
+                className="flex w-[max(420px,46%)] min-h-0 min-w-0 flex-none [&>*]:min-w-0 [&>*]:flex-1"
                 style={canvasWidth !== null ? { width: canvasWidth } : undefined}
               >
                 <Canvas
@@ -321,7 +323,10 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       />
 
       {error && (
-        <div className="ws-toast" role="alert">
+        <div
+          className="fixed right-4 bottom-[calc(var(--statusbar-h)_+_12px)] z-[95] flex max-w-[420px] items-center gap-2 rounded-[var(--radius)] border border-danger bg-elevated py-2 pr-2 pl-3 text-[length:var(--fs-sm)] shadow-[var(--shadow-popup)]"
+          role="alert"
+        >
           <span>{error}</span>
           <button className="btn-icon" aria-label="Dismiss" onClick={() => setError(null)}>
             <XIcon size={14} />

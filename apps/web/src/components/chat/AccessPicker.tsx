@@ -8,6 +8,7 @@ import {
 } from "@phosphor-icons/react";
 import type { AccessMode } from "~/api";
 import Dropdown from "~/components/workspace/Dropdown";
+import { CHIP_CLASS } from "~/components/chat/ModelPicker";
 
 const MODES: { mode: AccessMode; label: string; description: string; Icon: Icon }[] = [
   {
@@ -69,7 +70,7 @@ export default function AccessPicker({
       up
       trigger={({ open, toggle }) => (
         <button
-          className="ws-chip-btn"
+          className={CHIP_CLASS}
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label={`Access: ${current.label}`}
@@ -87,18 +88,18 @@ export default function AccessPicker({
             key={m}
             role="menuitemradio"
             aria-checked={m === mode}
-            className={`ws-menu-item ws-access-item${m === mode ? " active" : ""}`}
+            className={`flex min-w-[300px] cursor-pointer flex-col items-start gap-0.5 rounded-[var(--radius-sm)] border-none bg-transparent px-2 py-[5px] text-left whitespace-nowrap text-fg ${m === mode ? "bg-selected-muted" : "hover:bg-hover"}`}
             onClick={() => {
               close();
               rememberAccessMode(m);
               onPick(m);
             }}
           >
-            <span className="ws-access-label">
+            <span className="inline-flex items-center gap-1.5">
               <Icon size={14} />
               {label}
             </span>
-            <span className="ws-access-desc">{description}</span>
+            <span className="pl-5 text-[length:var(--fs-sm)] text-fg-muted">{description}</span>
           </button>
         ))
       }
