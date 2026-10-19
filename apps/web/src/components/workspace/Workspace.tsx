@@ -9,6 +9,7 @@ import { XIcon } from "@phosphor-icons/react";
 import { api, defaultAgentOf, type FileChange, type Message, type Settings } from "~/api";
 import type { UpdateSettings } from "~/app/App";
 import Canvas, { type CanvasTab } from "~/components/canvas/Canvas";
+import { lastAccessMode } from "~/components/chat/AccessPicker";
 import Chat from "~/components/chat/Chat";
 import CommandPalette, { type PaletteItem } from "~/components/workspace/CommandPalette";
 import { openFolderAsProject } from "~/lib/projects";
@@ -45,8 +46,17 @@ const CANVAS_MIN_PX = 340;
 const CANVAS_MAX_FRACTION = 0.7;
 
 export default function Workspace({ settings, updateSettings, toggleTheme }: WorkspaceProps) {
-  const { threads, reload, selected, select, createThread, deleteThread, setModel, send } =
-    useThreads(settings.activeProjectId, () => void refreshGit());
+  const {
+    threads,
+    reload,
+    selected,
+    select,
+    createThread,
+    deleteThread,
+    setModel,
+    setAccessMode,
+    send,
+  } = useThreads(settings.activeProjectId, () => void refreshGit());
   // The selected thread decides the project (null: a chat without a project);
   // with nothing selected, the last active project does.
   const project =
@@ -113,7 +123,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
   /** New thread in a project, or a chat without a project when `id` is null. */
   const newThreadIn = (id: string | null) =>
     attempt(async () => {
-      await createThread(id, { agent: defaultAgent, model: null });
+      await createThread(id, { agent: defaultAgent, model: null, accessMode: lastAccessMode() });
       await rememberProject(id);
     });
   const newChat = () => newThreadIn(null);
@@ -260,6 +270,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
               onSend={(text, draft) => send(text, draft, projectId)}
               onCancel={(id) => api.cancelTurn(id)}
               onSetModel={setModel}
+              onSetAccessMode={setAccessMode}
             />
           </main>
 

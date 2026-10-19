@@ -59,6 +59,20 @@ export interface PlanStep {
   status: StepStatus;
 }
 
+/** How much an agent may do without asking, like T3 Code's runtime modes. */
+export type AccessMode = "supervised" | "auto-accept-edits" | "auto" | "full-access";
+
+export type ApprovalStatus = "pending" | "allowed" | "denied";
+
+/** An action the agent asked permission for during a turn. */
+export interface Approval {
+  id: string;
+  /** e.g. "Run command", "Edit files". */
+  title: string;
+  detail: string;
+  status: ApprovalStatus;
+}
+
 export interface Message {
   id: string;
   role: Role;
@@ -69,6 +83,7 @@ export interface Message {
   plan: PlanStep[];
   files: string[]; // project-relative paths edited during this message
   error: string | null;
+  approvals: Approval[];
 }
 
 export interface Thread {
@@ -78,6 +93,7 @@ export interface Thread {
   title: string;
   agent: AgentKind;
   model: string | null;
+  accessMode: AccessMode;
   sessionId: string | null;
   createdAt: number;
   messages: Message[];
@@ -128,6 +144,8 @@ export type AgentEvent =
   | { type: "toolFinished"; messageId: string; toolId: string; isError: boolean }
   | { type: "planUpdated"; messageId: string; steps: PlanStep[] }
   | { type: "fileTouched"; messageId: string; path: string }
+  | { type: "approvalRequested"; messageId: string; approval: Approval }
+  | { type: "approvalResolved"; messageId: string; approvalId: string; allowed: boolean }
   | {
       type: "turnCompleted";
       messageId: string;
@@ -212,16 +230,25 @@ export const api = {
 
   /** All threads (project tasks and project-less chats), newest first. */
   listThreads: () => invoke<Thread[]>("list_threads"),
-  createThread: (projectId: string | null, agent: AgentKind, model: string | null) =>
-    invoke<Thread>("create_thread", { projectId, agent, model }),
+  createThread: (
+    projectId: string | null,
+    agent: AgentKind,
+    model: string | null,
+    accessMode: AccessMode,
+  ) => invoke<Thread>("create_thread", { projectId, agent, model, accessMode }),
   deleteThread: (id: string) => invoke<void>("delete_thread", { id }),
   /** Sets agent + model; the agent can only change before the first message. */
   setThreadModel: (id: string, agent: AgentKind, model: string | null) =>
     invoke<void>("set_thread_model", { id, agent, model }),
+  /** Takes effect from the thread's next turn. */
+  setThreadAccessMode: (id: string, mode: AccessMode) =>
+    invoke<void>("set_thread_access_mode", { id, mode }),
   /** Returns the stored user message; assistant output streams via onAgentEvent. */
   sendMessage: (threadId: string, text: string) =>
     invoke<Message>("send_message", { threadId, text }),
   cancelTurn: (threadId: string) => invoke<void>("cancel_turn", { threadId }),
+  respondApproval: (threadId: string, approvalId: string, allow: boolean) =>
+    invoke<void>("respond_approval", { threadId, approvalId, allow }),
 
   readFile: (projectId: string, path: string) =>
     invoke<string>("read_file", { projectId, path }),

@@ -247,6 +247,29 @@
   background: var(--bg-hover);
 }
 
+/* Access modes: label with a description below, like T3 Code. */
+.ws-access-item {
+  height: auto;
+  min-width: 300px;
+  padding: 5px 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.ws-access-item.active {
+  background: var(--bg-selected-muted);
+}
+.ws-access-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ws-access-desc {
+  padding-left: 20px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
 /* Keep provider changes and search results from resizing the popup. */
 .ws-model-popup {
   position: fixed; z-index: 1000; display: flex; width: 360px;
@@ -479,6 +502,46 @@
 }
 .ws-row-delete:hover {
   color: var(--danger);
+}
+
+/* Thread cards, like T3 Code's: provider and time above, title below. */
+.ws-thread-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 8px;
+}
+.ws-card-line {
+  min-width: 0;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ws-card-logo {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--bg-selected-muted);
+}
+.ws-card-agent {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.ws-card-status {
+  flex: none;
+  display: inline-flex;
+}
+.ws-icon-warning {
+  color: var(--warning);
 }
 
 /* project rows in the task tree; their tasks are indented beneath */
@@ -790,6 +853,54 @@
   font-size: var(--fs-sm);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.ws-approval {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  font-size: var(--fs-sm);
+}
+.ws-approval-pending {
+  border-color: var(--warning);
+}
+.ws-approval-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ws-approval-pending .ws-approval-head {
+  color: var(--warning);
+}
+.ws-approval-allowed .ws-approval-head {
+  color: var(--success);
+}
+.ws-approval-denied .ws-approval-head {
+  color: var(--danger);
+}
+.ws-approval-title {
+  color: var(--text);
+  font-weight: 600;
+}
+.ws-approval-status {
+  margin-left: auto;
+}
+.ws-approval-detail {
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-editor);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.ws-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .ws-actions {

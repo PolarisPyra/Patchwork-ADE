@@ -41,6 +41,11 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX messages_thread ON messages (thread_id, position);
     ",
+    // 2: per-thread access mode and per-message approvals.
+    "
+    ALTER TABLE threads ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'full-access';
+    ALTER TABLE messages ADD COLUMN approvals TEXT NOT NULL DEFAULT '[]';
+    ",
 ];
 
 /// Brings the schema up to date. Returns the version the database was at before.

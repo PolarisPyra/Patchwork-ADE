@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowUpIcon, SquareIcon } from "@phosphor-icons/react";
-import { api, type AgentKind, type ModelOption } from "~/api";
+import { api, type AccessMode, type AgentKind, type ModelOption } from "~/api";
+import AccessPicker from "~/components/chat/AccessPicker";
 import ModelPicker from "~/components/chat/ModelPicker";
 
 interface ComposerProps {
@@ -16,6 +17,8 @@ interface ComposerProps {
   agents: AgentKind[];
   /** Picking another agent's model switches the agent too. */
   onPickModel: (agent: AgentKind, model: string | null) => void;
+  accessMode: AccessMode;
+  onPickAccess: (mode: AccessMode) => void;
 }
 
 /** Models per agent, fetched once per agent kind. */
@@ -50,6 +53,8 @@ export default function Composer({
   model,
   agents,
   onPickModel,
+  accessMode,
+  onPickAccess,
 }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // Grow with the content; CSS min/max-height keep it between about 3 and 14 rows.
@@ -87,6 +92,7 @@ export default function Composer({
           models={models}
           onPick={onPickModel}
         />
+        <AccessPicker mode={accessMode} onPick={onPickAccess} />
         <span className="ws-spacer" />
         {working ? (
           <button className="ws-send ws-stop" onClick={onStop} title="Stop" aria-label="Stop">

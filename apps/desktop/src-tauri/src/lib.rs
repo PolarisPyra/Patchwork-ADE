@@ -81,8 +81,9 @@ fn create_thread(
     project_id: Option<String>,
     agent: AgentKind,
     model: Option<String>,
+    access_mode: AccessMode,
 ) -> Res<Thread> {
-    server.create_thread(project_id, agent, model)
+    server.create_thread(project_id, agent, model, access_mode)
 }
 
 #[tauri::command]
@@ -96,6 +97,11 @@ fn set_thread_model(server: Srv, id: String, agent: AgentKind, model: Option<Str
 }
 
 #[tauri::command]
+fn set_thread_access_mode(server: Srv, id: String, mode: AccessMode) -> Res<()> {
+    server.set_thread_access_mode(&id, mode)
+}
+
+#[tauri::command]
 fn send_message(server: Srv, thread_id: String, text: String) -> Res<Message> {
     server.send_message(thread_id, text)
 }
@@ -103,6 +109,11 @@ fn send_message(server: Srv, thread_id: String, text: String) -> Res<Message> {
 #[tauri::command]
 fn cancel_turn(server: Srv, thread_id: String) {
     server.cancel_turn(&thread_id)
+}
+
+#[tauri::command]
+fn respond_approval(server: Srv, thread_id: String, approval_id: String, allow: bool) -> Res<()> {
+    server.respond_approval(&thread_id, &approval_id, allow)
 }
 
 #[tauri::command]
@@ -195,8 +206,10 @@ pub fn run() {
             create_thread,
             delete_thread,
             set_thread_model,
+            set_thread_access_mode,
             send_message,
             cancel_turn,
+            respond_approval,
             scan_imports,
             import_threads,
             read_file,

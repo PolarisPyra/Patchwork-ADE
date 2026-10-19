@@ -123,6 +123,7 @@ impl Server {
         project_id: Option<String>,
         agent: AgentKind,
         model: Option<String>,
+        access_mode: AccessMode,
     ) -> Res<Thread> {
         if let Some(id) = &project_id {
             self.project_root(id)?;
@@ -138,6 +139,7 @@ impl Server {
             title: title.into(),
             agent,
             model,
+            access_mode,
             session_id: None,
             created_at: now_ms(),
             messages: vec![],
@@ -173,6 +175,11 @@ impl Server {
         })
     }
 
+    /// Takes effect from the thread's next turn.
+    pub fn set_thread_access_mode(&self, id: &str, mode: AccessMode) -> Res<()> {
+        self.store.update_thread(id, |t| t.access_mode = mode)
+    }
+
     /// Appends the user message, then starts the agent turn in the background.
     /// Returns the stored user message; assistant output arrives via the event sink.
     pub fn send_message(self: &Arc<Self>, thread_id: String, text: String) -> Res<Message> {
@@ -189,6 +196,7 @@ impl Server {
             plan: vec![],
             files: vec![],
             error: None,
+            approvals: vec![],
         };
         let m = msg.clone();
         self.store.update_thread(&thread_id, |t| {
@@ -203,6 +211,16 @@ impl Server {
 
     pub fn cancel_turn(&self, thread_id: &str) {
         self.runner.cancel(thread_id);
+    }
+
+    /// Answers a pending approval in the thread's running turn.
+    pub fn respond_approval(
+        self: &Arc<Self>,
+        thread_id: &str,
+        approval_id: &str,
+        allow: bool,
+    ) -> Res<()> {
+        self.runner.respond(self, thread_id, approval_id, allow)
     }
 
     // ---- importing conversations ------------------------------------------

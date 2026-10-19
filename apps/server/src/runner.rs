@@ -1,9 +1,10 @@
 //! Runs agent turns by spawning the agent CLIs and translating their JSONL
-//! output into `AgentEvent`s. Each turn is one child process.
+//! output into `AgentEvent`s. Each turn is one child process; its stdin stays
+//! open while the turn runs so approvals can be answered.
 
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, BufReader};
-use std::process::{Child, ChildStderr, ChildStdout, Stdio};
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
@@ -12,7 +13,7 @@ use std::thread::JoinHandle;
 use std::os::unix::process::CommandExt;
 
 use crate::Server;
-use crate::provider::{self, Parsed};
+use crate::provider::{self, Parsed, TurnSpec};
 use crate::types::*;
 use crate::workspace;
 use serde_json::Value;
@@ -20,9 +21,19 @@ use serde_json::Value;
 /// How much of the agent's stderr is kept for error reporting.
 const STDERR_TAIL_BYTES: usize = 4096;
 
+/// The agent's stdin; None once the turn has finished.
+type Stdin = Arc<Mutex<Option<ChildStdin>>>;
+
+/// Pending approvals of one turn: approval id → the provider's reply context.
+type Pending = Arc<Mutex<HashMap<String, Value>>>;
+
 struct RunningTurn {
     pid: u32,
     cancelled: Arc<AtomicBool>,
+    agent: AgentKind,
+    message_id: String,
+    stdin: Stdin,
+    pending: Pending,
 }
 
 #[derive(Default)]
@@ -44,7 +55,7 @@ impl Runner {
         thread_id: String,
         text: String,
     ) -> Result<(), String> {
-        let (agent, root, session_id, model, bypass) = {
+        let (agent, root, session_id, model, mode) = {
             let thread = server.store.thread(&thread_id).ok_or("Task not found")?;
             let settings = server.store.settings();
             let root = match &thread.project_id {
@@ -65,25 +76,30 @@ impl Runner {
                 root,
                 thread.session_id,
                 thread.model,
-                settings.integrations.terminal,
+                thread.access_mode,
             )
+        };
+        let spec = TurnSpec {
+            root: &root,
+            session_id: session_id.as_deref(),
+            model: model.as_deref(),
+            text: &text,
+            mode,
         };
 
         // Agents often edit files through the shell, so changes are also found by
         // comparing git state before and after the turn.
         let baseline = workspace::git_changes(&root).unwrap_or_default();
-        let args = provider::turn_args(
-            agent,
-            &root,
-            session_id.as_deref(),
-            model.as_deref(),
-            &text,
-            bypass,
-        );
+        let args = provider::turn_args(agent, &spec);
+        let input = provider::turn_input(agent, &spec);
         let mut cmd = provider::agent_command(agent)?;
         cmd.args(&args)
             .current_dir(&root)
-            .stdin(Stdio::null())
+            .stdin(if input.is_empty() {
+                Stdio::null()
+            } else {
+                Stdio::piped()
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         #[cfg(unix)]
@@ -95,6 +111,10 @@ impl Runner {
             return Err("Agent output is unavailable".into());
         };
         let stderr_tail = std::thread::spawn(move || read_stderr_tail(stderr));
+        let stdin: Stdin = Arc::new(Mutex::new(child.stdin.take()));
+        for line in &input {
+            write_line(&stdin, line);
+        }
 
         let message = Message {
             id: new_id(),
@@ -106,16 +126,24 @@ impl Runner {
             plan: vec![],
             files: vec![],
             error: None,
+            approvals: vec![],
         };
         let cancelled = Arc::new(AtomicBool::new(false));
+        let pending = Pending::default();
         let turn = Turn {
             server: server.clone(),
             thread_id: thread_id.clone(),
             message_id: message.id.clone(),
             agent,
-            root,
             cancelled: cancelled.clone(),
             baseline,
+            stdin: stdin.clone(),
+            pending: pending.clone(),
+            root,
+            session_id,
+            model,
+            text,
+            mode,
         };
         self.turns
             .lock()
@@ -125,6 +153,10 @@ impl Runner {
                 RunningTurn {
                     pid: child.id(),
                     cancelled,
+                    agent,
+                    message_id: message.id.clone(),
+                    stdin,
+                    pending,
                 },
             );
         turn.publish(AgentEvent::MessageStarted { message });
@@ -139,6 +171,70 @@ impl Runner {
             workspace::signal_process_group(turn.pid, libc::SIGTERM);
         }
     }
+
+    /// Sends the user's answer to a pending approval and records it.
+    pub fn respond(
+        &self,
+        server: &Server,
+        thread_id: &str,
+        approval_id: &str,
+        allow: bool,
+    ) -> Result<(), String> {
+        let (agent, message_id, stdin, reply) = {
+            let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+            let turn = turns
+                .get(thread_id)
+                .ok_or("This turn is no longer running")?;
+            let reply = turn
+                .pending
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(approval_id)
+                .ok_or("This request was already answered")?;
+            (
+                turn.agent,
+                turn.message_id.clone(),
+                turn.stdin.clone(),
+                reply,
+            )
+        };
+        write_line(&stdin, &provider::approval_reply(agent, &reply, allow));
+        publish(
+            server,
+            thread_id,
+            &message_id,
+            AgentEvent::ApprovalResolved {
+                message_id: message_id.clone(),
+                approval_id: approval_id.into(),
+                allowed: allow,
+            },
+        );
+        Ok(())
+    }
+}
+
+/// Writes one line to the agent's stdin, if it is still open.
+fn write_line(stdin: &Mutex<Option<ChildStdin>>, line: &str) {
+    let mut stdin = stdin.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(pipe) = stdin.as_mut()
+        && let Err(e) = writeln!(pipe, "{line}").and_then(|()| pipe.flush())
+    {
+        log::warn!("failed to write to agent: {e}");
+    }
+}
+
+/// Saves `event` onto the stored message, then streams it to the frontend.
+fn publish(server: &Server, thread_id: &str, message_id: &str, event: AgentEvent) {
+    if let Err(e) = server
+        .store
+        .update_thread(thread_id, |t| apply(t, message_id, &event))
+    {
+        log::warn!("failed to save agent event: {e}");
+    }
+    server.emit(AgentEventEnvelope {
+        thread_id: thread_id.into(),
+        event,
+    });
 }
 
 /// Everything the stdout reader needs to persist and publish one turn's events.
@@ -147,24 +243,31 @@ struct Turn {
     thread_id: String,
     message_id: String,
     agent: AgentKind,
-    root: String,
     cancelled: Arc<AtomicBool>,
     /// `git status` of the project when the turn started.
     baseline: Vec<FileChange>,
+    stdin: Stdin,
+    pending: Pending,
+    root: String,
+    session_id: Option<String>,
+    model: Option<String>,
+    text: String,
+    mode: AccessMode,
 }
 
 impl Turn {
-    /// Saves `event` onto the stored message, then streams it to the frontend.
     fn publish(&self, event: AgentEvent) {
-        let store = &self.server.store;
-        if let Err(e) = store.update_thread(&self.thread_id, |t| apply(t, &self.message_id, &event))
-        {
-            log::warn!("failed to save agent event: {e}");
+        publish(&self.server, &self.thread_id, &self.message_id, event);
+    }
+
+    fn spec(&self) -> TurnSpec<'_> {
+        TurnSpec {
+            root: &self.root,
+            session_id: self.session_id.as_deref(),
+            model: self.model.as_deref(),
+            text: &self.text,
+            mode: self.mode,
         }
-        self.server.emit(AgentEventEnvelope {
-            thread_id: self.thread_id.clone(),
-            event,
-        });
     }
 }
 
@@ -181,9 +284,37 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
         let Ok(value) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
-        let parsed = provider::parse_line(turn.agent, &value, &turn.root, &turn.message_id);
+        let parsed = provider::parse_line(turn.agent, &value, &turn.spec(), &turn.message_id);
         for item in parsed {
             match item {
+                Parsed::Send(line) => write_line(&turn.stdin, &line),
+                Parsed::Approval {
+                    title,
+                    detail,
+                    reply,
+                } => {
+                    let approval = Approval {
+                        id: new_id(),
+                        title,
+                        detail,
+                        status: ApprovalStatus::Pending,
+                    };
+                    turn.pending
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .insert(approval.id.clone(), reply);
+                    turn.publish(AgentEvent::ApprovalRequested {
+                        message_id: turn.message_id.clone(),
+                        approval,
+                    });
+                }
+                // Closing stdin lets the agent exit.
+                Parsed::Finished => drop(
+                    turn.stdin
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .take(),
+                ),
                 Parsed::SessionId(id) => {
                     let store = &turn.server.store;
                     if let Err(e) =
@@ -337,9 +468,31 @@ fn apply(thread: &mut Thread, message_id: &str, event: &AgentEvent) {
                 msg.files.push(path.clone());
             }
         }
+        AgentEvent::ApprovalRequested { approval, .. } => msg.approvals.push(approval.clone()),
+        AgentEvent::ApprovalResolved {
+            approval_id,
+            allowed,
+            ..
+        } => {
+            if let Some(approval) = msg.approvals.iter_mut().find(|a| a.id == *approval_id) {
+                approval.status = if *allowed {
+                    ApprovalStatus::Allowed
+                } else {
+                    ApprovalStatus::Denied
+                };
+            }
+        }
         AgentEvent::TurnCompleted { status, error, .. } => {
             msg.status = *status;
             msg.error = error.clone();
+            // Unanswered requests lapse with the turn.
+            for approval in msg
+                .approvals
+                .iter_mut()
+                .filter(|a| a.status == ApprovalStatus::Pending)
+            {
+                approval.status = ApprovalStatus::Denied;
+            }
             // Nothing can still be running once the turn has ended.
             let tool_end = if *status == MessageStatus::Complete {
                 StepStatus::Done
@@ -390,9 +543,10 @@ mod tests {
         assert_eq!(changed_paths(&before, &after), ["b.rs", "c.rs"]);
     }
 
-    /// Runs a real turn through the installed CLI and checks the parsed stream.
-    /// Needs the agent installed and signed in: `cargo test -- --ignored`.
-    fn live_turn(agent: AgentKind) {
+    /// Runs a real turn through the installed CLI, allowing every approval, and
+    /// checks the parsed stream. Needs the agent installed and signed in:
+    /// `cargo test -- --ignored`.
+    fn live_turn(agent: AgentKind, mode: AccessMode) {
         let root = std::env::temp_dir().join(new_id());
         std::fs::create_dir_all(&root).unwrap();
         let root_str = root.to_str().unwrap();
@@ -403,30 +557,64 @@ mod tests {
             .unwrap();
         assert!(ok.success());
 
-        let prompt = "Create a file named hello.txt whose only content is the two letters hi (no period). Do nothing else.";
-        let model = (agent == AgentKind::Claude).then_some("haiku");
+        let spec = TurnSpec {
+            root: root_str,
+            session_id: None,
+            model: (agent == AgentKind::Claude).then_some("haiku"),
+            text: "Create a file named hello.txt whose only content is the two letters hi (no period). Do nothing else.",
+            mode,
+        };
         let baseline = workspace::git_changes(root_str).unwrap();
-        let args = provider::turn_args(agent, root_str, None, model, prompt, false);
-        let out = provider::agent_command(agent)
+        let input = provider::turn_input(agent, &spec);
+        let mut child = provider::agent_command(agent)
             .unwrap()
-            .args(&args)
+            .args(provider::turn_args(agent, &spec))
             .current_dir(&root)
-            .stdin(Stdio::null())
-            .output()
+            .stdin(if input.is_empty() {
+                Stdio::null()
+            } else {
+                Stdio::piped()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .unwrap();
+        let stdin: Stdin = Arc::new(Mutex::new(child.stdin.take()));
+        for line in &input {
+            write_line(&stdin, line);
+        }
+
+        let mut parsed = Vec::new();
+        for line in BufReader::new(child.stdout.take().unwrap()).lines() {
+            let Ok(value) = serde_json::from_str::<Value>(&line.unwrap()) else {
+                continue;
+            };
+            for item in provider::parse_line(agent, &value, &spec, "m") {
+                match &item {
+                    Parsed::Send(line) => write_line(&stdin, line),
+                    Parsed::Approval { reply, .. } => {
+                        write_line(&stdin, &provider::approval_reply(agent, reply, true))
+                    }
+                    Parsed::Finished => drop(stdin.lock().unwrap().take()),
+                    _ => {}
+                }
+                parsed.push(item);
+            }
+        }
+        let out = child.wait_with_output().unwrap();
         assert!(
             out.status.success(),
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-
-        let parsed: Vec<Parsed> = String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-            .flat_map(|v| provider::parse_line(agent, &v, root_str, "m"))
-            .collect();
         assert!(parsed.iter().any(|p| matches!(p, Parsed::SessionId(_))));
-        assert!(!parsed.iter().any(|p| matches!(p, Parsed::Error(_))));
+        assert!(
+            !parsed.iter().any(|p| matches!(p, Parsed::Error(_))),
+            "{parsed:?}"
+        );
+        if mode == AccessMode::Supervised && agent != AgentKind::Gemini {
+            assert!(parsed.iter().any(|p| matches!(p, Parsed::Approval { .. })));
+        }
         let changed = changed_paths(&baseline, &workspace::git_changes(root_str).unwrap());
         assert_eq!(changed, ["hello.txt"]);
         let content = std::fs::read_to_string(root.join("hello.txt")).unwrap();
@@ -436,19 +624,31 @@ mod tests {
 
     #[test]
     #[ignore = "runs the real Claude Code CLI"]
+    fn live_claude_supervised_turn() {
+        live_turn(AgentKind::Claude, AccessMode::Supervised);
+    }
+
+    #[test]
+    #[ignore = "runs the real Codex CLI"]
+    fn live_codex_supervised_turn() {
+        live_turn(AgentKind::Codex, AccessMode::Supervised);
+    }
+
+    #[test]
+    #[ignore = "runs the real Claude Code CLI"]
     fn live_claude_turn() {
-        live_turn(AgentKind::Claude);
+        live_turn(AgentKind::Claude, AccessMode::FullAccess);
     }
 
     #[test]
     #[ignore = "runs the real Codex CLI"]
     fn live_codex_turn() {
-        live_turn(AgentKind::Codex);
+        live_turn(AgentKind::Codex, AccessMode::FullAccess);
     }
 
     #[test]
     #[ignore = "runs the real Gemini CLI"]
     fn live_gemini_turn() {
-        live_turn(AgentKind::Gemini);
+        live_turn(AgentKind::Gemini, AccessMode::AutoAcceptEdits);
     }
 }

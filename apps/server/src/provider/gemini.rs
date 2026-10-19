@@ -60,13 +60,19 @@ pub fn models() -> Vec<ModelOption> {
     manifest_models("gemini")
 }
 
-pub fn turn_args(
-    session_id: Option<&str>,
-    model: Option<&str>,
-    text: &str,
-    bypass: bool,
-) -> Vec<String> {
-    let mode = if bypass { "yolo" } else { "auto_edit" };
+/// Gemini runs headless, so "default" cannot ask: actions that need approval are refused.
+pub fn turn_args(spec: &TurnSpec) -> Vec<String> {
+    let TurnSpec {
+        session_id,
+        model,
+        text,
+        ..
+    } = *spec;
+    let mode = match spec.mode {
+        AccessMode::FullAccess => "yolo",
+        AccessMode::AutoAcceptEdits => "auto_edit",
+        AccessMode::Supervised | AccessMode::Auto => "default",
+    };
     let mut args: Vec<String> = ["--output-format", "stream-json", "--approval-mode", mode]
         .map(String::from)
         .into();
@@ -182,7 +188,13 @@ mod tests {
     #[test]
     fn args_resume_and_quote_prompt() {
         assert_eq!(
-            turn_args(Some("sid"), Some("pro"), "-x", false),
+            turn_args(&TurnSpec {
+                root: "/abs",
+                session_id: Some("sid"),
+                model: Some("pro"),
+                text: "-x",
+                mode: AccessMode::AutoAcceptEdits,
+            }),
             [
                 "--output-format",
                 "stream-json",

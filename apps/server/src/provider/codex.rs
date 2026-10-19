@@ -1,8 +1,8 @@
-//! Codex (`codex exec --json`).
+//! Codex (`codex app-server`, JSON-RPC over stdio).
 
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::*;
 
@@ -97,78 +97,94 @@ pub fn rollout_files(dir: &Path) -> Vec<(std::time::SystemTime, PathBuf)> {
     out
 }
 
-/// The prompt is the final positional argument.
-pub fn turn_args(
-    root: &str,
-    session_id: Option<&str>,
-    model: Option<&str>,
-    text: &str,
-) -> Vec<String> {
-    let mut args: Vec<String> = Vec::new();
-    args.extend(
-        [
-            "exec",
-            "--json",
-            "--skip-git-repo-check",
-            "-C",
-            root,
-            "-s",
-            "workspace-write",
-        ]
-        .map(String::from),
-    );
-    if let Some(m) = model {
-        args.extend(["-m".to_string(), m.to_string()]);
-    }
-    if let Some(id) = session_id {
-        args.extend(["resume".to_string(), id.to_string()]);
-    }
-    args.extend(["--".to_string(), text.to_string()]);
-    args
+/// `codex app-server` speaks JSON-RPC on stdio; `turn_input` starts the conversation.
+pub fn turn_args() -> Vec<String> {
+    vec!["app-server".into()]
 }
 
-fn codex_step_status_list(items: &Value) -> Vec<PlanStep> {
-    let mut running_taken = false;
-    items
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|todo| {
-            let status = if todo["completed"].as_bool() == Some(true) {
-                StepStatus::Done
-            } else if !running_taken {
-                running_taken = true;
-                StepStatus::Running
-            } else {
-                StepStatus::Pending
-            };
-            PlanStep {
-                text: todo["text"].as_str().unwrap_or_default().into(),
-                status,
-            }
-        })
-        .collect()
+/// Request id of `thread/start` / `thread/resume`; its response carries the thread id.
+const THREAD_REQUEST: u64 = 2;
+
+/// Handshake, then start or resume the thread. `turn/start` follows once the thread id is known.
+pub fn turn_input(spec: &TurnSpec) -> Vec<String> {
+    let mut thread = json!({"cwd": spec.root});
+    if let Some(m) = spec.model {
+        thread["model"] = json!(m);
+    }
+    let method = match spec.session_id {
+        Some(id) => {
+            thread["threadId"] = json!(id);
+            thread["excludeTurns"] = json!(true);
+            "thread/resume"
+        }
+        None => "thread/start",
+    };
+    [
+        json!({"id": 1, "method": "initialize", "params": {
+            "clientInfo": {"name": "patchwork", "title": "Patchwork", "version": env!("CARGO_PKG_VERSION")}
+        }}),
+        json!({"method": "initialized"}),
+        json!({"id": THREAD_REQUEST, "method": method, "params": thread}),
+    ]
+    .map(|v| v.to_string())
+    .into()
 }
 
-/// Maps one item event (`item.started` / `item.updated` / `item.completed`).
+/// T3 Code's approval policy and sandbox for each access mode.
+fn turn_start(spec: &TurnSpec, thread_id: &str) -> String {
+    let (policy, reviewer, sandbox) = match spec.mode {
+        AccessMode::Supervised => ("untrusted", "user", "readOnly"),
+        AccessMode::AutoAcceptEdits => ("on-request", "user", "workspaceWrite"),
+        AccessMode::Auto => ("on-request", "auto_review", "workspaceWrite"),
+        AccessMode::FullAccess => ("never", "user", "dangerFullAccess"),
+    };
+    let mut params = json!({
+        "threadId": thread_id,
+        "cwd": spec.root,
+        "input": [{"type": "text", "text": spec.text}],
+        "approvalPolicy": policy,
+        "approvalsReviewer": reviewer,
+        "sandboxPolicy": {"type": sandbox},
+    });
+    if let Some(m) = spec.model {
+        params["model"] = json!(m);
+    }
+    json!({"id": THREAD_REQUEST + 1, "method": "turn/start", "params": params}).to_string()
+}
+
+pub fn approval_reply(reply: &Value, allow: bool) -> String {
+    let decision = if allow { "accept" } else { "decline" };
+    json!({"id": reply["id"], "result": {"decision": decision}}).to_string()
+}
+
+fn plan_step_status(status: Option<&str>) -> StepStatus {
+    match status {
+        Some("inProgress") => StepStatus::Running,
+        Some("completed") => StepStatus::Done,
+        _ => StepStatus::Pending,
+    }
+}
+
+/// Maps `item/started` / `item/completed`.
 fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: &mut Vec<Parsed>) {
     let id = item["id"].as_str().unwrap_or_default();
+    let failed = matches!(item["status"].as_str(), Some("failed" | "declined"));
     match item["type"].as_str() {
-        Some("agent_message") if completed => {
+        Some("agentMessage") if completed => {
             let text = item["text"].as_str().unwrap_or_default();
             if !text.is_empty() {
                 out.push(text_delta(message_id, text));
             }
         }
-        Some("command_execution") => {
+        Some("commandExecution") => {
             let command = item["command"].as_str().unwrap_or_default();
             out.push(tool_started(message_id, id, "Shell", one_line(command)));
             if completed {
-                let failed = item["exit_code"].as_i64().unwrap_or(0) != 0;
-                out.push(tool_finished(message_id, id, failed));
+                let exit_failed = item["exitCode"].as_i64().is_some_and(|c| c != 0);
+                out.push(tool_finished(message_id, id, failed || exit_failed));
             }
         }
-        Some("mcp_tool_call") => {
+        Some("mcpToolCall") => {
             let summary = format!(
                 "{}.{}",
                 item["server"].as_str().unwrap_or_default(),
@@ -176,17 +192,17 @@ fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: 
             );
             out.push(tool_started(message_id, id, "MCP", summary));
             if completed {
-                out.push(tool_finished(message_id, id, item["status"] == "failed"));
+                out.push(tool_finished(message_id, id, failed));
             }
         }
-        Some("web_search") => {
+        Some("webSearch") => {
             let query = item["query"].as_str().unwrap_or_default();
             out.push(tool_started(message_id, id, "WebSearch", one_line(query)));
             if completed {
                 out.push(tool_finished(message_id, id, false));
             }
         }
-        Some("file_change") if completed => {
+        Some("fileChange") => {
             let paths: Vec<String> = item["changes"]
                 .as_array()
                 .into_iter()
@@ -200,42 +216,100 @@ fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: 
                 "Edit",
                 one_line(&paths.join(", ")),
             ));
-            for path in paths {
-                out.push(file_touched(message_id, path));
+            if completed {
+                if !failed {
+                    out.extend(paths.into_iter().map(|p| file_touched(message_id, p)));
+                }
+                out.push(tool_finished(message_id, id, failed));
             }
-            out.push(tool_finished(message_id, id, item["status"] == "failed"));
-        }
-        Some("todo_list") => {
-            out.push(Parsed::Event(AgentEvent::PlanUpdated {
-                message_id: message_id.into(),
-                steps: codex_step_status_list(&item["items"]),
-            }));
         }
         _ => {}
     }
 }
 
-/// Maps one line of `codex exec --json` output.
-pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
+/// Maps a request Codex sends us. Approvals wait for the user; anything else is refused.
+fn codex_server_request(v: &Value) -> Parsed {
+    let params = &v["params"];
+    let reason = params["reason"].as_str().filter(|r| !r.is_empty());
+    let (title, detail) = match v["method"].as_str() {
+        Some("item/commandExecution/requestApproval") => (
+            "Run command",
+            params["command"].as_str().or(reason).unwrap_or_default(),
+        ),
+        Some("item/fileChange/requestApproval") => (
+            "Edit files",
+            reason
+                .or(params["grantRoot"].as_str())
+                .unwrap_or("Apply the proposed file changes"),
+        ),
+        _ => {
+            return Parsed::Send(
+                json!({"id": v["id"], "error": {"code": -32601, "message": "Not supported by Patchwork"}})
+                    .to_string(),
+            );
+        }
+    };
+    Parsed::Approval {
+        title: title.into(),
+        detail: one_line(detail),
+        reply: json!({"id": v["id"]}),
+    }
+}
+
+/// Maps one JSON-RPC message from `codex app-server`.
+pub fn parse(v: &Value, spec: &TurnSpec, message_id: &str) -> Vec<Parsed> {
     let mut out = Vec::new();
-    match v["type"].as_str() {
-        Some("thread.started") => {
-            if let Some(id) = v["thread_id"].as_str() {
-                out.push(Parsed::SessionId(id.into()));
+    let params = &v["params"];
+    match (v.get("id"), v["method"].as_str()) {
+        // A response to one of our requests.
+        (Some(id), None) => {
+            if let Some(message) = v["error"]["message"].as_str() {
+                out.extend([Parsed::Error(message.into()), Parsed::Finished]);
+            } else if id == THREAD_REQUEST
+                && let Some(thread_id) = v["result"]["thread"]["id"].as_str()
+            {
+                out.push(Parsed::SessionId(thread_id.into()));
+                out.push(Parsed::Send(turn_start(spec, thread_id)));
             }
         }
-        Some(kind @ ("item.started" | "item.updated" | "item.completed")) => {
-            if let Some(item) = v.get("item") {
-                codex_item(kind == "item.completed", item, root, message_id, &mut out);
+        (Some(_), Some(_)) => out.push(codex_server_request(v)),
+        (None, Some(kind @ ("item/started" | "item/completed"))) => {
+            codex_item(
+                kind == "item/completed",
+                &params["item"],
+                spec.root,
+                message_id,
+                &mut out,
+            );
+        }
+        (None, Some("turn/plan/updated")) => {
+            let steps = params["plan"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|step| PlanStep {
+                    text: step["step"].as_str().unwrap_or_default().into(),
+                    status: plan_step_status(step["status"].as_str()),
+                })
+                .collect();
+            out.push(Parsed::Event(AgentEvent::PlanUpdated {
+                message_id: message_id.into(),
+                steps,
+            }));
+        }
+        (None, Some("error")) if params["willRetry"] != true => {
+            let message = params["error"]["message"]
+                .as_str()
+                .unwrap_or("Codex reported an error");
+            out.push(Parsed::Error(message.into()));
+        }
+        (None, Some("turn/completed")) => {
+            let turn = &params["turn"];
+            if turn["status"] == "failed" {
+                let message = turn["error"]["message"].as_str().unwrap_or("Turn failed");
+                out.push(Parsed::Error(message.into()));
             }
-        }
-        Some("turn.failed") => {
-            let message = v["error"]["message"].as_str().unwrap_or("Turn failed");
-            out.push(Parsed::Error(message.into()));
-        }
-        Some("error") => {
-            let message = v["message"].as_str().unwrap_or("Codex reported an error");
-            out.push(Parsed::Error(message.into()));
+            out.push(Parsed::Finished);
         }
         _ => {}
     }
@@ -245,87 +319,100 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+
+    fn spec(session_id: Option<&'static str>, mode: AccessMode) -> TurnSpec<'static> {
+        TurnSpec {
+            root: "/abs",
+            session_id,
+            model: Some("gpt"),
+            text: "go",
+            mode,
+        }
+    }
+
+    fn sent(out: &[Parsed]) -> Vec<Value> {
+        out.iter()
+            .filter_map(|p| match p {
+                Parsed::Send(line) => serde_json::from_str(line).ok(),
+                _ => None,
+            })
+            .collect()
+    }
 
     #[test]
-    fn codex_thread_and_config_warnings() {
-        let started = json!({"type": "thread.started", "thread_id": "01a154bb"});
-        assert!(matches!(
-            parse(&started, "/abs", "m1").as_slice(),
-            [Parsed::SessionId(id)] if id == "01a154bb"
-        ));
+    fn codex_starts_or_resumes_then_starts_the_turn() {
+        let new: Vec<Value> = turn_input(&spec(None, AccessMode::FullAccess))
+            .iter()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert_eq!(new[0]["method"], "initialize");
+        assert_eq!(new[1]["method"], "initialized");
+        assert_eq!(new[2]["method"], "thread/start");
+        assert_eq!(new[2]["params"]["cwd"], "/abs");
 
-        let turn = json!({"type": "turn.started"});
-        assert!(parse(&turn, "/abs", "m1").is_empty());
+        let resumed = turn_input(&spec(Some("sid"), AccessMode::FullAccess));
+        let resume: Value = serde_json::from_str(&resumed[2]).unwrap();
+        assert_eq!(resume["method"], "thread/resume");
+        assert_eq!(resume["params"]["threadId"], "sid");
 
-        let warning = json!({"type": "item.completed", "item": {
-            "id": "item_0", "type": "error",
-            "message": "Codex is ignoring 1 unrecognized configuration setting"
-        }});
-        assert!(parse(&warning, "/abs", "m1").is_empty());
+        let response = json!({"id": THREAD_REQUEST, "result": {"thread": {"id": "t1"}}});
+        let out = parse(&response, &spec(None, AccessMode::Supervised), "m1");
+        assert!(matches!(&out[0], Parsed::SessionId(id) if id == "t1"));
+        let turn = &sent(&out)[0];
+        assert_eq!(turn["method"], "turn/start");
+        assert_eq!(turn["params"]["threadId"], "t1");
+        assert_eq!(turn["params"]["input"][0]["text"], "go");
+        assert_eq!(turn["params"]["approvalPolicy"], "untrusted");
+        assert_eq!(turn["params"]["sandboxPolicy"]["type"], "readOnly");
     }
 
     #[test]
     fn codex_message_and_command() {
-        let msg = json!({"type": "item.completed", "item": {"id": "item_2", "type": "agent_message", "text": "hi"}});
+        let spec = spec(None, AccessMode::FullAccess);
+        let msg = json!({"method": "item/completed", "params": {"item":
+            {"id": "i2", "type": "agentMessage", "text": "hi"}}});
         assert!(matches!(
-            parse(&msg, "/abs", "m1").as_slice(),
+            parse(&msg, &spec, "m1").as_slice(),
             [Parsed::Event(AgentEvent::TextDelta { text, .. })] if text == "hi"
         ));
 
-        let started = json!({"type": "item.started", "item": {
-            "id": "item_3", "type": "command_execution", "command": "cargo  test", "status": "in_progress"
-        }});
+        let started = json!({"method": "item/started", "params": {"item": {
+            "id": "i3", "type": "commandExecution", "command": "cargo  test", "status": "inProgress"}}});
         assert!(matches!(
-            parse(&started, "/abs", "m1").as_slice(),
+            parse(&started, &spec, "m1").as_slice(),
             [Parsed::Event(AgentEvent::ToolStarted { tool, .. })]
                 if tool.name == "Shell" && tool.summary == "cargo test"
         ));
 
-        let done = json!({"type": "item.completed", "item": {
-            "id": "item_3", "type": "command_execution", "command": "cargo test",
-            "exit_code": 1, "status": "failed"
-        }});
-        let out = parse(&done, "/abs", "m1");
+        let done = json!({"method": "item/completed", "params": {"item": {
+            "id": "i3", "type": "commandExecution", "command": "cargo test",
+            "exitCode": 1, "status": "failed"}}});
         assert!(matches!(
-            out.last(),
-            Some(Parsed::Event(AgentEvent::ToolFinished { tool_id, is_error: true, .. })) if tool_id == "item_3"
+            parse(&done, &spec, "m1").last(),
+            Some(Parsed::Event(AgentEvent::ToolFinished { tool_id, is_error: true, .. })) if tool_id == "i3"
         ));
     }
 
     #[test]
-    fn codex_file_change_and_todo_list() {
-        let change = json!({"type": "item.completed", "item": {
-            "id": "item_4", "type": "file_change", "status": "completed",
-            "changes": [{"path": "/abs/src/a.ts", "kind": "update"}]
-        }});
-        let out = parse(&change, "/abs", "m1");
-        assert_eq!(out.len(), 3);
-        assert!(matches!(
-            &out[0],
-            Parsed::Event(AgentEvent::ToolStarted { tool, .. }) if tool.name == "Edit" && tool.summary == "src/a.ts"
-        ));
-        assert!(
-            matches!(&out[1], Parsed::Event(AgentEvent::FileTouched { path, .. }) if path == "src/a.ts")
-        );
-        assert!(matches!(
-            &out[2],
-            Parsed::Event(AgentEvent::ToolFinished {
-                is_error: false,
-                ..
-            })
+    fn codex_file_change_and_plan() {
+        let spec = spec(None, AccessMode::FullAccess);
+        let change = json!({"method": "item/completed", "params": {"item": {
+            "id": "i4", "type": "fileChange", "status": "completed",
+            "changes": [{"path": "/abs/src/a.ts", "kind": {"type": "update"}, "diff": ""}]}}});
+        let out = parse(&change, &spec, "m1");
+        assert!(out.iter().any(
+            |p| matches!(p, Parsed::Event(AgentEvent::FileTouched { path, .. }) if path == "src/a.ts")
         ));
 
-        let todos = json!({"type": "item.updated", "item": {"id": "item_5", "type": "todo_list", "items": [
-            {"text": "Read", "completed": true},
-            {"text": "Edit", "completed": false},
-            {"text": "Test", "completed": false}
-        ]}});
-        let out = parse(&todos, "/abs", "m1");
+        let plan = json!({"method": "turn/plan/updated", "params": {"plan": [
+            {"step": "a", "status": "completed"},
+            {"step": "b", "status": "inProgress"},
+            {"step": "c", "status": "pending"}]}});
+        let out = parse(&plan, &spec, "m1");
         let [Parsed::Event(AgentEvent::PlanUpdated { steps, .. })] = out.as_slice() else {
-            panic!("expected a plan update, got {out:?}");
+            panic!("no plan");
         };
-        let statuses: Vec<StepStatus> = steps.iter().map(|s| s.status).collect();
+        let statuses: Vec<_> = steps.iter().map(|s| s.status).collect();
         assert_eq!(
             statuses,
             [StepStatus::Done, StepStatus::Running, StepStatus::Pending]
@@ -333,50 +420,55 @@ mod tests {
     }
 
     #[test]
-    fn codex_turn_failure_is_error() {
-        let failed = json!({"type": "turn.failed", "error": {"message": "rate limited"}});
-        assert!(matches!(
-            parse(&failed, "/abs", "m1").as_slice(),
-            [Parsed::Error(e)] if e == "rate limited"
-        ));
+    fn codex_approvals_and_unsupported_requests() {
+        let spec = spec(None, AccessMode::Supervised);
+        let request = json!({"id": 7, "method": "item/commandExecution/requestApproval",
+            "params": {"itemId": "i1", "threadId": "t", "turnId": "u", "startedAtMs": 0,
+                "command": "rm -rf build"}});
+        let out = parse(&request, &spec, "m1");
+        let [
+            Parsed::Approval {
+                title,
+                detail,
+                reply,
+            },
+        ] = out.as_slice()
+        else {
+            panic!("{out:?}");
+        };
+        assert_eq!(
+            (title.as_str(), detail.as_str()),
+            ("Run command", "rm -rf build")
+        );
+        let answer: Value = serde_json::from_str(&approval_reply(reply, false)).unwrap();
+        assert_eq!(answer, json!({"id": 7, "result": {"decision": "decline"}}));
+
+        let input = json!({"id": 8, "method": "item/tool/requestUserInput", "params": {}});
+        assert_eq!(
+            sent(&parse(&input, &spec, "m1"))[0]["error"]["code"],
+            -32601
+        );
     }
 
     #[test]
-    fn codex_args_for_new_and_resumed_turns() {
-        let new = turn_args("/abs", None, None, "go");
-        assert_eq!(
-            new,
-            [
-                "exec",
-                "--json",
-                "--skip-git-repo-check",
-                "-C",
-                "/abs",
-                "-s",
-                "workspace-write",
-                "--",
-                "go"
-            ]
-        );
-        let resumed = turn_args("/abs", Some("sid"), Some("gpt"), "go");
-        assert_eq!(
-            resumed,
-            [
-                "exec",
-                "--json",
-                "--skip-git-repo-check",
-                "-C",
-                "/abs",
-                "-s",
-                "workspace-write",
-                "-m",
-                "gpt",
-                "resume",
-                "sid",
-                "--",
-                "go",
-            ]
-        );
+    fn codex_turn_end_and_errors() {
+        let spec = spec(None, AccessMode::FullAccess);
+        let retrying =
+            json!({"method": "error", "params": {"error": {"message": "x"}, "willRetry": true}});
+        assert!(parse(&retrying, &spec, "m1").is_empty());
+
+        let failed = json!({"method": "turn/completed", "params": {"turn": {
+            "status": "failed", "error": {"message": "usage limit"}}}});
+        assert!(matches!(
+            parse(&failed, &spec, "m1").as_slice(),
+            [Parsed::Error(e), Parsed::Finished] if e == "usage limit"
+        ));
+
+        let rejected = json!({"id": 3, "error": {"code": -1, "message": "bad model"}});
+        assert!(matches!(
+            parse(&rejected, &spec, "m1").as_slice(),
+            [Parsed::Error(e), Parsed::Finished] if e == "bad model"
+        ));
     }
 
     #[test]

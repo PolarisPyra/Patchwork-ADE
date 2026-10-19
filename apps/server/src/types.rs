@@ -120,6 +120,40 @@ pub struct PlanStep {
     pub status: StepStatus,
 }
 
+/// How much an agent may do without asking, like T3 Code's runtime modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum AccessMode {
+    /// Ask before commands and file changes.
+    Supervised,
+    /// Edits are approved; other actions ask.
+    AutoAcceptEdits,
+    /// The provider approves routine actions; others still ask.
+    Auto,
+    #[default]
+    FullAccess,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ApprovalStatus {
+    Pending,
+    Allowed,
+    Denied,
+}
+
+/// An action the agent asked permission for during a turn.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Approval {
+    pub id: String,
+    /// e.g. "Run command", "Edit files", "Use WebFetch".
+    pub title: String,
+    /// The command, paths, or other detail being approved.
+    pub detail: String,
+    pub status: ApprovalStatus,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -138,6 +172,8 @@ pub struct Message {
     pub files: Vec<String>,
     #[serde(default)]
     pub error: Option<String>,
+    #[serde(default)]
+    pub approvals: Vec<Approval>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,6 +185,8 @@ pub struct Thread {
     pub title: String,
     pub agent: AgentKind,
     pub model: Option<String>,
+    #[serde(default)]
+    pub access_mode: AccessMode,
     /// Claude session_id / Codex thread_id used to resume the conversation.
     pub session_id: Option<String>,
     pub created_at: u64,
@@ -254,6 +292,16 @@ pub enum AgentEvent {
     FileTouched {
         message_id: String,
         path: String,
+    },
+    /// The agent is waiting for the user to allow or deny `approval`.
+    ApprovalRequested {
+        message_id: String,
+        approval: Approval,
+    },
+    ApprovalResolved {
+        message_id: String,
+        approval_id: String,
+        allowed: bool,
     },
     /// Terminal event for a turn. `status` is complete | error | cancelled.
     TurnCompleted {

@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState, type UIEvent } from "react";
 import { FolderPlusIcon } from "@phosphor-icons/react";
-import type { AgentKind, FileChange, Message, Project, Thread } from "~/api";
+import {
+  api,
+  type AccessMode,
+  type AgentKind,
+  type FileChange,
+  type Message,
+  type Project,
+  type Thread,
+} from "~/api";
 import ProviderLogos from "~/components/ProviderLogos";
 import type { CanvasTab } from "~/components/canvas/Canvas";
+import { lastAccessMode } from "~/components/chat/AccessPicker";
 import Composer from "~/components/chat/Composer";
 import Messages from "~/components/chat/Messages";
 import { isWorking, type NewThreadOptions } from "~/hooks/useThreads";
@@ -32,6 +41,7 @@ interface ChatProps {
   onSend: (text: string, draft: NewThreadOptions) => Promise<void>;
   onCancel: (threadId: string) => Promise<void>;
   onSetModel: (threadId: string, agent: AgentKind, model: string | null) => Promise<void>;
+  onSetAccessMode: (threadId: string, mode: AccessMode) => Promise<void>;
 }
 
 export default function Chat({
@@ -45,10 +55,11 @@ export default function Chat({
   onSend,
   onCancel,
   onSetModel,
+  onSetAccessMode,
 }: ChatProps) {
   // Drafts are kept per thread ("new" when nothing is selected).
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  // Agent/model chosen for the next thread; null means the defaults.
+  // Agent/model/access chosen for the next thread; null means the defaults.
   const [pick, setPick] = useState<NewThreadOptions | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,10 +70,15 @@ export default function Chat({
   const draft = drafts[key] ?? "";
   const setDraft = (text: string) => setDrafts((d) => ({ ...d, [key]: text }));
 
-  const newOpts: NewThreadOptions = pick ?? { agent: defaultAgent, model: null };
+  const newOpts: NewThreadOptions = pick ?? {
+    agent: defaultAgent,
+    model: null,
+    accessMode: lastAccessMode(),
+  };
   const empty = !thread || thread.messages.length === 0;
   const agent = thread?.agent ?? newOpts.agent;
   const model = thread ? thread.model : newOpts.model;
+  const accessMode = thread?.accessMode ?? newOpts.accessMode;
   const working = sending || isWorking(thread);
   // Before the first message any connected agent's models are offered.
   const offered = agents.includes(agent) ? agents : [agent, ...agents];
@@ -117,11 +133,26 @@ export default function Chat({
 
   function pickModel(nextAgent: AgentKind, nextModel: string | null) {
     if (!thread) {
-      setPick({ agent: nextAgent, model: nextModel });
+      setPick({ ...newOpts, agent: nextAgent, model: nextModel });
       return;
     }
     setError(null);
     onSetModel(thread.id, nextAgent, nextModel).catch((e: unknown) => setError(errorText(e)));
+  }
+
+  function pickAccess(mode: AccessMode) {
+    if (!thread) {
+      setPick({ ...newOpts, accessMode: mode });
+      return;
+    }
+    setError(null);
+    onSetAccessMode(thread.id, mode).catch((e: unknown) => setError(errorText(e)));
+  }
+
+  function respond(approvalId: string, allow: boolean) {
+    if (!thread) return;
+    setError(null);
+    api.respondApproval(thread.id, approvalId, allow).catch((e: unknown) => setError(errorText(e)));
   }
 
   return (
@@ -134,6 +165,7 @@ export default function Chat({
             busy={working}
             onOpenCanvas={project ? onOpenCanvas : undefined}
             onRetry={retry}
+            onRespond={respond}
           />
         ) : (
           <div className="ws-chat-empty">
@@ -172,6 +204,8 @@ export default function Chat({
           model={model}
           agents={empty ? offered : [agent]}
           onPickModel={pickModel}
+          accessMode={accessMode}
+          onPickAccess={pickAccess}
         />
       </div>
     </div>

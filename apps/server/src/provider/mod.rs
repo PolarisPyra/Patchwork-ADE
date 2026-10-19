@@ -186,28 +186,50 @@ fn manifest_models(provider: &str) -> Vec<ModelOption> {
         .collect()
 }
 
+/// What one turn runs with.
+pub struct TurnSpec<'a> {
+    pub root: &'a str,
+    pub session_id: Option<&'a str>,
+    pub model: Option<&'a str>,
+    pub text: &'a str,
+    pub mode: AccessMode,
+}
+
 /// Command-line arguments for one turn.
-pub fn turn_args(
-    agent: AgentKind,
-    root: &str,
-    session_id: Option<&str>,
-    model: Option<&str>,
-    text: &str,
-    bypass: bool,
-) -> Vec<String> {
+pub fn turn_args(agent: AgentKind, spec: &TurnSpec) -> Vec<String> {
     match agent {
-        AgentKind::Claude => claude::turn_args(session_id, model, text, bypass),
-        AgentKind::Codex => codex::turn_args(root, session_id, model, text),
-        AgentKind::Gemini => gemini::turn_args(session_id, model, text, bypass),
+        AgentKind::Claude => claude::turn_args(spec),
+        AgentKind::Codex => codex::turn_args(),
+        AgentKind::Gemini => gemini::turn_args(spec),
+    }
+}
+
+/// Lines written to the agent's stdin when the turn starts. Empty means the
+/// agent takes no input, and stdin is closed.
+pub fn turn_input(agent: AgentKind, spec: &TurnSpec) -> Vec<String> {
+    match agent {
+        AgentKind::Claude => vec![claude::user_message(spec.text)],
+        AgentKind::Codex => codex::turn_input(spec),
+        AgentKind::Gemini => vec![],
     }
 }
 
 /// Maps one line of the agent's JSONL output.
-pub fn parse_line(agent: AgentKind, v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
+pub fn parse_line(agent: AgentKind, v: &Value, spec: &TurnSpec, message_id: &str) -> Vec<Parsed> {
     match agent {
-        AgentKind::Claude => claude::parse(v, root, message_id),
-        AgentKind::Codex => codex::parse(v, root, message_id),
-        AgentKind::Gemini => gemini::parse(v, root, message_id),
+        AgentKind::Claude => claude::parse(v, spec.root, message_id),
+        AgentKind::Codex => codex::parse(v, spec, message_id),
+        AgentKind::Gemini => gemini::parse(v, spec.root, message_id),
+    }
+}
+
+/// The stdin line answering an approval, from the `reply` the parser attached to it.
+pub fn approval_reply(agent: AgentKind, reply: &Value, allow: bool) -> String {
+    match agent {
+        AgentKind::Claude => claude::approval_reply(reply, allow),
+        AgentKind::Codex => codex::approval_reply(reply, allow),
+        // Gemini runs headless and never asks.
+        AgentKind::Gemini => String::new(),
     }
 }
 
@@ -218,6 +240,16 @@ pub enum Parsed {
     SessionId(String),
     /// The turn failed with this message.
     Error(String),
+    /// Write this line to the agent's stdin.
+    Send(String),
+    /// The agent waits for the user; `reply` is what `approval_reply` needs to answer it.
+    Approval {
+        title: String,
+        detail: String,
+        reply: Value,
+    },
+    /// The turn is over; stdin is closed so the agent exits.
+    Finished,
 }
 
 /// Collapses whitespace and caps the length, for tool summaries.

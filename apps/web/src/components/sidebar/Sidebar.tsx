@@ -10,10 +10,12 @@ import {
   GitDiffIcon,
   MagnifyingGlassIcon,
   PlusIcon,
+  ShieldWarningIcon,
   TrashIcon,
   type Icon,
 } from "@phosphor-icons/react";
-import { type AgentKind, type FileChange, type Project, type Thread } from "~/api";
+import { AGENT_LABELS, type AgentKind, type FileChange, type Project, type Thread } from "~/api";
+import ProviderLogos from "~/components/ProviderLogos";
 import UsagePopover from "~/components/usage/UsagePopover";
 import { isWorking } from "~/hooks/useThreads";
 import { baseName, dirName, displayTitle, formatRelative } from "~/lib/util";
@@ -214,25 +216,44 @@ function ThreadRow({
   onDeleteThread: (id: string) => void;
 }) {
   const last = thread.messages[thread.messages.length - 1];
+  const needsApproval = last?.approvals.some((a) => a.status === "pending") ?? false;
   return (
     <div
-      className={`ws-row${thread.id === selectedId ? " selected" : ""}`}
+      className={`ws-row ws-thread-card${thread.id === selectedId ? " selected" : ""}`}
       onClick={() => onSelectThread(thread.id)}
     >
-      <span className="ws-row-title">{displayTitle(thread.title)}</span>
-      {isWorking(thread) && <CircleNotchIcon size={15} className="spin ws-icon-accent" />}
-      <span className="ws-row-time">{formatRelative(last?.createdAt ?? thread.createdAt)}</span>
-      <button
-        className="btn-icon ws-row-delete"
-        title="Delete"
-        aria-label="Delete"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDeleteThread(thread.id);
-        }}
-      >
-        <TrashIcon size={15} />
-      </button>
+      <div className="ws-card-line">
+        <span className="ws-card-logo">
+          <ProviderLogos kind={thread.agent} size={12} />
+        </span>
+        <span className="ws-card-agent">{AGENT_LABELS[thread.agent]}</span>
+        <span className="ws-row-time">{formatRelative(last?.createdAt ?? thread.createdAt)}</span>
+        <button
+          className="btn-icon ws-row-delete"
+          title="Delete"
+          aria-label="Delete"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteThread(thread.id);
+          }}
+        >
+          <TrashIcon size={14} />
+        </button>
+      </div>
+      <div className="ws-card-line">
+        <span className="ws-row-title">{displayTitle(thread.title)}</span>
+        {needsApproval ? (
+          <span title="Waiting for approval" className="ws-card-status ws-icon-warning">
+            <ShieldWarningIcon size={15} />
+          </span>
+        ) : (
+          isWorking(thread) && (
+            <span title="Working" className="ws-card-status">
+              <CircleNotchIcon size={15} className="spin ws-icon-accent" />
+            </span>
+          )
+        )}
+      </div>
     </div>
   );
 }

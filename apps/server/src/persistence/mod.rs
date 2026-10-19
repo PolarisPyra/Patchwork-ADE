@@ -234,11 +234,12 @@ fn save_settings(tx: &Transaction, settings: &Settings) -> rusqlite::Result<()> 
 
 fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
     tx.execute(
-        "INSERT INTO threads (id, project_id, title, agent, model, session_id, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "INSERT INTO threads
+             (id, project_id, title, agent, model, session_id, created_at, access_mode)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
          ON CONFLICT (id) DO UPDATE SET project_id = excluded.project_id,
              title = excluded.title, agent = excluded.agent, model = excluded.model,
-             session_id = excluded.session_id",
+             session_id = excluded.session_id, access_mode = excluded.access_mode",
         params![
             t.id,
             t.project_id,
@@ -246,7 +247,8 @@ fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
             enc(&t.agent),
             t.model,
             t.session_id,
-            t.created_at
+            t.created_at,
+            enc(&t.access_mode)
         ],
     )?;
     Ok(())
@@ -260,11 +262,12 @@ fn save_message(
 ) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO messages
-             (id, thread_id, position, role, text, created_at, status, tools, plan, files, error)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+             (id, thread_id, position, role, text, created_at, status, tools, plan, files, error,
+              approvals)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
          ON CONFLICT (id) DO UPDATE SET position = excluded.position, text = excluded.text,
              status = excluded.status, tools = excluded.tools, plan = excluded.plan,
-             files = excluded.files, error = excluded.error",
+             files = excluded.files, error = excluded.error, approvals = excluded.approvals",
         params![
             m.id,
             thread_id,
@@ -276,7 +279,8 @@ fn save_message(
             json(&m.tools),
             json(&m.plan),
             json(&m.files),
-            m.error
+            m.error,
+            json(&m.approvals)
         ],
     )?;
     Ok(())
@@ -303,7 +307,8 @@ fn load_settings(conn: &Connection) -> rusqlite::Result<Settings> {
 
 fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
     let mut stmt = conn.prepare(
-        "SELECT id, project_id, title, agent, model, session_id, created_at FROM threads",
+        "SELECT id, project_id, title, agent, model, session_id, created_at, access_mode
+         FROM threads",
     )?;
     let mut threads: Vec<Thread> = stmt
         .query_map([], |r| {
@@ -315,12 +320,13 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                 model: r.get(4)?,
                 session_id: r.get(5)?,
                 created_at: r.get(6)?,
+                access_mode: dec(r.get(7)?)?,
                 messages: vec![],
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
     let mut stmt = conn.prepare(
-        "SELECT id, role, text, created_at, status, tools, plan, files, error
+        "SELECT id, role, text, created_at, status, tools, plan, files, error, approvals
          FROM messages WHERE thread_id = ?1 ORDER BY position",
     )?;
     for t in &mut threads {
@@ -336,6 +342,7 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                     plan: from_json(r.get(6)?),
                     files: from_json(r.get(7)?),
                     error: r.get(8)?,
+                    approvals: from_json(r.get(9)?),
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -402,6 +409,7 @@ mod tests {
             plan: vec![],
             files: vec!["a.rs".into()],
             error: None,
+            approvals: vec![],
         }
     }
 
@@ -413,6 +421,7 @@ mod tests {
             agent: AgentKind::Gemini,
             model: Some("pro".into()),
             session_id: Some("s".into()),
+            access_mode: crate::types::AccessMode::Supervised,
             created_at: 2,
             messages,
         }

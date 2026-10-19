@@ -89,6 +89,7 @@ pub fn to_thread(session: Session, project_id: Option<String>) -> Thread {
         title,
         agent: session.agent,
         model: session.model,
+        access_mode: AccessMode::default(),
         session_id: Some(session.session_id),
         created_at: session.created_at,
         messages: session
@@ -104,6 +105,7 @@ pub fn to_thread(session: Session, project_id: Option<String>) -> Thread {
                 plan: vec![],
                 files: vec![],
                 error: None,
+                approvals: vec![],
             })
             .collect(),
     }

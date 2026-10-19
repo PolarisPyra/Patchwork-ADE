@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   onAgentEvent,
+  type AccessMode,
   type AgentEvent,
   type AgentKind,
   type Message,
@@ -12,6 +13,7 @@ import {
 export interface NewThreadOptions {
   agent: AgentKind;
   model: string | null;
+  accessMode: AccessMode;
 }
 
 /** True while any message in the thread is still streaming. */
@@ -67,6 +69,21 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
         m.files.includes(path) ? m : { ...m, files: [...m.files, path] },
       );
     }
+    case "approvalRequested": {
+      const { messageId, approval } = event;
+      return updateMessage(thread, messageId, (m) => ({
+        ...m,
+        approvals: [...m.approvals, approval],
+      }));
+    }
+    case "approvalResolved": {
+      const { messageId, approvalId, allowed } = event;
+      const status = allowed ? "allowed" : "denied";
+      return updateMessage(thread, messageId, (m) => ({
+        ...m,
+        approvals: m.approvals.map((a) => (a.id === approvalId ? { ...a, status } : a)),
+      }));
+    }
     case "turnCompleted": {
       const { messageId, status, error } = event;
       // Nothing can still be running once the turn has ended (mirrors runner.rs).
@@ -77,6 +94,7 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
         error,
         tools: m.tools.map((t) => (t.status === "running" ? { ...t, status: toolEnd } : t)),
         plan: m.plan.map((s) => (s.status === "running" ? { ...s, status: "pending" } : s)),
+        approvals: m.approvals.map((a) => (a.status === "pending" ? { ...a, status: "denied" } : a)),
       }));
     }
   }
@@ -144,7 +162,7 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
 
   /** Creates a thread in `projectId` (null: a chat without a project) and selects it. */
   async function createThread(projectId: string | null, opts: NewThreadOptions): Promise<Thread> {
-    const thread = await api.createThread(projectId, opts.agent, opts.model);
+    const thread = await api.createThread(projectId, opts.agent, opts.model, opts.accessMode);
     setThreads((prev) => [thread, ...prev]);
     setSelectedId(thread.id);
     return thread;
@@ -159,6 +177,11 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
   async function setModel(id: string, agent: AgentKind, model: string | null): Promise<void> {
     await api.setThreadModel(id, agent, model);
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, agent, model } : t)));
+  }
+
+  async function setAccessMode(id: string, accessMode: AccessMode): Promise<void> {
+    await api.setThreadAccessMode(id, accessMode);
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, accessMode } : t)));
   }
 
   /** Sends a message, creating a thread in `projectId` first when none is selected. */
@@ -187,6 +210,7 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     createThread,
     deleteThread,
     setModel,
+    setAccessMode,
     send,
   };
 }

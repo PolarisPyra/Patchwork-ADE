@@ -1,4 +1,4 @@
-//! Claude Code (`claude -p --output-format stream-json`).
+//! Claude Code (`claude -p` with stream-json input and output).
 
 use std::path::PathBuf;
 
@@ -49,39 +49,98 @@ pub fn models() -> Vec<ModelOption> {
     manifest_models("claude")
 }
 
-/// The prompt is the final positional argument.
-pub fn turn_args(
-    session_id: Option<&str>,
-    model: Option<&str>,
-    text: &str,
-    bypass: bool,
-) -> Vec<String> {
-    let mut args: Vec<String> = Vec::new();
-    let mode = if bypass {
-        "bypassPermissions"
-    } else {
-        "acceptEdits"
+/// The prompt is sent on stdin (`user_message`), so approvals can be answered there too.
+pub fn turn_args(spec: &TurnSpec) -> Vec<String> {
+    let mode = match spec.mode {
+        AccessMode::Supervised => "default",
+        AccessMode::AutoAcceptEdits => "acceptEdits",
+        AccessMode::Auto => "auto",
+        AccessMode::FullAccess => "bypassPermissions",
     };
-    args.extend(
-        [
-            "-p",
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--permission-mode",
-            mode,
-        ]
-        .map(String::from),
-    );
-    if let Some(id) = session_id {
+    let mut args: Vec<String> = [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        mode,
+    ]
+    .map(String::from)
+    .into();
+    if spec.mode != AccessMode::FullAccess {
+        // Permission checks arrive as `can_use_tool` control requests on stdout.
+        args.extend(["--permission-prompt-tool".to_string(), "stdio".to_string()]);
+    }
+    if let Some(id) = spec.session_id {
         args.extend(["--resume".to_string(), id.to_string()]);
     }
-    if let Some(m) = model {
+    if let Some(m) = spec.model {
         args.extend(["--model".to_string(), m.to_string()]);
     }
-    // `--` keeps a prompt that starts with "-" from being read as a flag.
-    args.extend(["--".to_string(), text.to_string()]);
     args
+}
+
+/// The stream-json input line carrying the prompt.
+pub fn user_message(text: &str) -> String {
+    serde_json::json!({
+        "type": "user",
+        "message": {"role": "user", "content": [{"type": "text", "text": text}]},
+        "parent_tool_use_id": null,
+        "session_id": "",
+    })
+    .to_string()
+}
+
+pub fn approval_reply(reply: &Value, allow: bool) -> String {
+    let decision = if allow {
+        serde_json::json!({"behavior": "allow", "updatedInput": reply["input"]})
+    } else {
+        serde_json::json!({"behavior": "deny", "message": "The user denied this action."})
+    };
+    serde_json::json!({
+        "type": "control_response",
+        "response": {
+            "subtype": "success",
+            "request_id": reply["request_id"],
+            "response": decision,
+        },
+    })
+    .to_string()
+}
+
+/// A `can_use_tool` request becomes an approval; other control requests are refused.
+fn claude_control_request(v: &Value, root: &str) -> Parsed {
+    let request = &v["request"];
+    if request["subtype"] != "can_use_tool" {
+        return Parsed::Send(
+            serde_json::json!({
+                "type": "control_response",
+                "response": {
+                    "subtype": "error",
+                    "request_id": v["request_id"],
+                    "error": "Not supported by Patchwork",
+                },
+            })
+            .to_string(),
+        );
+    }
+    let tool = request["tool_name"].as_str().unwrap_or("a tool");
+    let title = match tool {
+        "Bash" => "Run command".to_string(),
+        "Edit" | "Write" | "MultiEdit" | "NotebookEdit" => "Edit file".to_string(),
+        _ => format!("Use {}", request["display_name"].as_str().unwrap_or(tool)),
+    };
+    let mut detail = summarize(&request["input"], root);
+    if detail.is_empty() {
+        detail = one_line(request["description"].as_str().unwrap_or_default());
+    }
+    Parsed::Approval {
+        title,
+        detail,
+        reply: serde_json::json!({"request_id": v["request_id"], "input": request["input"]}),
+    }
 }
 
 fn claude_step_status(status: Option<&str>) -> StepStatus {
@@ -167,7 +226,9 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                     .unwrap_or(subtype);
                 out.push(Parsed::Error(text.into()));
             }
+            out.push(Parsed::Finished);
         }
+        Some("control_request") => out.push(claude_control_request(v, root)),
         _ => {}
     }
     out
@@ -248,19 +309,69 @@ mod tests {
 
         let failed = json!({"type": "result", "subtype": "success", "is_error": true, "result": "Invalid key"});
         let out = parse(&failed, "/abs", "m1");
-        assert!(matches!(out.as_slice(), [Parsed::Error(e)] if e == "Invalid key"));
+        assert!(
+            matches!(out.as_slice(), [Parsed::Error(e), Parsed::Finished] if e == "Invalid key")
+        );
 
         let ok = json!({"type": "result", "subtype": "success", "is_error": false, "result": "hi"});
-        assert!(parse(&ok, "/abs", "m1").is_empty());
+        assert!(matches!(
+            parse(&ok, "/abs", "m1").as_slice(),
+            [Parsed::Finished]
+        ));
+    }
+
+    #[test]
+    fn claude_permission_request_round_trip() {
+        let request = json!({"type": "control_request", "request_id": "r1", "request": {
+            "subtype": "can_use_tool", "tool_name": "Bash", "display_name": "Bash",
+            "input": {"command": "rm -rf build"}}});
+        let out = parse(&request, "/abs", "m1");
+        let [
+            Parsed::Approval {
+                title,
+                detail,
+                reply,
+            },
+        ] = out.as_slice()
+        else {
+            panic!("{out:?}");
+        };
+        assert_eq!(
+            (title.as_str(), detail.as_str()),
+            ("Run command", "rm -rf build")
+        );
+
+        let allow: Value = serde_json::from_str(&approval_reply(reply, true)).unwrap();
+        assert_eq!(allow["response"]["request_id"], "r1");
+        assert_eq!(allow["response"]["response"]["behavior"], "allow");
+        assert_eq!(
+            allow["response"]["response"]["updatedInput"]["command"],
+            "rm -rf build"
+        );
+        let deny: Value = serde_json::from_str(&approval_reply(reply, false)).unwrap();
+        assert_eq!(deny["response"]["response"]["behavior"], "deny");
+
+        let other = json!({"type": "control_request", "request_id": "r2",
+            "request": {"subtype": "hook_callback"}});
+        let out = parse(&other, "/abs", "m1");
+        assert!(matches!(out.as_slice(), [Parsed::Send(line)] if line.contains("\"error\"")));
     }
 
     #[test]
     fn claude_args_include_resume_model_and_mode() {
-        let args = turn_args(Some("sid"), Some("opus"), "do it", true);
+        let mut spec = TurnSpec {
+            root: "/abs",
+            session_id: Some("sid"),
+            model: Some("opus"),
+            text: "do it",
+            mode: AccessMode::FullAccess,
+        };
         assert_eq!(
-            args,
+            turn_args(&spec),
             [
                 "-p",
+                "--input-format",
+                "stream-json",
                 "--output-format",
                 "stream-json",
                 "--verbose",
@@ -270,9 +381,17 @@ mod tests {
                 "sid",
                 "--model",
                 "opus",
-                "--",
-                "do it",
             ]
+        );
+        spec.mode = AccessMode::Supervised;
+        let args = turn_args(&spec);
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--permission-mode", "default"])
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--permission-prompt-tool", "stdio"])
         );
     }
 }
