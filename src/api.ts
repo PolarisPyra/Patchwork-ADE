@@ -111,8 +111,6 @@ export const DEFAULT_SETTINGS: Settings = {
   activeProjectId: null,
 };
 
-export const ALL_AGENTS: AgentKind[] = ["claude", "codex"];
-
 /** Agent used for new tasks: the first connected one, else Claude Code. */
 export function defaultAgentOf(settings: Settings): AgentKind {
   return settings.agents[0] ?? "claude";

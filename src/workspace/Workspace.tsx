@@ -11,7 +11,7 @@ import Sidebar, { ToolStripe, type SidebarView } from "./Sidebar";
 import StatusBar from "./StatusBar";
 import Toolbar from "./Toolbar";
 import { isWorking, useThreads } from "./useThreads";
-import { errorText } from "./util";
+import { AGENT_KINDS, errorText } from "./util";
 import "./Workspace.css";
 
 export interface WorkspaceProps {
@@ -43,6 +43,8 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
   const project = settings.projects.find((p) => p.id === settings.activeProjectId) ?? settings.projects[0] ?? null;
   const projectId = project?.id ?? null;
   const defaultAgent = defaultAgentOf(settings);
+  // Display order stays fixed; `settings.agents` order only marks the default.
+  const connectedAgents = AGENT_KINDS.filter((k) => settings.agents.includes(k));
 
   const [view, setView] = useState<SidebarView | null>("tasks");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -184,7 +186,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
         {view && (
           <Sidebar
             view={view}
-            agents={settings.agents.length > 0 ? settings.agents : [defaultAgent]}
+            agents={connectedAgents.length > 0 ? connectedAgents : [defaultAgent]}
             project={project}
             projects={settings.projects}
             threads={threads}
@@ -206,7 +208,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
             thread={selected}
             changes={changes}
             defaultAgent={defaultAgent}
-            agents={settings.agents}
+            agents={connectedAgents}
             onOpenFolder={openFolder}
             onOpenCanvas={openCanvasAt}
             onSend={send}

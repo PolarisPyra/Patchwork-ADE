@@ -180,7 +180,8 @@ function AgentPane({ settings, updateSettings }: PaneProps) {
             <div className="ws-setting-desc">You can still pick an agent per task in the composer</div>
           </div>
           <div className="ws-segmented">
-            {connected.map((kind) => (
+            {/* Fixed order: choosing a default reorders `agents`, not the buttons. */}
+            {AGENT_KINDS.filter((kind) => connected.includes(kind)).map((kind) => (
               <button
                 key={kind}
                 className={`ws-seg ws-seg-text${connected[0] === kind ? " active" : ""}`}
