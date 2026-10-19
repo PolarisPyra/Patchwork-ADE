@@ -259,7 +259,11 @@ impl Server {
     ) -> (u32, u32, Vec<import::Session>) {
         let all = import::sessions(source);
         let subagents = all.iter().filter(|s| s.subagent).count() as u32;
-        let all: Vec<_> = all.into_iter().filter(|s| !s.subagent).collect();
+        // Patchwork's own chats are not the user's imports, so they are not counted.
+        let all: Vec<_> = all
+            .into_iter()
+            .filter(|s| !s.subagent && !Path::new(&s.cwd).starts_with(&self.chats_dir))
+            .collect();
         let found = all.len() as u32;
         let new = all
             .into_iter()
@@ -268,7 +272,6 @@ impl Server {
                     .iter()
                     .any(|(a, id)| *a == s.agent && *id == s.session_id)
             })
-            .filter(|s| !Path::new(&s.cwd).starts_with(&self.chats_dir))
             .collect();
         (found, subagents, new)
     }
