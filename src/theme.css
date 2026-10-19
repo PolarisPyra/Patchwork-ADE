@@ -1,0 +1,349 @@
+/*
+ * Patchwork design tokens — JetBrains "Int UI" (New UI) palette.
+ * Theme is selected by `data-theme="light" | "dark"` on <html>.
+ * Components must use these variables, never hard-coded colors.
+ */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app: #1e1f22; /* window chrome, toolbars, stripes */
+  --bg-panel: #2b2d30; /* tool windows, sidebar, cards */
+  --bg-editor: #1e1f22; /* editor / chat surface */
+  --bg-elevated: #2b2d30; /* popups, dialogs */
+  --bg-input: #1e1f22;
+  --bg-hover: #393b40;
+  --bg-selected: #2e436e;
+  --bg-selected-muted: #43454a;
+  --bg-accent-soft: rgba(53, 116, 240, 0.16);
+  --bg-code-gutter: #1e1f22;
+
+  --border: #393b40;
+  --border-strong: #4e5157;
+  --border-focus: #3574f0;
+
+  --text: #dfe1e5;
+  --text-muted: #9fa2a8;
+  --text-subtle: #6f737a;
+  --text-on-accent: #ffffff;
+
+  --accent: #3574f0;
+  --accent-hover: #4682fa;
+  --accent-text: #548af7;
+  --success: #5fb865;
+  --success-soft: rgba(95, 184, 101, 0.14);
+  --danger: #db5c5c;
+  --danger-soft: rgba(219, 92, 92, 0.14);
+  --warning: #f2c55c;
+
+  --diff-add-bg: rgba(84, 155, 90, 0.18);
+  --diff-del-bg: rgba(219, 92, 92, 0.18);
+
+  /* syntax (Darcula / New UI Dark) */
+  --syn-keyword: #cf8e6d;
+  --syn-string: #6aab73;
+  --syn-number: #2aacb8;
+  --syn-comment: #7a7e85;
+  --syn-function: #56a8f5;
+  --syn-property: #c77dbb;
+  --syn-type: #16baac;
+  --syn-tag: #d5b778;
+
+  --shadow-popup: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-app: #f7f8fa;
+  --bg-panel: #f7f8fa;
+  --bg-editor: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: #dfe1e5;
+  --bg-selected: #d4e2ff;
+  --bg-selected-muted: #ebecf0;
+  --bg-accent-soft: #edf3ff;
+  --bg-code-gutter: #ffffff;
+
+  --border: #ebecf0;
+  --border-strong: #c9ccd6;
+  --border-focus: #3574f0;
+
+  --text: #000000;
+  --text-muted: #6c707e;
+  --text-subtle: #818594;
+  --text-on-accent: #ffffff;
+
+  --accent: #3574f0;
+  --accent-hover: #2d63cc;
+  --accent-text: #3574f0;
+  --success: #208a3c;
+  --success-soft: #e6f5ea;
+  --danger: #e55765;
+  --danger-soft: #fdeef0;
+  --warning: #c27d04;
+
+  --diff-add-bg: #e6f5ea;
+  --diff-del-bg: #fdeef0;
+
+  /* syntax (IntelliJ Light) */
+  --syn-keyword: #0033b3;
+  --syn-string: #067d17;
+  --syn-number: #1750eb;
+  --syn-comment: #8c8c8c;
+  --syn-function: #00627a;
+  --syn-property: #871094;
+  --syn-type: #008080;
+  --syn-tag: #0033b3;
+
+  --shadow-popup: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+
+:root {
+  --font-ui: "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px; /* JetBrains default UI size */
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+  --fs-xxl: 28px;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --toolbar-h: 40px;
+  --statusbar-h: 24px;
+  --stripe-w: 40px;
+}
+
+/* ---- base -------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+input,
+textarea,
+button,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: var(--bg-selected);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+/* ---- shared primitives -------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-editor);
+  color: var(--text);
+  font-size: var(--fs-md);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.btn-lg {
+  height: 36px;
+  padding: 0 20px;
+}
+.btn-icon {
+  width: 28px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+}
+.btn-icon:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.link:hover {
+  text-decoration: underline;
+}
+
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  background: var(--bg-selected-muted);
+  color: var(--text-muted);
+}
+.badge-accent {
+  background: var(--bg-accent-soft);
+  color: var(--accent-text);
+}
+.badge-success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.badge-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--bg-selected-muted);
+  color: var(--text-subtle);
+  font-size: 10px;
+  font-family: var(--font-ui);
+}
+
+.input {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  outline: none;
+  user-select: text;
+}
+.input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 1px var(--border-focus);
+}
+
+/* toggle switch: <button class="toggle" role="switch" aria-checked="true|false"> */
+.toggle {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex: none;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-selected-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s;
+}
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-on-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.12s;
+}
+.toggle[aria-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.toggle[aria-checked="true"]::after {
+  transform: translateX(14px);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.selectable {
+  user-select: text;
+}

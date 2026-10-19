@@ -1,0 +1,63 @@
+import { useCallback, useEffect, useState } from "react";
+import { api, DEFAULT_SETTINGS, type Settings } from "./api";
+import Onboarding from "./onboarding/Onboarding";
+import Workspace from "./workspace/Workspace";
+
+export type UpdateSettings = (next: Settings | ((s: Settings) => Settings)) => Promise<void>;
+
+function useResolvedTheme(theme: Settings["theme"]): "light" | "dark" {
+  const query = "(prefers-color-scheme: dark)";
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setSystemDark(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  if (theme === "system") return systemDark ? "dark" : "light";
+  return theme;
+}
+
+export default function App() {
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const resolvedTheme = useResolvedTheme(settings?.theme ?? DEFAULT_SETTINGS.theme);
+
+  useEffect(() => {
+    api.getSettings().then(setSettings, () => setSettings(DEFAULT_SETTINGS));
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+  }, [resolvedTheme]);
+
+  const updateSettings = useCallback<UpdateSettings>(async (next) => {
+    let resolved!: Settings;
+    setSettings((prev) => {
+      resolved = typeof next === "function" ? next(prev ?? DEFAULT_SETTINGS) : next;
+      return resolved;
+    });
+    await api.saveSettings(resolved);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    void updateSettings((s) => ({ ...s, theme: resolvedTheme === "dark" ? "light" : "dark" }));
+  }, [resolvedTheme, updateSettings]);
+
+  if (!settings) return null;
+
+  return settings.onboarded ? (
+    <Workspace
+      settings={settings}
+      updateSettings={updateSettings}
+      resolvedTheme={resolvedTheme}
+      toggleTheme={toggleTheme}
+    />
+  ) : (
+    <Onboarding
+      settings={settings}
+      updateSettings={updateSettings}
+      resolvedTheme={resolvedTheme}
+      toggleTheme={toggleTheme}
+    />
+  );
+}
