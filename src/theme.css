@@ -224,14 +224,23 @@ pre,
   height: 36px;
   padding: 0 20px;
 }
+/* Square icon button; complete on its own, so `btn` is optional alongside it. */
 .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
   width: 28px;
+  height: 28px;
   padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
   background: transparent;
-  border-color: transparent;
   color: var(--text-muted);
+  cursor: pointer;
 }
 .btn-icon:hover:not(:disabled) {
+  background: var(--bg-hover);
   color: var(--text);
 }
 
@@ -338,6 +347,10 @@ pre,
 }
 .toggle[aria-checked="true"]::after {
   transform: translateX(14px);
+}
+.toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .spin {

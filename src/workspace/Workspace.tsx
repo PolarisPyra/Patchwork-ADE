@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { X } from "lucide-react";
-import { api, type FileChange, type Message, type Settings } from "../api";
+import { api, defaultAgentOf, type FileChange, type Message, type Settings } from "../api";
 import type { UpdateSettings } from "../App";
 import Canvas, { type CanvasTab } from "./canvas/Canvas";
 import Chat from "./Chat";
@@ -42,7 +42,7 @@ const CANVAS_MAX_FRACTION = 0.7;
 export default function Workspace({ settings, updateSettings, resolvedTheme, toggleTheme }: WorkspaceProps) {
   const project = settings.projects.find((p) => p.id === settings.activeProjectId) ?? settings.projects[0] ?? null;
   const projectId = project?.id ?? null;
-  const defaultAgent = settings.agent ?? "claude";
+  const defaultAgent = defaultAgentOf(settings);
 
   const [view, setView] = useState<SidebarView | null>("tasks");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -184,7 +184,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
         {view && (
           <Sidebar
             view={view}
-            agent={defaultAgent}
+            agents={settings.agents.length > 0 ? settings.agents : [defaultAgent]}
             project={project}
             projects={settings.projects}
             threads={threads}
@@ -206,6 +206,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
             thread={selected}
             changes={changes}
             defaultAgent={defaultAgent}
+            agents={settings.agents}
             onOpenFolder={openFolder}
             onOpenCanvas={openCanvasAt}
             onSend={send}

@@ -19,6 +19,8 @@ interface ChatProps {
   thread: Thread | null;
   changes: FileChange[];
   defaultAgent: AgentKind;
+  /** Connected agents offered in the composer's agent picker. */
+  agents: AgentKind[];
   onOpenFolder: () => void;
   onOpenCanvas: (path: string, message: Message | null, tab: CanvasTab) => void;
   onSend: (text: string, draft: NewThreadOptions) => Promise<void>;
@@ -32,6 +34,7 @@ export default function Chat({
   thread,
   changes,
   defaultAgent,
+  agents,
   onOpenFolder,
   onOpenCanvas,
   onSend,
@@ -174,6 +177,7 @@ export default function Chat({
           agent={agent}
           model={model}
           canPickAgent={empty}
+          agents={agents}
           onAgentChange={changeAgent}
           onModelChange={changeModel}
         />

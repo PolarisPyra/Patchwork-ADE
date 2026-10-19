@@ -137,28 +137,61 @@ function AgentPane({ settings, updateSettings }: PaneProps) {
     };
   }, []);
 
-  const current = settings.agent ?? "claude";
+  const connected = settings.agents;
+  const toggle = (kind: AgentKind) =>
+    void updateSettings((st) => ({
+      ...st,
+      agents: st.agents.includes(kind) ? st.agents.filter((k) => k !== kind) : [...st.agents, kind],
+    }));
+  const makeDefault = (kind: AgentKind) =>
+    void updateSettings((st) => ({ ...st, agents: [kind, ...st.agents.filter((k) => k !== kind)] }));
+
   return (
     <>
       {AGENT_KINDS.map((kind) => {
         const s = status[kind];
+        const on = connected.includes(kind);
         const badge = s === undefined ? "Checking…" : s?.installed ? "Installed" : "Not installed";
+        // Keep at least one agent connected, and only connect installed ones.
+        const locked = on ? connected.length === 1 : !s?.installed;
         return (
-          <button
-            key={kind}
-            className={`ws-radio-row${current === kind ? " active" : ""}`}
-            onClick={() => void updateSettings((st) => ({ ...st, agent: kind }))}
-          >
-            <span className={`ws-radio${current === kind ? " on" : ""}`} />
+          <div key={kind} className="ws-setting-row">
             <AgentIcon kind={kind} size={20} />
-            <span className="ws-radio-text">
-              <span className="ws-radio-name">{AGENT_LABELS[kind]}</span>
-              <span className="ws-setting-desc">{describeAgent(s)}</span>
-            </span>
+            <div className="ws-setting-text">
+              <div className="ws-setting-title">{AGENT_LABELS[kind]}</div>
+              <div className="ws-setting-desc">{describeAgent(s)}</div>
+            </div>
             <span className={`badge${s?.installed ? " badge-success" : ""}`}>{badge}</span>
-          </button>
+            <button
+              className="toggle"
+              role="switch"
+              aria-label={`Connect ${AGENT_LABELS[kind]}`}
+              aria-checked={on}
+              disabled={locked}
+              onClick={() => toggle(kind)}
+            />
+          </div>
         );
       })}
+      {connected.length > 1 && (
+        <div className="ws-setting-row">
+          <div className="ws-setting-text">
+            <div className="ws-setting-title">Default for new tasks</div>
+            <div className="ws-setting-desc">You can still pick an agent per task in the composer</div>
+          </div>
+          <div className="ws-segmented">
+            {connected.map((kind) => (
+              <button
+                key={kind}
+                className={`ws-seg ws-seg-text${connected[0] === kind ? " active" : ""}`}
+                onClick={() => makeDefault(kind)}
+              >
+                {AGENT_LABELS[kind]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }

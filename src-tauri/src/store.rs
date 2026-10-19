@@ -38,8 +38,12 @@ impl Store {
                 }
             }
         }
+        let mut settings: Settings = load(&dir.join("settings.json"));
+        if settings.agents.is_empty() {
+            settings.agents.extend(settings.agent.take());
+        }
         Self {
-            settings: Mutex::new(load(&dir.join("settings.json"))),
+            settings: Mutex::new(settings),
             threads: Mutex::new(threads),
             dir,
         }
@@ -84,5 +88,30 @@ impl Store {
                 f(t);
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{AgentKind, new_id};
+
+    #[test]
+    fn legacy_single_agent_migrates_to_agents_list() {
+        let dir = std::env::temp_dir().join(new_id());
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("settings.json"),
+            r#"{"onboarded":true,"agent":"codex"}"#,
+        )
+        .unwrap();
+
+        let store = Store::open(dir.clone());
+        assert_eq!(store.settings().agents, [AgentKind::Codex]);
+
+        store.update_settings(|_| ()).unwrap();
+        let saved = std::fs::read_to_string(dir.join("settings.json")).unwrap();
+        assert!(saved.contains(r#""agents": ["#) && !saved.contains(r#""agent":"#));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

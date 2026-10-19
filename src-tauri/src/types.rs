@@ -41,6 +41,10 @@ pub struct Project {
 pub struct Settings {
     pub onboarded: bool,
     pub theme: Theme,
+    /// Connected agents; the first is the default for new tasks.
+    pub agents: Vec<AgentKind>,
+    /// Legacy single-agent setting, migrated into `agents` on load.
+    #[serde(skip_serializing)]
     pub agent: Option<AgentKind>,
     pub integrations: Integrations,
     pub projects: Vec<Project>,

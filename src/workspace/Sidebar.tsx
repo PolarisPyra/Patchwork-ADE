@@ -73,7 +73,8 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
 
 interface SidebarProps {
   view: SidebarView;
-  agent: AgentKind;
+  /** Connected agents, shown as status cards at the bottom. */
+  agents: AgentKind[];
   project: Project | null;
   projects: Project[];
   threads: Thread[];
@@ -92,7 +93,11 @@ export default function Sidebar(props: SidebarProps) {
   return (
     <aside className="ws-sidebar">
       {props.view === "tasks" ? <TasksView {...props} /> : <ChangesView {...props} />}
-      <AgentCard agent={props.agent} />
+      <div className="ws-agent-cards">
+        {props.agents.map((kind) => (
+          <AgentCard key={kind} agent={kind} />
+        ))}
+      </div>
     </aside>
   );
 }

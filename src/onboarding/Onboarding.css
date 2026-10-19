@@ -344,7 +344,7 @@
   height: 44px;
 }
 
-.ob-radio {
+.ob-checkbox {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -352,11 +352,11 @@
   width: 18px;
   height: 18px;
   border: 1px solid var(--border-strong);
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   color: var(--text-on-accent);
 }
 
-.ob-radio.is-selected {
+.ob-checkbox.is-selected {
   border-color: var(--accent);
   background: var(--accent);
 }

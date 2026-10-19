@@ -25,7 +25,8 @@ export interface Project {
 export interface Settings {
   onboarded: boolean;
   theme: Theme;
-  agent: AgentKind | null;
+  /** Connected agents; the first is the default for new tasks. */
+  agents: AgentKind[];
   integrations: Integrations;
   projects: Project[];
   activeProjectId: string | null;
@@ -104,11 +105,18 @@ export interface AgentEventEnvelope {
 export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
   theme: "dark",
-  agent: null,
+  agents: [],
   integrations: { github: false, terminal: false, figma: false, browser: false },
   projects: [],
   activeProjectId: null,
 };
+
+export const ALL_AGENTS: AgentKind[] = ["claude", "codex"];
+
+/** Agent used for new tasks: the first connected one, else Claude Code. */
+export function defaultAgentOf(settings: Settings): AgentKind {
+  return settings.agents[0] ?? "claude";
+}
 
 export const AGENT_LABELS: Record<AgentKind, string> = {
   claude: "Claude Code",

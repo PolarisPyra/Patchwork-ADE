@@ -20,10 +20,10 @@ export interface OnboardingProps {
 const STEPS = [
   {
     label: "Agent",
-    title: "Connect a coding agent",
+    title: "Connect your coding agents",
     subtitle:
-      "Connect an agent already installed on this computer. Patchwork will use it to work in your projects.",
-    helper: "Connect an agent to start your first task.",
+      "Connect the agents already installed on this computer. You can pick which one runs each task.",
+    helper: "Connect at least one agent to start your first task.",
   },
   {
     label: "Projects",
@@ -57,22 +57,30 @@ export default function Onboarding({
   const [step, setStep] = useState(0);
   const [reached, setReached] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [agent, setAgent] = useState<AgentKind | null>(null);
+  // Connected agents, kept in AGENT_KINDS order so the first is the default.
+  const [agents, setAgents] = useState<AgentKind[] | null>(null);
   const { probes, check, checking } = useAgentProbes();
 
-  // Keep a valid selection: keep the current choice while it is still ready,
-  // otherwise prefer the saved agent, otherwise the first ready one.
+  // Only ready agents can be selected. Start from the saved agents (or every
+  // ready agent on first run), then keep the user's choices while still ready.
   useEffect(() => {
     if (checking) return;
     const ready = AGENT_KINDS.filter((k) => isReady(probes[k]));
-    setAgent((current) => {
-      if (current && ready.includes(current)) return current;
-      if (settings.agent && ready.includes(settings.agent)) return settings.agent;
-      return ready[0] ?? null;
+    setAgents((current) => {
+      const saved = settings.agents.filter((k) => ready.includes(k));
+      const base = current ?? (saved.length > 0 ? saved : ready);
+      return ready.filter((k) => base.includes(k));
     });
-  }, [checking, probes, settings.agent]);
+  }, [checking, probes, settings.agents]);
 
-  const canContinue = !saving && (step !== 0 || agent !== null);
+  const toggleAgent = (kind: AgentKind) =>
+    setAgents((current) => {
+      const set = current ?? [];
+      const next = set.includes(kind) ? set.filter((k) => k !== kind) : [...set, kind];
+      return AGENT_KINDS.filter((k) => next.includes(k));
+    });
+
+  const canContinue = !saving && (step !== 0 || (agents?.length ?? 0) > 0);
   const isLast = step === LAST_STEP;
   const current = STEPS[step];
 
@@ -90,7 +98,7 @@ export default function Onboarding({
       if (isLast) {
         await complete();
       } else {
-        if (step === 0 && agent) await updateSettings((s) => ({ ...s, agent }));
+        if (step === 0 && agents) await updateSettings((s) => ({ ...s, agents }));
         goTo(step + 1);
       }
     } finally {
@@ -119,8 +127,8 @@ export default function Onboarding({
           <AgentStep
             probes={probes}
             checking={checking}
-            selected={agent}
-            onSelect={setAgent}
+            selected={agents ?? []}
+            onToggle={toggleAgent}
             onRecheck={check}
           />
         );

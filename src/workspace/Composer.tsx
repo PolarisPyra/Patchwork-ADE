@@ -3,7 +3,6 @@ import { ArrowUp, Check, ChevronDown, Cpu, Square } from "lucide-react";
 import { AGENT_LABELS, AGENT_MODELS, type AgentKind } from "../api";
 import AgentIcon from "../components/AgentIcon";
 import Dropdown from "./Dropdown";
-import { AGENT_KINDS } from "./util";
 
 interface ComposerProps {
   value: string;
@@ -16,6 +15,7 @@ interface ComposerProps {
   model: string | null;
   /** The agent can only be changed before the first message. */
   canPickAgent: boolean;
+  agents: AgentKind[];
   onAgentChange: (agent: AgentKind) => void;
   onModelChange: (model: string | null) => void;
 }
@@ -30,6 +30,7 @@ export default function Composer({
   agent,
   model,
   canPickAgent,
+  agents,
   onAgentChange,
   onModelChange,
 }: ComposerProps) {
@@ -64,7 +65,7 @@ export default function Composer({
         onKeyDown={onKeyDown}
       />
       <div className="ws-composer-foot">
-        {canPickAgent && (
+        {canPickAgent && agents.length > 1 && (
           <Dropdown
             up
             trigger={({ toggle }) => (
@@ -76,7 +77,7 @@ export default function Composer({
             )}
           >
             {(close) =>
-              AGENT_KINDS.map((kind) => (
+              agents.map((kind) => (
                 <button
                   key={kind}
                   className="ws-menu-item"

@@ -7,12 +7,12 @@ import { AGENT_KINDS, isReady, type AgentProbe, type AgentProbes } from "./agent
 interface AgentStepProps {
   probes: AgentProbes;
   checking: boolean;
-  selected: AgentKind | null;
-  onSelect: (kind: AgentKind) => void;
+  selected: AgentKind[];
+  onToggle: (kind: AgentKind) => void;
   onRecheck: () => void;
 }
 
-export default function AgentStep({ probes, checking, selected, onSelect, onRecheck }: AgentStepProps) {
+export default function AgentStep({ probes, checking, selected, onToggle, onRecheck }: AgentStepProps) {
   return (
     <>
       <div className="ob-card-header">
@@ -22,14 +22,14 @@ export default function AgentStep({ probes, checking, selected, onSelect, onRech
           Check again
         </button>
       </div>
-      <div className="ob-option-list" role="radiogroup" aria-label="Coding agents">
+      <div className="ob-option-list" role="group" aria-label="Coding agents">
         {AGENT_KINDS.map((kind) => (
           <AgentRow
             key={kind}
             kind={kind}
             probe={probes[kind]}
-            selected={selected === kind}
-            onSelect={onSelect}
+            selected={selected.includes(kind)}
+            onToggle={onToggle}
           />
         ))}
       </div>
@@ -41,22 +41,22 @@ function AgentRow({
   kind,
   probe,
   selected,
-  onSelect,
+  onToggle,
 }: {
   kind: AgentKind;
   probe: AgentProbe;
   selected: boolean;
-  onSelect: (kind: AgentKind) => void;
+  onToggle: (kind: AgentKind) => void;
 }) {
   const ready = isReady(probe);
   return (
     <button
       type="button"
-      role="radio"
+      role="checkbox"
       aria-checked={selected}
       disabled={!ready}
       className={cx("ob-option", ready && "is-clickable", selected && "is-selected")}
-      onClick={() => onSelect(kind)}
+      onClick={() => onToggle(kind)}
     >
       <span className="ob-tile ob-tile-lg">
         <AgentIcon kind={kind} size={26} />
@@ -67,7 +67,7 @@ function AgentRow({
       </span>
       <span className="ob-option-trail">
         <StatusBadge probe={probe} />
-        {ready && <span className={cx("ob-radio", selected && "is-selected")}>{selected && <Check size={12} strokeWidth={3} />}</span>}
+        {ready && <span className={cx("ob-checkbox", selected && "is-selected")}>{selected && <Check size={12} strokeWidth={3} />}</span>}
       </span>
     </button>
   );

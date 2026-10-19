@@ -495,12 +495,18 @@
   color: var(--danger);
 }
 
-.ws-agent-card {
+.ws-agent-cards {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px;
+}
+
+.ws-agent-card {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 8px;
   padding: 10px;
   background: var(--bg-editor);
   border: 1px solid var(--border);
@@ -1220,57 +1226,6 @@ h5.ws-md-heading {
 .ws-setting-desc {
   color: var(--text-muted);
   font-size: var(--fs-sm);
-}
-
-.ws-radio-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-.ws-radio-row:hover {
-  background: var(--bg-hover);
-}
-.ws-radio-row.active {
-  border-color: var(--accent);
-}
-
-.ws-radio {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-}
-.ws-radio.on {
-  border-color: var(--accent);
-}
-.ws-radio.on::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-.ws-radio-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.ws-radio-name {
-  font-weight: 600;
 }
 
 .ws-project-row {
