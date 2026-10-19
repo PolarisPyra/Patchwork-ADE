@@ -174,7 +174,6 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
         onOpenFolder={openFolder}
         onOpenPalette={() => setPaletteOpen(true)}
         toggleTheme={toggleTheme}
-        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       <div className="ws-body" ref={bodyRef}>

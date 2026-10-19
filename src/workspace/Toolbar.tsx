@@ -1,4 +1,4 @@
-import { ChevronDown, FolderPlus, GitBranch, Moon, Search, Settings, Sun } from "lucide-react";
+import { ChevronDown, FolderPlus, GitBranch, Moon, Search, Sun } from "lucide-react";
 import { AGENT_LABELS, type Project, type Thread } from "../api";
 import Dropdown from "./Dropdown";
 
@@ -31,7 +31,6 @@ interface ToolbarProps {
   onOpenFolder: () => void;
   onOpenPalette: () => void;
   toggleTheme: () => void;
-  onOpenSettings: () => void;
 }
 
 export default function Toolbar({
@@ -44,7 +43,6 @@ export default function Toolbar({
   onOpenFolder,
   onOpenPalette,
   toggleTheme,
-  onOpenSettings,
 }: ToolbarProps) {
   const pickTheme = (t: "light" | "dark") => {
     if (t !== resolvedTheme) toggleTheme();
@@ -139,9 +137,6 @@ export default function Toolbar({
             <Moon size={14} />
           </button>
         </div>
-        <button className="btn-icon" title="Settings" aria-label="Settings" onClick={onOpenSettings}>
-          <Settings size={16} />
-        </button>
       </div>
     </header>
   );
