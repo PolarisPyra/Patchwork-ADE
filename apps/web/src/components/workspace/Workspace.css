@@ -508,8 +508,9 @@
 .ws-thread-card {
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
-  padding: 6px 8px;
+  gap: 4px;
+  margin-bottom: 2px;
+  padding: 8px 10px;
 }
 .ws-card-line {
   min-width: 0;
@@ -527,14 +528,8 @@
   border-radius: 5px;
   background: var(--bg-selected-muted);
 }
-.ws-card-agent {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
+.ws-card-foot {
+  justify-content: flex-end;
 }
 .ws-card-status {
   flex: none;
@@ -546,7 +541,9 @@
 
 /* project rows in the task tree; their tasks are indented beneath */
 .ws-project-row-tree {
-  gap: 6px;
+  min-height: 32px;
+  margin-top: 4px;
+  gap: 8px;
 }
 .ws-project-row-tree .ws-row-title {
   font-weight: 500;
@@ -561,7 +558,7 @@
   display: inline-flex;
 }
 .ws-tree-children {
-  padding-left: 14px;
+  padding: 2px 0 6px 14px;
 }
 
 .ws-change-name {
@@ -628,6 +625,20 @@
   padding: 24px;
   text-align: center;
 }
+/* A new thread centers the hero and the composer together. */
+.ws-chat-new {
+  justify-content: center;
+}
+.ws-chat-new .ws-chat-scroll {
+  flex: none;
+}
+.ws-chat-new .ws-chat-empty {
+  height: auto;
+}
+.ws-chat-new .ws-composer-wrap {
+  padding-bottom: 10vh;
+}
+
 .ws-chat-empty h2 {
   margin: 0;
   font-size: var(--fs-xl);

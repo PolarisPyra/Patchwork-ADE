@@ -11,6 +11,7 @@ use crate::time::parse_rfc3339_ms;
 use crate::types::*;
 
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
+const PROFILE_URL: &str = "https://api.anthropic.com/api/oauth/profile";
 
 /// Windows the endpoint reports, in display order.
 const WINDOWS: [(&str, &str); 4] = [
@@ -91,7 +92,36 @@ pub fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, Failure> {
         .map_err(|e| format!("Couldn't load usage: {e}"))?;
     out.windows = windows(&body);
     out.updated_at = Some(now_ms());
+    // The stored plan is only set at sign-in, so it misses upgrades; prefer the live one.
+    if let Some(plan) = agent
+        .get(PROFILE_URL)
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("anthropic-beta", "oauth-2025-04-20")
+        .call()
+        .ok()
+        .filter(|r| r.status().is_success())
+        .and_then(|mut r| r.body_mut().read_json::<Value>().ok())
+        .and_then(|profile| live_plan(&profile))
+    {
+        out.plan = Some(plan);
+    }
     Ok(out)
+}
+
+/// e.g. "max 5x" from organization type "claude_max" and tier "default_claude_max_5x".
+fn live_plan(profile: &Value) -> Option<String> {
+    let org = &profile["organization"];
+    let plan = org["organization_type"]
+        .as_str()?
+        .trim_start_matches("claude_");
+    let multiplier = org["rate_limit_tier"]
+        .as_str()
+        .and_then(|tier| tier.rsplit('_').next())
+        .filter(|m| m.ends_with('x') && m[..m.len() - 1].parse::<u32>().is_ok());
+    Some(match multiplier {
+        Some(m) => format!("{plan} {m}"),
+        None => plan.to_string(),
+    })
 }
 
 fn windows(body: &Value) -> Vec<UsageWindow> {
@@ -127,5 +157,16 @@ mod tests {
             ("Session (5h)", 9.0, Some(1000))
         );
         assert_eq!((w[1].label.as_str(), w[1].resets_at), ("Weekly", None));
+    }
+
+    #[test]
+    fn live_plan_includes_the_usage_multiplier() {
+        let max = json!({"organization": {
+            "organization_type": "claude_max", "rate_limit_tier": "default_claude_max_5x"}});
+        assert_eq!(live_plan(&max).as_deref(), Some("max 5x"));
+        let pro = json!({"organization": {
+            "organization_type": "claude_pro", "rate_limit_tier": "default_claude_ai"}});
+        assert_eq!(live_plan(&pro).as_deref(), Some("pro"));
+        assert_eq!(live_plan(&json!({})), None);
     }
 }

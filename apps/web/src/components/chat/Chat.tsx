@@ -155,10 +155,11 @@ export default function Chat({
     api.respondApproval(thread.id, approvalId, allow).catch((e: unknown) => setError(errorText(e)));
   }
 
+  const isNew = !thread || empty;
   return (
-    <div className="ws-chat">
+    <div className={`ws-chat${isNew ? " ws-chat-new" : ""}`}>
       <div className="ws-chat-scroll" ref={scrollRef} onScroll={onScroll}>
-        {thread && !empty ? (
+        {!isNew ? (
           <Messages
             thread={thread}
             changes={changes}

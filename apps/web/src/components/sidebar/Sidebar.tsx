@@ -223,10 +223,7 @@ function ThreadRow({
       onClick={() => onSelectThread(thread.id)}
     >
       <div className="ws-card-line">
-        <span className="ws-card-logo">
-          <ProviderLogos kind={thread.agent} size={12} />
-        </span>
-        <span className="ws-card-agent">{AGENT_LABELS[thread.agent]}</span>
+        <span className="ws-row-title">{displayTitle(thread.title)}</span>
         <span className="ws-row-time">{formatRelative(last?.createdAt ?? thread.createdAt)}</span>
         <button
           className="btn-icon ws-row-delete"
@@ -240,8 +237,7 @@ function ThreadRow({
           <TrashIcon size={14} />
         </button>
       </div>
-      <div className="ws-card-line">
-        <span className="ws-row-title">{displayTitle(thread.title)}</span>
+      <div className="ws-card-line ws-card-foot">
         {needsApproval ? (
           <span title="Waiting for approval" className="ws-card-status ws-icon-warning">
             <ShieldWarningIcon size={15} />
@@ -253,6 +249,9 @@ function ThreadRow({
             </span>
           )
         )}
+        <span className="ws-card-logo" title={AGENT_LABELS[thread.agent]}>
+          <ProviderLogos kind={thread.agent} size={12} />
+        </span>
       </div>
     </div>
   );
