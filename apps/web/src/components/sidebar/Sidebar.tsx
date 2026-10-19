@@ -16,6 +16,7 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { AGENT_LABELS, type AgentKind, type FileChange, type Project, type Thread } from "~/api";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import ProviderLogos from "~/components/ProviderLogos";
 import ContextMenu, { type MenuItem } from "~/components/sidebar/ContextMenu";
 import UsagePopover from "~/components/usage/UsagePopover";
@@ -160,13 +161,19 @@ function TasksView({
       label: "Remove",
       Icon: TrashIcon,
       danger: true,
-      onSelect: () => {
+      onSelect: async () => {
         if (target.kind === "thread") {
           onDeleteThread(target.id);
           return;
         }
+        // The native dialog is async in Tauri; window.confirm returns before the user answers.
         const name = projects.find((p) => p.id === target.id)?.name ?? "this project";
-        if (window.confirm(`Remove ${name} and its tasks?`)) {
+        if (
+          await confirm(`Remove ${name} and its tasks?`, {
+            title: "Remove project",
+            kind: "warning",
+          })
+        ) {
           onRemoveProject(target.id);
         }
       },

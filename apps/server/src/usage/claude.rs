@@ -1,7 +1,8 @@
 //! Claude subscription limits from the claude.ai OAuth usage endpoint, using
 //! the token Claude Code stored when the user signed in.
 
-use std::time::Duration;
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -12,6 +13,11 @@ use crate::types::*;
 
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const PROFILE_URL: &str = "https://api.anthropic.com/api/oauth/profile";
+/// The plan changes rarely, so the profile is asked for at most this often.
+const PLAN_FRESH_FOR: Duration = Duration::from_secs(6 * 60 * 60);
+
+/// When the live plan was last read, and what it said (None if the read failed).
+static LIVE_PLAN: Mutex<Option<(Instant, Option<String>)>> = Mutex::new(None);
 
 /// Windows the endpoint reports, in display order.
 const WINDOWS: [(&str, &str); 4] = [
@@ -93,7 +99,22 @@ pub fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, Failure> {
     out.windows = windows(&body);
     out.updated_at = Some(now_ms());
     // The stored plan is only set at sign-in, so it misses upgrades; prefer the live one.
-    if let Some(plan) = agent
+    if let Some(plan) = live_plan_for(&agent, token) {
+        out.plan = Some(plan);
+    }
+    Ok(out)
+}
+
+/// The live plan, asked for at most once per `PLAN_FRESH_FOR`, failures included,
+/// so a rate-limited profile request is not repeated on every usage refresh.
+fn live_plan_for(agent: &ureq::Agent, token: &str) -> Option<String> {
+    let mut cache = LIVE_PLAN.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some((at, plan)) = cache.as_ref()
+        && at.elapsed() < PLAN_FRESH_FOR
+    {
+        return plan.clone();
+    }
+    let plan = agent
         .get(PROFILE_URL)
         .header("Authorization", &format!("Bearer {token}"))
         .header("anthropic-beta", "oauth-2025-04-20")
@@ -101,11 +122,9 @@ pub fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, Failure> {
         .ok()
         .filter(|r| r.status().is_success())
         .and_then(|mut r| r.body_mut().read_json::<Value>().ok())
-        .and_then(|profile| live_plan(&profile))
-    {
-        out.plan = Some(plan);
-    }
-    Ok(out)
+        .and_then(|profile| live_plan(&profile));
+    *cache = Some((Instant::now(), plan.clone()));
+    plan
 }
 
 /// e.g. "max 5x" from organization type "claude_max" and tier "default_claude_max_5x".
