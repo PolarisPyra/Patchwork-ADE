@@ -4,10 +4,11 @@ export const AGENT_KINDS = Object.keys(AGENT_LABELS) as AgentKind[];
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Local "HH:MM". */
+/** Local 12-hour time, e.g. "4:27 PM". */
 export function formatClock(ts: number): string {
   const d = new Date(ts);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const h = d.getHours();
+  return `${h % 12 || 12}:${pad(d.getMinutes())} ${h < 12 ? "AM" : "PM"}`;
 }
 
 /** Compact age: "now", "5m", "3h", "2d". */
@@ -54,6 +55,11 @@ export function languageLabel(path: string): string {
   if (dot === -1) return "Plain text";
   const ext = name.slice(dot + 1).toLowerCase();
   return LANGUAGES[ext] ?? ext.toUpperCase();
+}
+
+/** A thread title for display, with its first letter capitalized. */
+export function displayTitle(title: string): string {
+  return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
 export function errorText(e: unknown): string {

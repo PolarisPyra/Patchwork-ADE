@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowRightIcon, MoonIcon, SunIcon } from "@phosphor-icons/react";
-import { api, type AgentKind, type Settings } from "~/api";
+import { api, importSourcesFor, type AgentKind, type ImportSource, type Settings } from "~/api";
 import type { UpdateSettings } from "~/app/App";
 import AgentStep from "~/components/onboarding/AgentStep";
 import DevicesStep from "~/components/onboarding/DevicesStep";
@@ -70,17 +70,18 @@ export default function Onboarding({
   // Connected agents, kept in AGENT_KINDS order so the first is the default.
   const [agents, setAgents] = useState<AgentKind[] | null>(null);
   const { probes, check, checking } = useAgentProbes();
-  const { scans, scanning } = useImportScans(agents ?? [], step === IMPORTS_STEP);
+  const importSources = importSourcesFor(agents ?? []);
+  const { scans, scanning } = useImportScans(importSources, step === IMPORTS_STEP);
   // Providers to import from; defaults to every one with something new.
-  const [importKinds, setImportKinds] = useState<AgentKind[] | null>(null);
+  const [importKinds, setImportKinds] = useState<ImportSource[] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (step !== IMPORTS_STEP || scanning || importKinds !== null) return;
-    setImportKinds((agents ?? []).filter((k) => (scans[k]?.new ?? 0) > 0));
+    setImportKinds(importSourcesFor(agents ?? []).filter((k) => (scans[k]?.new ?? 0) > 0));
   }, [step, scanning, scans, agents, importKinds]);
 
-  const toggleImport = (kind: AgentKind) =>
+  const toggleImport = (kind: ImportSource) =>
     setImportKinds((current) => {
       const set = current ?? [];
       return set.includes(kind) ? set.filter((k) => k !== kind) : [...set, kind];
@@ -179,7 +180,7 @@ export default function Onboarding({
       case IMPORTS_STEP:
         return (
           <ImportsStep
-            agents={agents ?? []}
+            sources={importSources}
             scans={scans}
             selected={importKinds ?? []}
             onToggle={toggleImport}

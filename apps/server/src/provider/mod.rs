@@ -165,14 +165,23 @@ pub fn list_models(kind: AgentKind) -> Vec<ModelOption> {
     out
 }
 
-/// Fixed model aliases, as `ModelOption`s.
-fn alias_models(aliases: &[(&str, &str)]) -> Vec<ModelOption> {
-    aliases
-        .iter()
-        .map(|(id, label)| ModelOption {
-            id: Some((*id).into()),
-            label: (*label).into(),
-            default_model: None,
+/// Current models for CLIs that don't publish a model list of their own, with
+/// display names. Like t3code's model manifest; update it when models ship.
+const MODEL_MANIFEST: &str = include_str!("model-manifest.json");
+
+/// The manifest's models for `provider` ("claude", "gemini").
+fn manifest_models(provider: &str) -> Vec<ModelOption> {
+    let manifest: Value = serde_json::from_str(MODEL_MANIFEST).unwrap_or_default();
+    manifest["providers"][provider]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            Some(ModelOption {
+                id: Some(m["id"].as_str()?.into()),
+                label: m["name"].as_str()?.into(),
+                default_model: None,
+            })
         })
         .collect()
 }
@@ -285,4 +294,19 @@ fn summarize(input: &Value, root: &str) -> String {
         })
         .map(|s| one_line(&s))
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_lists_named_models() {
+        for provider in ["claude", "gemini"] {
+            let models = manifest_models(provider);
+            assert!(!models.is_empty(), "{provider} has no models");
+            assert!(models.iter().all(|m| m.id.is_some() && !m.label.is_empty()));
+        }
+        assert_eq!(list_models(AgentKind::Claude)[1].label, "Fable 5.1");
+    }
 }

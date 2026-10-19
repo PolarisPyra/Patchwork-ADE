@@ -44,14 +44,9 @@ pub fn configured_model() -> Option<String> {
     Some(settings.get("model")?.as_str()?.to_owned())
 }
 
-/// Claude Code aliases always resolve to the newest model of each family.
+/// Current Claude models, from the bundled model manifest.
 pub fn models() -> Vec<ModelOption> {
-    alias_models(&[
-        ("fable", "Fable"),
-        ("opus", "Opus"),
-        ("sonnet", "Sonnet"),
-        ("haiku", "Haiku"),
-    ])
+    manifest_models("claude")
 }
 
 /// The prompt is the final positional argument.

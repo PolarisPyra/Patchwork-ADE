@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use super::{Failure, RATE_LIMIT_BACKOFF};
 use crate::provider;
 use crate::time::parse_rfc3339_ms;
 use crate::types::*;
@@ -39,7 +40,7 @@ fn credentials() -> Option<Value> {
     serde_json::from_str(raw.trim()).ok()
 }
 
-pub fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, String> {
+pub fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, Failure> {
     let creds = credentials().ok_or("Not signed in with a Claude subscription")?;
     let oauth = &creds["claudeAiOauth"];
     let token = oauth["accessToken"]
@@ -55,14 +56,38 @@ pub fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, String> {
 
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(10)))
+        .http_status_as_error(false)
         .build()
         .into();
-    let body: Value = agent
+    let mut response = agent
         .get(USAGE_URL)
         .header("Authorization", &format!("Bearer {token}"))
         .header("anthropic-beta", "oauth-2025-04-20")
         .call()
-        .and_then(|mut r| r.body_mut().read_json())
+        .map_err(|e| format!("Couldn't load usage: {e}"))?;
+    match response.status().as_u16() {
+        200..=299 => {}
+        429 => {
+            let retry_after = response
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.trim().parse().ok())
+                .map(Duration::from_secs)
+                .unwrap_or(RATE_LIMIT_BACKOFF);
+            let minutes = retry_after.as_secs().div_ceil(60).max(1);
+            return Err(Failure {
+                message: format!(
+                    "Anthropic is rate-limiting usage checks; trying again in about {minutes} min"
+                ),
+                retry_after: Some(retry_after),
+            });
+        }
+        code => return Err(format!("Couldn't load usage (HTTP {code})").into()),
+    }
+    let body: Value = response
+        .body_mut()
+        .read_json()
         .map_err(|e| format!("Couldn't load usage: {e}"))?;
     out.windows = windows(&body);
     out.updated_at = Some(now_ms());

@@ -10,7 +10,7 @@ use serde_json::Value;
 use super::{Session, SessionMessage, push_merged};
 use crate::provider;
 use crate::time::parse_rfc3339_ms;
-use crate::types::Role;
+use crate::types::{AgentKind, Role};
 
 pub fn sessions() -> Vec<Session> {
     let Some(home) = provider::gemini::home() else {
@@ -100,9 +100,11 @@ fn push_record(messages: &mut Vec<SessionMessage>, record: &Value, fallback_at: 
 
 fn session(meta: &Value, cwd: &str, messages: Vec<SessionMessage>) -> Option<Session> {
     Some(Session {
+        agent: AgentKind::Gemini,
         session_id: meta["sessionId"].as_str()?.to_string(),
         cwd: cwd.to_string(),
         title: None,
+        model: None,
         created_at: meta["startTime"]
             .as_str()
             .and_then(parse_rfc3339_ms)

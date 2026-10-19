@@ -24,6 +24,7 @@ pub type EventSink = Box<dyn Fn(AgentEventEnvelope) + Send + Sync>;
 
 pub struct Server {
     pub store: Store,
+    pub usage: usage::UsageCache,
     runner: Runner,
     /// Parent of the scratch folders that project-less chats run in.
     chats_dir: PathBuf,
@@ -41,6 +42,7 @@ impl Server {
     pub fn open(config_dir: PathBuf, data_dir: &Path, sink: EventSink) -> Res<Arc<Self>> {
         Ok(Arc::new(Self {
             store: Store::open(config_dir)?,
+            usage: usage::UsageCache::default(),
             runner: Runner::default(),
             chats_dir: data_dir.join("chats"),
             sink,
@@ -203,21 +205,24 @@ impl Server {
         self.runner.cancel(thread_id);
     }
 
-    // ---- importing agent conversations -----------------------------------
+    // ---- importing conversations ------------------------------------------
 
-    /// Sessions `kind` saved on disk that can be imported: ones whose folder
-    /// still exists, that Patchwork did not run as a chat, and that are not
-    /// already threads.
-    fn importable(&self, kind: AgentKind) -> (u32, Vec<import::Session>) {
-        let known = self.store.session_keys();
-        let all = import::sessions(kind);
+    /// Sessions `source` saved on disk that can be imported: ones whose folder
+    /// still exists, that Patchwork did not run as a chat, and whose
+    /// `(agent, session)` is not in `known`. Returns (found, importable).
+    fn importable(
+        &self,
+        source: ImportSource,
+        known: &[(AgentKind, String)],
+    ) -> (u32, Vec<import::Session>) {
+        let all = import::sessions(source);
         let found = all.len() as u32;
         let new = all
             .into_iter()
             .filter(|s| {
                 !known
                     .iter()
-                    .any(|(a, id)| *a == kind && *id == s.session_id)
+                    .any(|(a, id)| *a == s.agent && *id == s.session_id)
             })
             .filter(|s| {
                 !Path::new(&s.cwd).starts_with(&self.chats_dir) && Path::new(&s.cwd).is_dir()
@@ -226,24 +231,34 @@ impl Server {
         (found, new)
     }
 
-    pub fn scan_imports(&self, kind: AgentKind) -> ImportScan {
-        let (found, new) = self.importable(kind);
+    pub fn scan_imports(&self, source: ImportSource) -> ImportScan {
+        let (found, new) = self.importable(source, &self.store.session_keys());
         ImportScan {
-            kind,
+            kind: source,
             found,
             new: new.len() as u32,
         }
     }
 
     /// Imports new sessions as threads in the project for their folder, adding
-    /// the project if needed. Returns how many threads were added.
-    pub fn import_threads(&self, kinds: &[AgentKind]) -> Res<u32> {
+    /// the project if needed. A conversation found by more than one source (a
+    /// T3 Code thread is also in the agent's own files) is imported once.
+    /// Returns how many threads were added.
+    pub fn import_threads(&self, sources: &[ImportSource]) -> Res<u32> {
+        let mut known = self.store.session_keys();
         let mut threads = Vec::new();
-        for &kind in kinds {
-            for session in self.importable(kind).1 {
+        for &source in sources {
+            for session in self.importable(source, &known).1 {
+                if known
+                    .iter()
+                    .any(|(a, id)| *a == session.agent && *id == session.session_id)
+                {
+                    continue;
+                }
+                known.push((session.agent, session.session_id.clone()));
                 let project =
                     self.register_project(workspace::make_project(&session.cwd)?, false)?;
-                threads.push(import::to_thread(kind, session, Some(project.id)));
+                threads.push(import::to_thread(session, Some(project.id)));
             }
         }
         let count = threads.len() as u32;

@@ -110,9 +110,12 @@ export interface ProviderUsage {
   updatedAt: number | null;
 }
 
-/** Conversations an agent CLI saved on disk that can be imported. */
+/** Where imported conversations come from: an agent CLI, or T3 Code. */
+export type ImportSource = AgentKind | "t3";
+
+/** Conversations a source saved on disk that can be imported. */
 export interface ImportScan {
-  kind: AgentKind;
+  kind: ImportSource;
   found: number;
   /** Not yet in Patchwork. */
   new: number;
@@ -157,6 +160,13 @@ export const AGENT_LABELS: Record<AgentKind, string> = {
   gemini: "Gemini CLI",
 };
 
+export const SOURCE_LABELS: Record<ImportSource, string> = { ...AGENT_LABELS, t3: "T3 Code" };
+
+/** Import sources to offer: each connected agent's own files, plus T3 Code. */
+export function importSourcesFor(agents: AgentKind[]): ImportSource[] {
+  return [...agents, "t3"];
+}
+
 
 const agentStatusCache: Partial<Record<AgentKind, AgentStatus>> = {};
 const pendingDetect: Partial<Record<AgentKind, Promise<AgentStatus>>> = {};
@@ -184,12 +194,14 @@ export const api = {
   },
   /** Models for an agent, starting with "Default" (the CLI's own choice). */
   listModels: (kind: AgentKind) => invoke<ModelOption[]>("list_models", { kind }),
-  /** Subscription usage limits as reported by the provider. */
-  getUsage: (kind: AgentKind) => invoke<ProviderUsage>("get_usage", { kind }),
+  /** Subscription usage limits. Cached by the backend; `refresh` asks for new
+   * numbers, which it still throttles to avoid provider rate limits. */
+  getUsage: (kind: AgentKind, refresh = false) =>
+    invoke<ProviderUsage>("get_usage", { kind, refresh }),
   /** Counts conversations `kind` saved on disk that are not threads yet. */
-  scanImports: (kind: AgentKind) => invoke<ImportScan>("scan_imports", { kind }),
+  scanImports: (kind: ImportSource) => invoke<ImportScan>("scan_imports", { kind }),
   /** Imports those conversations as threads; returns how many were added. */
-  importThreads: (kinds: AgentKind[]) => invoke<number>("import_threads", { kinds }),
+  importThreads: (kinds: ImportSource[]) => invoke<number>("import_threads", { kinds }),
 
   /** Registers an existing folder; also makes it the active project. */
   addProject: (path: string) => invoke<Project>("add_project", { path }),

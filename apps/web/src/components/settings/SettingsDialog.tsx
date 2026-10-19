@@ -16,9 +16,12 @@ import {
 import {
   api,
   AGENT_LABELS,
+  importSourcesFor,
+  SOURCE_LABELS,
   type AgentKind,
   type AgentStatus,
   type ImportScan,
+  type ImportSource,
   type Integrations,
   type Settings,
   type Theme,
@@ -204,25 +207,25 @@ function AgentPane({ settings, updateSettings }: PaneProps) {
 }
 
 function ImportsPane({ settings, updateSettings, onImported }: PaneProps & { onImported: () => void }) {
-  const [scans, setScans] = useState<Partial<Record<AgentKind, ImportScan | null>>>({});
-  const [busy, setBusy] = useState<AgentKind | null>(null);
+  const [scans, setScans] = useState<Partial<Record<ImportSource, ImportScan | null>>>({});
+  const [busy, setBusy] = useState<ImportSource | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const agents = AGENT_KINDS.filter((k) => settings.agents.includes(k));
-  const key = agents.join(",");
+  const sources = importSourcesFor(AGENT_KINDS.filter((k) => settings.agents.includes(k)));
+  const key = sources.join(",");
 
-  const scan = useCallback((kind: AgentKind) => {
+  const scan = useCallback((kind: ImportSource) => {
     api.scanImports(kind).then(
       (s) => setScans((prev) => ({ ...prev, [kind]: s })),
       () => setScans((prev) => ({ ...prev, [kind]: null })),
     );
   }, []);
 
-  // `key` stands in for `agents`, which is a new array on every render.
+  // `key` stands in for `sources`, which is a new array on every render.
   useEffect(() => {
-    for (const kind of agents) scan(kind);
+    for (const kind of sources) scan(kind);
   }, [key, scan]);
 
-  const importFrom = async (kind: AgentKind) => {
+  const importFrom = async (kind: ImportSource) => {
     setBusy(kind);
     setError(null);
     try {
@@ -240,8 +243,10 @@ function ImportsPane({ settings, updateSettings, onImported }: PaneProps & { onI
 
   return (
     <>
-      {agents.map((kind) => {
+      {sources.map((kind) => {
         const s = scans[kind];
+        // T3 Code is only offered to people who use it.
+        if (kind === "t3" && !(s && s.found > 0)) return null;
         const desc =
           s === undefined
             ? "Looking for saved conversations…"
@@ -256,7 +261,7 @@ function ImportsPane({ settings, updateSettings, onImported }: PaneProps & { onI
           <div key={kind} className="ws-setting-row">
             <ProviderLogos kind={kind} size={20} />
             <div className="ws-setting-text">
-              <div className="ws-setting-title">{AGENT_LABELS[kind]}</div>
+              <div className="ws-setting-title">{SOURCE_LABELS[kind]}</div>
               <div className="ws-setting-desc">{desc}</div>
             </div>
             <button

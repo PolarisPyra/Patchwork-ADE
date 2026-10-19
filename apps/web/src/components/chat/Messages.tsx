@@ -62,8 +62,8 @@ export default function Messages({ thread, changes, busy, onOpenCanvas, onRetry 
 function UserMessage({ message }: { message: Message }) {
   return (
     <div className="ws-user">
-      <div className="ws-user-bubble selectable">{message.text}</div>
       <div className="ws-user-meta">You · {formatClock(message.createdAt)}</div>
+      <div className="ws-user-bubble selectable">{message.text}</div>
     </div>
   );
 }
@@ -93,7 +93,6 @@ function AssistantMessage({
       <header className="ws-assistant-head">
         <span className="ws-assistant-agent">{AGENT_LABELS[agent]}</span>
         <StatusBadge status={message.status} />
-        <span className="ws-assistant-time">{formatClock(message.createdAt)}</span>
       </header>
       {message.text && <Markdown text={message.text} />}
       {message.plan.length > 0 && <PlanList steps={message.plan} />}
@@ -116,6 +115,7 @@ function AssistantMessage({
               <ArrowClockwiseIcon size={13} /> Retry
             </button>
           )}
+          <span className="ws-assistant-time">{formatClock(message.createdAt)}</span>
         </div>
       )}
     </section>

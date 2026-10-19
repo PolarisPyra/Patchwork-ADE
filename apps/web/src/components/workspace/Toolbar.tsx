@@ -6,6 +6,7 @@ import {
 } from "@phosphor-icons/react";
 import { AGENT_LABELS, type Project, type Thread } from "~/api";
 import Dropdown from "~/components/workspace/Dropdown";
+import { displayTitle } from "~/lib/util";
 
 const TILE_COLORS = [
   "var(--accent)",
@@ -47,72 +48,73 @@ export default function Toolbar({
 
   return (
     <header className="ws-toolbar">
-      <Dropdown
-        trigger={({ toggle }) => (
-          <button className="ws-project-btn" onClick={toggle}>
-            {project ? (
-              <span className="ws-project-tile" style={{ background: tileColor(name) }}>
-                {initials(name)}
-              </span>
-            ) : (
-              <span className="ws-project-tile ws-project-tile-chats">
-                <ChatsIcon size={12} />
-              </span>
-            )}
-            <span className="ws-project-label">{project?.name ?? "No project"}</span>
-            <CaretDownIcon size={14} />
-          </button>
-        )}
-      >
-        {(close) => (
-          <>
-            {projects.map((p) => (
+      <div className="ws-toolbar-left">
+        <Dropdown
+          trigger={({ toggle }) => (
+            <button className="ws-project-btn" onClick={toggle}>
+              {project ? (
+                <span className="ws-project-tile" style={{ background: tileColor(name) }}>
+                  {initials(name)}
+                </span>
+              ) : (
+                <span className="ws-project-tile ws-project-tile-chats">
+                  <ChatsIcon size={12} />
+                </span>
+              )}
+              <span className="ws-project-label">{project?.name ?? "No project"}</span>
+              <CaretDownIcon size={14} />
+            </button>
+          )}
+        >
+          {(close) => (
+            <>
+              {projects.map((p) => (
+                <button
+                  key={p.id}
+                  className="ws-menu-item"
+                  onClick={() => {
+                    close();
+                    onSelectProject(p.id);
+                  }}
+                >
+                  <span className={`ws-dot${p.id === project?.id ? " active" : ""}`} />
+                  {p.name}
+                </button>
+              ))}
+              {projects.length > 0 && <div className="ws-menu-sep" />}
               <button
-                key={p.id}
                 className="ws-menu-item"
                 onClick={() => {
                   close();
-                  onSelectProject(p.id);
+                  onOpenFolder();
                 }}
               >
-                <span className={`ws-dot${p.id === project?.id ? " active" : ""}`} />
-                {p.name}
+                <FolderPlusIcon size={14} />
+                Open folder…
               </button>
-            ))}
-            {projects.length > 0 && <div className="ws-menu-sep" />}
-            <button
-              className="ws-menu-item"
-              onClick={() => {
-                close();
-                onOpenFolder();
-              }}
-            >
-              <FolderPlusIcon size={14} />
-              Open folder…
-            </button>
-          </>
-        )}
-      </Dropdown>
+            </>
+          )}
+        </Dropdown>
 
-      {branch && (
-        <>
-          <span className="ws-sep" />
-          <span className="ws-branch" title="Current branch">
-            <GitBranchIcon size={14} />
-            {branch}
-          </span>
-        </>
-      )}
-
-      <div className="ws-toolbar-center">
-        {thread && (
+        {branch && (
           <>
-            <span className="ws-title">{thread.title}</span>
-            <span className="badge badge-accent">{AGENT_LABELS[thread.agent]}</span>
+            <span className="ws-sep" />
+            <span className="ws-branch" title="Current branch">
+              <GitBranchIcon size={14} />
+              {branch}
+            </span>
           </>
         )}
       </div>
 
+      <div className="ws-toolbar-center">
+        {thread && (
+          <>
+            <span className="ws-title">{displayTitle(thread.title)}</span>
+            <span className="badge badge-accent">{AGENT_LABELS[thread.agent]}</span>
+          </>
+        )}
+      </div>
     </header>
   );
 }

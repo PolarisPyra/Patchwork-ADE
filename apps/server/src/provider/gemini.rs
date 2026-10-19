@@ -55,13 +55,9 @@ pub fn configured_model() -> Option<String> {
         .map(String::from)
 }
 
-/// Gemini CLI aliases resolve to the newest model of each tier.
+/// Current Gemini models, from the bundled model manifest.
 pub fn models() -> Vec<ModelOption> {
-    alias_models(&[
-        ("pro", "Pro"),
-        ("flash", "Flash"),
-        ("flash-lite", "Flash Lite"),
-    ])
+    manifest_models("gemini")
 }
 
 pub fn turn_args(

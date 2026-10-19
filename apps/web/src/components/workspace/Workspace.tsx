@@ -11,13 +11,12 @@ import Sidebar, { ToolStripe, type SidebarView } from "~/components/sidebar/Side
 import StatusBar from "~/components/workspace/StatusBar";
 import Toolbar from "~/components/workspace/Toolbar";
 import { isWorking, useThreads } from "~/hooks/useThreads";
-import { AGENT_KINDS, errorText } from "~/lib/util";
+import { AGENT_KINDS, displayTitle, errorText } from "~/lib/util";
 import "./Workspace.css";
 
 export interface WorkspaceProps {
   settings: Settings;
   updateSettings: UpdateSettings;
-  resolvedTheme: "light" | "dark";
   toggleTheme: () => void;
 }
 
@@ -39,7 +38,7 @@ interface GitState {
 const CANVAS_MIN_PX = 340;
 const CANVAS_MAX_FRACTION = 0.7;
 
-export default function Workspace({ settings, updateSettings, resolvedTheme, toggleTheme }: WorkspaceProps) {
+export default function Workspace({ settings, updateSettings, toggleTheme }: WorkspaceProps) {
   const { threads, reload, selected, select, createThread, deleteThread, setModel, send } = useThreads(
     settings.activeProjectId,
     () => void refreshGit(),
@@ -169,7 +168,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
     ...threads.map((t) => ({
       id: `task-${t.id}`,
       group: settings.projects.find((p) => p.id === t.projectId)?.name ?? "Chats",
-      label: t.title,
+      label: displayTitle(t.title),
       run: () => {
         setView("tasks");
         selectThread(t.id);
@@ -265,9 +264,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
         changeCount={changes.length}
         agent={selected?.agent ?? defaultAgent}
         working={isWorking(selected)}
-        resolvedTheme={resolvedTheme}
         onOpenChanges={() => setView("changes")}
-        toggleTheme={toggleTheme}
       />
 
       {error && (

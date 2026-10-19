@@ -1,20 +1,20 @@
 import { useEffect, useState } from "react";
 import { CheckIcon, CircleNotchIcon } from "@phosphor-icons/react";
-import { api, AGENT_LABELS, type AgentKind, type ImportScan } from "~/api";
+import { api, SOURCE_LABELS, type ImportScan, type ImportSource } from "~/api";
 import ProviderLogos from "~/components/ProviderLogos";
 import { cx } from "~/components/onboarding/classNames";
 
-export type ImportScans = Partial<Record<AgentKind, ImportScan | null>>;
+export type ImportScans = Partial<Record<ImportSource, ImportScan | null>>;
 
 /** Scans each agent's saved conversations; `null` marks a failed scan. */
-export function useImportScans(agents: AgentKind[], enabled: boolean) {
+export function useImportScans(sources: ImportSource[], enabled: boolean) {
   const [scans, setScans] = useState<ImportScans>({});
-  const key = agents.join(",");
+  const key = sources.join(",");
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     setScans({});
-    for (const kind of agents) {
+    for (const kind of sources) {
       api.scanImports(kind).then(
         (scan) => !cancelled && setScans((s) => ({ ...s, [kind]: scan })),
         () => !cancelled && setScans((s) => ({ ...s, [kind]: null })),
@@ -23,29 +23,31 @@ export function useImportScans(agents: AgentKind[], enabled: boolean) {
     return () => {
       cancelled = true;
     };
-    // `key` stands in for `agents`, which is a new array on every render.
+    // `key` stands in for `sources`, which is a new array on every render.
   }, [key, enabled]);
-  const scanning = agents.some((k) => scans[k] === undefined);
+  const scanning = sources.some((k) => scans[k] === undefined);
   return { scans, scanning };
 }
 
 interface ImportsStepProps {
-  agents: AgentKind[];
+  sources: ImportSource[];
   scans: ImportScans;
-  selected: AgentKind[];
-  onToggle: (kind: AgentKind) => void;
+  selected: ImportSource[];
+  onToggle: (kind: ImportSource) => void;
   error: string | null;
 }
 
-export default function ImportsStep({ agents, scans, selected, onToggle, error }: ImportsStepProps) {
+export default function ImportsStep({ sources, scans, selected, onToggle, error }: ImportsStepProps) {
   return (
     <>
       <div className="ob-card-header">
         <span className="ob-card-title">Conversations found on this computer</span>
       </div>
       <div className="ob-option-list" role="group" aria-label="Providers to import from">
-        {agents.map((kind) => {
+        {sources.map((kind) => {
           const scan = scans[kind];
+          // T3 Code is only offered to people who use it.
+          if (kind === "t3" && !(scan && scan.found > 0)) return null;
           const importable = (scan?.new ?? 0) > 0;
           const isSelected = importable && selected.includes(kind);
           return (
@@ -62,7 +64,7 @@ export default function ImportsStep({ agents, scans, selected, onToggle, error }
                 <ProviderLogos kind={kind} size={26} />
               </span>
               <span className="ob-option-text">
-                <span className="ob-option-name">{AGENT_LABELS[kind]}</span>
+                <span className="ob-option-name">{SOURCE_LABELS[kind]}</span>
                 <span className="ob-option-detail">{describeScan(scan)}</span>
               </span>
               <span className="ob-option-trail">

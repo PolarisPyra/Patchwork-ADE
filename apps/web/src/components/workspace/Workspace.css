@@ -71,11 +71,15 @@
 /* ---- toolbar ------------------------------------------------------------ */
 
 .ws-toolbar {
-  display: flex;
+  /* Equal side columns keep the title centred on the whole header. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding: 0 8px;
+  /* Centre the 20px project tile on the stripe icons below it: the stripe's centre
+     (minus its 1px border), less the project button's 4px left padding. */
+  padding: 0 8px 0 calc((var(--stripe-w) - 1px - 20px) / 2 - 4px);
   background: var(--bg-app);
   border-bottom: 1px solid var(--border);
 }
@@ -140,8 +144,14 @@
   font-size: var(--fs-sm);
 }
 
+.ws-toolbar-left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .ws-toolbar-center {
-  flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -311,8 +321,8 @@
 }
 
 .ws-stripe-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border: none;
@@ -427,7 +437,11 @@
   background: var(--bg-selected);
 }
 .ws-row.selected .ws-row-title {
-  color: var(--accent-text);
+  color: var(--text);
+  font-weight: 500;
+}
+.ws-row.selected .ws-row-time {
+  color: var(--text-muted);
 }
 
 .ws-slot {
@@ -604,16 +618,19 @@
   gap: 4px;
 }
 
+/* A plain chat bubble: neutral fill, no outline, squircle-like corners. */
 .ws-user-bubble {
-  padding: 12px 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  border-radius: var(--radius-lg);
-  background: var(--bg-accent-soft);
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 10%, var(--bg-editor));
+  color: var(--text);
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .ws-user-meta {
+  padding: 0 8px;
   color: var(--text-subtle);
   font-size: var(--fs-xs);
 }
@@ -639,9 +656,13 @@
   text-transform: uppercase;
 }
 
+/* Same box as .ws-action so its text shares their baseline. */
 .ws-assistant-time {
-  margin-left: auto;
-  color: var(--text-subtle);
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  color: var(--text-muted);
   font-size: var(--fs-xs);
 }
 

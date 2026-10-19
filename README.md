@@ -6,7 +6,7 @@ Patchwork drives the **Claude Code**, **Codex**, and **Gemini** CLIs already ins
 
 The sidebar is a tree: **chats** without a project are top-level threads, and each project lists its own tasks (use its **+** to start one). Chats run in a private scratch folder under the app's data directory, which is deleted with the chat.
 
-Conversations you had with an agent outside Patchwork can be imported (during onboarding, or later in **Settings → Imports**). Each one becomes a task in the project for its folder, with its messages copied in, and follow-ups resume the original CLI session. The **Usage** button at the bottom of the sidebar shows each provider's subscription limits (Claude and Codex; Gemini CLI doesn't report them).
+Conversations you had with an agent outside Patchwork, either in the agent's own CLI or in [T3 Code](https://github.com/pingdotgg/t3code), can be imported (during onboarding, or later in **Settings → Imports**). T3 Code's database is only read, never modified. Each one becomes a task in the project for its folder, with its messages copied in, and follow-ups resume the original CLI session. The **Usage** button at the bottom of the sidebar shows each provider's subscription limits (Claude and Codex; Gemini CLI doesn't report them).
 
 State lives in SQLite at `~/.config/patchwork/patchwork.db`, and future config files go in the same folder. On first launch Patchwork moves its data there from the old `~/.config/dev.patchwork.ade` folder, and converts any older `settings.json` / `threads.json` into the database, keeping them as `*.json.bak`.
 

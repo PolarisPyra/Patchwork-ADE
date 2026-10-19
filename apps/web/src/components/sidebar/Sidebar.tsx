@@ -16,7 +16,7 @@ import {
 import { type AgentKind, type FileChange, type Project, type Thread } from "~/api";
 import UsagePopover from "~/components/usage/UsagePopover";
 import { isWorking } from "~/hooks/useThreads";
-import { baseName, dirName, formatRelative } from "~/lib/util";
+import { baseName, dirName, displayTitle, formatRelative } from "~/lib/util";
 
 export type SidebarView = "tasks" | "changes";
 
@@ -51,7 +51,7 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
           aria-pressed={view === v}
           onClick={() => onSelect(v)}
         >
-          <Icon size={20} />
+          <Icon size={18} />
         </button>
       ))}
       <button
@@ -60,7 +60,7 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
         aria-label="Settings"
         onClick={onOpenSettings}
       >
-        <GearSixIcon size={20} />
+        <GearSixIcon size={18} />
       </button>
     </nav>
   );
@@ -214,10 +214,8 @@ function ThreadRow({
       className={`ws-row${thread.id === selectedId ? " selected" : ""}`}
       onClick={() => onSelectThread(thread.id)}
     >
-      <span className="ws-slot">
-        {isWorking(thread) && <CircleNotchIcon size={15} className="spin ws-icon-accent" />}
-      </span>
-      <span className="ws-row-title">{thread.title}</span>
+      <span className="ws-row-title">{displayTitle(thread.title)}</span>
+      {isWorking(thread) && <CircleNotchIcon size={15} className="spin ws-icon-accent" />}
       <span className="ws-row-time">{formatRelative(last?.createdAt ?? thread.createdAt)}</span>
       <button
         className="btn-icon ws-row-delete"

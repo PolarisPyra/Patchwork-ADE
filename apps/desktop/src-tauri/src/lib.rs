@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use patchwork_server::types::*;
-use patchwork_server::{Res, Server, persistence, provider, usage};
+use patchwork_server::{Res, Server, persistence, provider};
 use tauri::{Emitter, Manager, State};
 
 type Srv<'a> = State<'a, Arc<Server>>;
@@ -47,8 +47,10 @@ async fn detect_agent(kind: AgentKind) -> AgentStatus {
 }
 
 #[tauri::command]
-async fn get_usage(kind: AgentKind) -> Res<ProviderUsage> {
-    blocking(move || usage::usage(kind)).await
+/// Cached; `refresh` asks for new numbers, which the server still throttles.
+async fn get_usage(server: Srv<'_>, kind: AgentKind, refresh: bool) -> Res<ProviderUsage> {
+    let server = server.inner().clone();
+    blocking(move || server.usage.get(kind, refresh)).await
 }
 
 #[tauri::command]
@@ -104,13 +106,13 @@ fn cancel_turn(server: Srv, thread_id: String) {
 }
 
 #[tauri::command]
-async fn scan_imports(server: Srv<'_>, kind: AgentKind) -> Res<ImportScan> {
+async fn scan_imports(server: Srv<'_>, kind: ImportSource) -> Res<ImportScan> {
     let server = server.inner().clone();
     blocking(move || server.scan_imports(kind)).await
 }
 
 #[tauri::command]
-async fn import_threads(server: Srv<'_>, kinds: Vec<AgentKind>) -> Res<u32> {
+async fn import_threads(server: Srv<'_>, kinds: Vec<ImportSource>) -> Res<u32> {
     let server = server.inner().clone();
     blocking(move || server.import_threads(&kinds)).await?
 }

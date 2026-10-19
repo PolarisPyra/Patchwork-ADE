@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::{Session, SessionMessage, push_merged};
 use crate::provider;
 use crate::time::parse_rfc3339_ms;
-use crate::types::Role;
+use crate::types::{AgentKind, Role};
 
 pub fn sessions() -> Vec<Session> {
     let Some(projects) = provider::claude::home().map(|h| h.join("projects")) else {
@@ -83,9 +83,11 @@ fn parse(text: &str) -> Option<Session> {
         }
     }
     Some(Session {
+        agent: AgentKind::Claude,
         session_id: session_id?,
         cwd: cwd?,
         title: custom_title.or(ai_title),
+        model: None,
         created_at: created_at.unwrap_or(0),
         messages,
     })

@@ -1,30 +1,137 @@
 //! Subscription usage limits (session / weekly windows) per agent.
+//!
+//! Claude's numbers come from a rate-limited web endpoint, so results are
+//! cached: reopening the usage popup reuses them, refreshing is throttled, and
+//! a 429 backs off while the last good numbers stay visible.
 
 mod claude;
 mod codex;
 
+use std::collections::HashMap;
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant};
+
 use crate::types::*;
 
-pub fn usage(kind: AgentKind) -> ProviderUsage {
-    let empty = ProviderUsage {
+/// How long fetched usage is reused before it is fetched again.
+const FRESH_FOR: Duration = Duration::from_secs(5 * 60);
+/// Minimum time between fetches, even for an explicit refresh.
+const MIN_REFRESH: Duration = Duration::from_secs(60);
+/// Wait after a 429 that did not say how long to wait.
+const RATE_LIMIT_BACKOFF: Duration = Duration::from_secs(5 * 60);
+
+/// Why usage couldn't be read.
+#[derive(Debug)]
+struct Failure {
+    message: String,
+    /// Set when the provider asked us to slow down.
+    retry_after: Option<Duration>,
+}
+
+impl From<&str> for Failure {
+    fn from(message: &str) -> Self {
+        message.to_string().into()
+    }
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            retry_after: None,
+        }
+    }
+}
+
+fn empty(kind: AgentKind) -> ProviderUsage {
+    ProviderUsage {
         kind,
         plan: None,
         windows: vec![],
         error: None,
         updated_at: None,
-    };
-    let result = match kind {
-        AgentKind::Claude => claude::usage(empty),
-        AgentKind::Codex => codex::usage(empty),
-        AgentKind::Gemini => Err("Gemini CLI doesn't report usage limits".to_string()),
-    };
-    result.unwrap_or_else(|error| ProviderUsage {
-        kind,
-        plan: None,
-        windows: vec![],
-        error: Some(error),
-        updated_at: None,
-    })
+    }
+}
+
+fn fetch(kind: AgentKind) -> Result<ProviderUsage, Failure> {
+    match kind {
+        AgentKind::Claude => claude::usage(empty(kind)),
+        AgentKind::Codex => codex::usage(empty(kind)).map_err(Failure::from),
+        AgentKind::Gemini => Err("Gemini CLI doesn't report usage limits".into()),
+    }
+}
+
+/// Codex and Gemini are read from local files, so only Claude is cached.
+fn is_remote(kind: AgentKind) -> bool {
+    kind == AgentKind::Claude
+}
+
+struct Entry {
+    fetched: Instant,
+    usage: ProviderUsage,
+    /// No requests before this, after a rate limit.
+    blocked_until: Option<Instant>,
+}
+
+#[derive(Default)]
+pub struct UsageCache {
+    entries: Mutex<HashMap<AgentKind, Entry>>,
+}
+
+impl UsageCache {
+    /// Usage for `kind`. `refresh` asks for new numbers, still subject to throttling.
+    pub fn get(&self, kind: AgentKind, refresh: bool) -> ProviderUsage {
+        if !is_remote(kind) {
+            return fetch(kind).unwrap_or_else(|f| ProviderUsage {
+                error: Some(f.message),
+                ..empty(kind)
+            });
+        }
+        self.get_with(kind, refresh, Instant::now(), || fetch(kind))
+    }
+
+    fn get_with(
+        &self,
+        kind: AgentKind,
+        refresh: bool,
+        now: Instant,
+        fetch: impl FnOnce() -> Result<ProviderUsage, Failure>,
+    ) -> ProviderUsage {
+        let lock = || self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(e) = lock().get(&kind) {
+            let age = now.saturating_duration_since(e.fetched);
+            let blocked = e.blocked_until.is_some_and(|until| now < until);
+            if blocked || age < MIN_REFRESH || (!refresh && age < FRESH_FOR) {
+                return e.usage.clone();
+            }
+        }
+        let result = fetch();
+        let mut entries = lock();
+        let entry = match result {
+            Ok(usage) => Entry {
+                fetched: now,
+                usage,
+                blocked_until: None,
+            },
+            Err(failure) => {
+                // Keep the last good numbers, with the reason they are not current.
+                let mut usage = entries
+                    .get(&kind)
+                    .map(|e| e.usage.clone())
+                    .filter(|u| !u.windows.is_empty())
+                    .unwrap_or_else(|| empty(kind));
+                usage.error = Some(failure.message);
+                Entry {
+                    fetched: now,
+                    usage,
+                    blocked_until: failure.retry_after.map(|d| now + d.max(MIN_REFRESH)),
+                }
+            }
+        };
+        let usage = entry.usage.clone();
+        entries.insert(kind, entry);
+        usage
+    }
 }
 
 /// "Session (5h)" for a 300-minute window, "Weekly" for 10080, and so on.
@@ -34,5 +141,66 @@ fn window_label(minutes: u64) -> String {
         10_080 => "Weekly".into(),
         m if m % 1440 == 0 => format!("{}-day", m / 1440),
         m => format!("{}h", (m as f64 / 60.0).round()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn usage_with(percent: f64) -> ProviderUsage {
+        ProviderUsage {
+            windows: vec![UsageWindow {
+                label: "Weekly".into(),
+                used_percent: percent,
+                resets_at: None,
+            }],
+            ..empty(AgentKind::Claude)
+        }
+    }
+
+    #[test]
+    fn reuses_fresh_numbers_and_throttles_refresh() {
+        let cache = UsageCache::default();
+        let t0 = Instant::now();
+        let first = cache.get_with(AgentKind::Claude, false, t0, || Ok(usage_with(10.0)));
+        assert_eq!(first.windows[0].used_percent, 10.0);
+
+        // Reopening within the fresh window, or refreshing within a minute, does not fetch.
+        let soon = t0 + Duration::from_secs(30);
+        let again = cache.get_with(AgentKind::Claude, true, soon, || panic!("fetched"));
+        assert_eq!(again.windows[0].used_percent, 10.0);
+        let later = t0 + Duration::from_secs(120);
+        cache.get_with(AgentKind::Claude, false, later, || panic!("fetched"));
+
+        // An explicit refresh after a minute does fetch.
+        let refreshed = cache.get_with(AgentKind::Claude, true, later, || Ok(usage_with(20.0)));
+        assert_eq!(refreshed.windows[0].used_percent, 20.0);
+    }
+
+    #[test]
+    fn rate_limit_keeps_last_numbers_and_backs_off() {
+        let cache = UsageCache::default();
+        let t0 = Instant::now();
+        cache.get_with(AgentKind::Claude, false, t0, || Ok(usage_with(10.0)));
+
+        let t1 = t0 + FRESH_FOR;
+        let limited = cache.get_with(AgentKind::Claude, false, t1, || {
+            Err(Failure {
+                message: "rate limited".into(),
+                retry_after: Some(Duration::from_secs(600)),
+            })
+        });
+        assert_eq!(limited.windows[0].used_percent, 10.0);
+        assert_eq!(limited.error.as_deref(), Some("rate limited"));
+
+        // Even a refresh waits out the backoff.
+        let t2 = t1 + Duration::from_secs(300);
+        cache.get_with(AgentKind::Claude, true, t2, || {
+            panic!("fetched during backoff")
+        });
+        let t3 = t1 + Duration::from_secs(601);
+        let ok = cache.get_with(AgentKind::Claude, true, t3, || Ok(usage_with(30.0)));
+        assert_eq!((ok.windows[0].used_percent, ok.error), (30.0, None));
     }
 }

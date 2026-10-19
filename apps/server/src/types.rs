@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentKind {
     Claude,
@@ -191,11 +191,22 @@ pub struct ProviderUsage {
     pub updated_at: Option<u64>,
 }
 
-/// Conversations an agent CLI has saved on disk that can be imported.
+/// Where imported conversations come from: an agent CLI's own session
+/// files, or another app (T3 Code) that ran those agents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImportSource {
+    Claude,
+    Codex,
+    Gemini,
+    T3,
+}
+
+/// Conversations a source has saved on disk that can be imported.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportScan {
-    pub kind: AgentKind,
+    pub kind: ImportSource,
     /// Sessions found on disk.
     pub found: u32,
     /// Sessions not yet in Patchwork.

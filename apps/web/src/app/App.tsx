@@ -51,7 +51,6 @@ export default function App() {
     <Workspace
       settings={settings}
       updateSettings={updateSettings}
-      resolvedTheme={resolvedTheme}
       toggleTheme={toggleTheme}
     />
   ) : (

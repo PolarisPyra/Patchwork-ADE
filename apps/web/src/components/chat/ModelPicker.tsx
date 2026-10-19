@@ -13,10 +13,22 @@ interface Props {
 }
 const PROVIDER_NAMES: Record<AgentKind, string> = { claude: "Claude", codex: "Codex", gemini: "Gemini" };
 const favoriteKey = "patchwork-model-favorites";
+/** Favorites saved before model ids came from the model manifest used CLI aliases. */
+const LEGACY_FAVORITES: Record<string, string> = {
+  "claude:fable": "claude:claude-fable-5-1",
+  "claude:opus": "claude:claude-opus-5-5",
+  "claude:sonnet": "claude:claude-sonnet-5-5",
+  "claude:haiku": "claude:claude-haiku-5-5",
+  "gemini:pro": "gemini:gemini-3.1-pro-preview",
+  "gemini:flash": "gemini:gemini-3.8-flash",
+  "gemini:flash-lite": "gemini:gemini-3.5-flash-lite",
+};
 function readFavorites(): string[] {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(favoriteKey) ?? "[]");
-    return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+    if (!Array.isArray(value)) return [];
+    const keys = value.filter((v): v is string => typeof v === "string").map((k) => LEGACY_FAVORITES[k] ?? k);
+    return [...new Set(keys)];
   } catch { return []; }
 }
 
@@ -36,7 +48,11 @@ export default function ModelPicker(props: Props) {
 
 function PickerPopup({ agent, model, agents, models, onPick, anchor, close }: Props & { anchor: HTMLButtonElement; close: () => void }) {
   const [favorites, setFavorites] = useState(readFavorites);
-  const [provider, setProvider] = useState<AgentKind | "favorites">(() => agents.length > 1 && favorites.length ? "favorites" : agent);
+  // Open on Favorites only if a favorite is still in the model list.
+  const [provider, setProvider] = useState<AgentKind | "favorites">(() => {
+    const hasFavorite = agents.some((kind) => (models[kind] ?? []).some((m) => favorites.includes(`${kind}:${m.id ?? "default"}`)));
+    return agents.length > 1 && hasFavorite ? "favorites" : agent;
+  });
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const panel = useRef<HTMLDivElement>(null);

@@ -31,14 +31,14 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback((refresh: boolean) => {
     setLoading(true);
     const jobs = agents.map(async (kind) => {
       const status = await api.detectAgent(kind).catch(() => null);
       const entry: Entry = { status };
       if (status?.installed && status.signedIn) {
         try {
-          entry.usage = await api.getUsage(kind);
+          entry.usage = await api.getUsage(kind, refresh);
         } catch (e) {
           entry.error = errorText(e);
         }
@@ -50,7 +50,7 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
 
   useEffect(() => {
     if (!open) return;
-    load();
+    load(false);
     const onDown = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node | null)) setOpen(false);
     };
@@ -81,7 +81,7 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
         <div className="usage-popup" role="dialog" aria-label="Usage">
           <div className="usage-head">
             <span>Usage</span>
-            <button className="btn-icon" title="Refresh" aria-label="Refresh" onClick={load} disabled={loading}>
+            <button className="btn-icon" title="Refresh" aria-label="Refresh" onClick={() => load(true)} disabled={loading}>
               <ArrowsClockwiseIcon size={14} className={loading ? "spin" : undefined} />
             </button>
           </div>

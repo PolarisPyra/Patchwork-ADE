@@ -9,7 +9,7 @@ use serde_json::Value;
 use super::{Session, SessionMessage, push_merged};
 use crate::provider;
 use crate::time::parse_rfc3339_ms;
-use crate::types::Role;
+use crate::types::{AgentKind, Role};
 
 pub fn sessions() -> Vec<Session> {
     let Some(home) = provider::codex::home() else {
@@ -108,9 +108,11 @@ fn parse(text: &str) -> Option<Session> {
     }
     let messages: Vec<SessionMessage> = if items.is_empty() { legacy } else { items };
     Some(Session {
+        agent: AgentKind::Codex,
         session_id,
         cwd,
         title: None,
+        model: None,
         created_at,
         messages,
     })
