@@ -155,6 +155,11 @@ function TasksView({
     e.preventDefault();
     setMenu({ x: e.clientX, y: e.clientY, target });
   };
+  // The native dialog is async in Tauri; window.confirm returns before the user answers.
+  const removeThread = async (thread: Thread) => {
+    const question = `Remove ${displayTitle(thread.title)}?`;
+    if (await confirm(question, { title: "Remove", kind: "warning" })) onDeleteThread(thread.id);
+  };
   const menuItems = (target: Target): MenuItem[] => [
     { label: "Rename", Icon: PencilSimpleIcon, onSelect: () => setRenaming(target) },
     {
@@ -163,10 +168,10 @@ function TasksView({
       danger: true,
       onSelect: async () => {
         if (target.kind === "thread") {
-          onDeleteThread(target.id);
+          const thread = threads.find((t) => t.id === target.id);
+          if (thread) await removeThread(thread);
           return;
         }
-        // The native dialog is async in Tauri; window.confirm returns before the user answers.
         const name = projects.find((p) => p.id === target.id)?.name ?? "this project";
         if (
           await confirm(`Remove ${name} and its tasks?`, {
@@ -190,7 +195,7 @@ function TasksView({
   const rowProps = {
     selectedId,
     onSelectThread,
-    onDeleteThread,
+    onRemoveThread: removeThread,
     renaming,
     onContextMenu: openMenu,
     onCommitRename: commitRename,
@@ -327,7 +332,7 @@ function ThreadRow({
   thread,
   selectedId,
   onSelectThread,
-  onDeleteThread,
+  onRemoveThread,
   renaming,
   onContextMenu,
   onCommitRename,
@@ -336,7 +341,7 @@ function ThreadRow({
   thread: Thread;
   selectedId: string | null;
   onSelectThread: (id: string) => void;
-  onDeleteThread: (id: string) => void;
+  onRemoveThread: (thread: Thread) => void;
   renaming: Target | null;
   onContextMenu: (e: MouseEvent, target: Target) => void;
   onCommitRename: (target: Target, name: string, current: string) => void;
@@ -370,7 +375,7 @@ function ThreadRow({
           aria-label="Delete"
           onClick={(e) => {
             e.stopPropagation();
-            onDeleteThread(thread.id);
+            onRemoveThread(thread);
           }}
         >
           <TrashIcon size={14} />
