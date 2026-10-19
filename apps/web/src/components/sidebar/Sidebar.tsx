@@ -166,7 +166,7 @@ function TasksView({
           return;
         }
         const name = projects.find((p) => p.id === target.id)?.name ?? "this project";
-        if (window.confirm(`Remove ${name} and its tasks? Its files are not deleted.`)) {
+        if (window.confirm(`Remove ${name} and its tasks?`)) {
           onRemoveProject(target.id);
         }
       },
