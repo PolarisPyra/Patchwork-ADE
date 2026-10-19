@@ -274,9 +274,14 @@ impl Server {
                     continue;
                 }
                 known.push((session.agent, session.session_id.clone()));
-                let project =
-                    self.register_project(workspace::make_project(&session.cwd)?, false)?;
-                threads.push(import::to_thread(session, Some(project.id)));
+                let project_id = if import::is_t3_chat_folder(Path::new(&session.cwd)) {
+                    None
+                } else {
+                    let project =
+                        self.register_project(workspace::make_project(&session.cwd)?, false)?;
+                    Some(project.id)
+                };
+                threads.push(import::to_thread(session, project_id));
             }
         }
         let count = threads.len() as u32;

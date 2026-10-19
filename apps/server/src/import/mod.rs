@@ -7,6 +7,9 @@ mod codex;
 mod gemini;
 mod t3;
 
+use std::path::Path;
+
+use crate::provider;
 use crate::types::*;
 
 /// A conversation read from an agent CLI's session files.
@@ -68,6 +71,12 @@ fn push_merged(messages: &mut Vec<SessionMessage>, role: Role, text: String, at:
         }
         _ => messages.push(SessionMessage::new(role, text, at)),
     }
+}
+
+/// T3 Code keeps its chats that have no project in a scratch folder. Those are
+/// chats for Patchwork too, not projects.
+pub fn is_t3_chat_folder(cwd: &Path) -> bool {
+    provider::home_dir().is_some_and(|home| cwd.starts_with(home.join(".t3/scratch")))
 }
 
 /// Converts an imported session into a stored thread.
