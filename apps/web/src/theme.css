@@ -4,6 +4,37 @@
  * Components must use these variables, never hard-coded colors.
  */
 
+/* Tailwind without preflight, so existing base element styles stay as they are. */
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
+
+/* Tailwind color utilities (bg-panel, text-fg-muted, border-border) read the
+   tokens below, so the theme switch still drives every class. */
+@theme inline {
+  --color-app: var(--bg-app);
+  --color-panel: var(--bg-panel);
+  --color-editor: var(--bg-editor);
+  --color-elevated: var(--bg-elevated);
+  --color-input: var(--bg-input);
+  --color-hover: var(--bg-hover);
+  --color-selected: var(--bg-selected);
+  --color-selected-muted: var(--bg-selected-muted);
+  --color-accent-soft: var(--bg-accent-soft);
+  --color-fg: var(--text);
+  --color-fg-muted: var(--text-muted);
+  --color-fg-subtle: var(--text-subtle);
+  --color-on-accent: var(--text-on-accent);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus: var(--border-focus);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+}
+
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
