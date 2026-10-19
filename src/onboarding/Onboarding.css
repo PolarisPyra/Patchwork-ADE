@@ -1,0 +1,494 @@
+/*
+ * Onboarding wizard. Colors come only from theme.css variables so the wizard
+ * works in both light and dark themes. Class names use the `ob-` prefix.
+ */
+
+/* ---- frame ------------------------------------------------------------- */
+
+.ob-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-app);
+  color: var(--text);
+}
+
+.ob-header {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 88px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-app);
+}
+
+.ob-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ob-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+
+.ob-app-name {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+}
+
+.ob-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn.ob-skip {
+  color: var(--text-muted);
+}
+
+.ob-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  padding: 40px 0;
+}
+
+.ob-column {
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.ob-title {
+  margin: 0;
+  font-size: var(--fs-xxl);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.ob-subtitle {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-lg);
+}
+
+.card.ob-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 24px;
+  min-height: 520px;
+  background: var(--bg-editor);
+}
+
+.ob-footer {
+  flex: none;
+  height: 84px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-app);
+}
+
+.ob-footer-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ob-helper {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.ob-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ob-continue {
+  width: 190px;
+}
+
+/* ---- stepper ----------------------------------------------------------- */
+
+.ob-stepper {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ob-step {
+  display: flex;
+  align-items: center;
+}
+
+.ob-step-line {
+  width: 48px;
+  height: 1px;
+  margin: 0 12px;
+  background: var(--border-strong);
+}
+
+.ob-step-line.is-filled {
+  background: var(--accent);
+}
+
+.ob-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  transition: background-color 0.12s;
+}
+
+.ob-step-btn:not(:disabled) {
+  cursor: pointer;
+}
+
+.ob-step-btn:not(:disabled):hover {
+  background: var(--bg-hover);
+}
+
+.ob-step-btn:disabled {
+  cursor: default;
+}
+
+.ob-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-selected-muted);
+  color: var(--text-subtle);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.ob-step-btn.is-filled .ob-step-num {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.ob-step-btn.is-filled .ob-step-label {
+  color: var(--text);
+}
+
+.ob-step-btn.is-current .ob-step-label {
+  font-weight: 600;
+}
+
+/* ---- card internals ---------------------------------------------------- */
+
+.ob-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ob-card-title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.ob-card-sub,
+.ob-card-note {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.ob-card-note {
+  margin: auto 0 0;
+}
+
+.ob-section-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.ob-muted {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.ob-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+
+.ob-root .link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ob-root .link:disabled:hover {
+  text-decoration: none;
+}
+
+/* ---- option rows ------------------------------------------------------- */
+
+.ob-option-list,
+.ob-option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-option {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s;
+}
+
+.ob-option.is-clickable:not(:disabled) {
+  cursor: pointer;
+}
+
+.ob-option.is-clickable:not(:disabled):hover {
+  background: var(--bg-hover);
+}
+
+.ob-option.is-selected,
+.ob-option.is-selected:hover {
+  border-color: var(--accent);
+  background: var(--bg-accent-soft);
+}
+
+.ob-option-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ob-option-name {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+
+.ob-option-detail {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.ob-option-trail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.ob-option-index {
+  flex: none;
+  width: 36px;
+  color: var(--accent-text);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ob-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  background: var(--bg-selected-muted);
+  color: var(--accent-text);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+
+.ob-tile.ob-tile-lg {
+  width: 44px;
+  height: 44px;
+}
+
+.ob-radio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-on-accent);
+}
+
+.ob-radio.is-selected {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.ob-selected-tag {
+  flex: none;
+  color: var(--accent-text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+/* ---- projects ---------------------------------------------------------- */
+
+.ob-create {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ob-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ob-form-label {
+  flex: none;
+  width: 72px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.ob-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-path.is-empty {
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+}
+
+.ob-name-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.ob-create-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ob-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ob-project-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.ob-project-row:hover {
+  background: var(--bg-hover);
+}
+
+.ob-project-row.is-active {
+  background: var(--bg-accent-soft);
+}
+
+.ob-project-check {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  color: var(--accent-text);
+}
+
+.ob-project-name {
+  flex: none;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.ob-project-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- devices / info box ------------------------------------------------ */
+
+.ob-info {
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: var(--bg-selected-muted);
+}
+
+.ob-info-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.ob-info-body {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}

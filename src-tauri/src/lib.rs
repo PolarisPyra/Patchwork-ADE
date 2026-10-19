@@ -92,7 +92,7 @@ fn list_threads(store: State<Store>, project_id: String) -> Vec<Thread> {
         .into_iter()
         .filter(|t| t.project_id == project_id)
         .collect();
-    ts.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    ts.sort_by_key(|t| std::cmp::Reverse(t.created_at));
     ts
 }
 

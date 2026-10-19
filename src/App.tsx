@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, DEFAULT_SETTINGS, type Settings } from "./api";
 import Onboarding from "./onboarding/Onboarding";
 import Workspace from "./workspace/Workspace";
@@ -30,12 +30,14 @@ export default function App() {
     document.documentElement.dataset.theme = resolvedTheme;
   }, [resolvedTheme]);
 
+  // Source of truth for sequential updates; React state updaters may run lazily.
+  const settingsRef = useRef<Settings | null>(null);
+  settingsRef.current = settings;
+
   const updateSettings = useCallback<UpdateSettings>(async (next) => {
-    let resolved!: Settings;
-    setSettings((prev) => {
-      resolved = typeof next === "function" ? next(prev ?? DEFAULT_SETTINGS) : next;
-      return resolved;
-    });
+    const resolved = typeof next === "function" ? next(settingsRef.current ?? DEFAULT_SETTINGS) : next;
+    settingsRef.current = resolved;
+    setSettings(resolved);
     await api.saveSettings(resolved);
   }, []);
 

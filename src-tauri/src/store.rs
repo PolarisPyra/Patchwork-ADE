@@ -61,7 +61,12 @@ impl Store {
     }
 
     pub fn thread(&self, id: &str) -> Option<Thread> {
-        self.threads.lock().unwrap().iter().find(|t| t.id == id).cloned()
+        self.threads
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|t| t.id == id)
+            .cloned()
     }
 
     /// Mutate the thread list and persist it.

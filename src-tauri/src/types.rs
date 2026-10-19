@@ -155,19 +155,45 @@ pub struct AgentEventEnvelope {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum AgentEvent {
     /// A new assistant message placeholder (status = streaming).
-    MessageStarted { message: Message },
+    MessageStarted {
+        message: Message,
+    },
     /// Append `text` to the message body.
-    TextDelta { message_id: String, text: String },
-    ToolStarted { message_id: String, tool: ToolCall },
-    ToolFinished { message_id: String, tool_id: String, is_error: bool },
+    TextDelta {
+        message_id: String,
+        text: String,
+    },
+    ToolStarted {
+        message_id: String,
+        tool: ToolCall,
+    },
+    ToolFinished {
+        message_id: String,
+        tool_id: String,
+        is_error: bool,
+    },
     /// Replace the message's plan with `steps`.
-    PlanUpdated { message_id: String, steps: Vec<PlanStep> },
-    FileTouched { message_id: String, path: String },
+    PlanUpdated {
+        message_id: String,
+        steps: Vec<PlanStep>,
+    },
+    FileTouched {
+        message_id: String,
+        path: String,
+    },
     /// Terminal event for a turn. `status` is complete | error | cancelled.
-    TurnCompleted { message_id: String, status: MessageStatus, error: Option<String> },
+    TurnCompleted {
+        message_id: String,
+        status: MessageStatus,
+        error: Option<String>,
+    },
 }
 
 pub fn now_ms() -> u64 {
