@@ -37,7 +37,13 @@ interface ImportsStepProps {
   error: string | null;
 }
 
-export default function ImportsStep({ sources, scans, selected, onToggle, error }: ImportsStepProps) {
+export default function ImportsStep({
+  sources,
+  scans,
+  selected,
+  onToggle,
+  error,
+}: ImportsStepProps) {
   return (
     <>
       <div className="ob-card-header">

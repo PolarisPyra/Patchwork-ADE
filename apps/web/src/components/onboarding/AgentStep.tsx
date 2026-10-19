@@ -2,7 +2,12 @@ import { ArrowClockwiseIcon, CheckIcon, CircleNotchIcon } from "@phosphor-icons/
 import { AGENT_LABELS, type AgentKind } from "~/api";
 import ProviderLogos from "~/components/ProviderLogos";
 import { cx } from "~/components/onboarding/classNames";
-import { AGENT_KINDS, isReady, type AgentProbe, type AgentProbes } from "~/components/onboarding/agentProbes";
+import {
+  AGENT_KINDS,
+  isReady,
+  type AgentProbe,
+  type AgentProbes,
+} from "~/components/onboarding/agentProbes";
 
 interface AgentStepProps {
   probes: AgentProbes;
@@ -12,7 +17,13 @@ interface AgentStepProps {
   onRecheck: () => void;
 }
 
-export default function AgentStep({ probes, checking, selected, onToggle, onRecheck }: AgentStepProps) {
+export default function AgentStep({
+  probes,
+  checking,
+  selected,
+  onToggle,
+  onRecheck,
+}: AgentStepProps) {
   return (
     <>
       <div className="ob-card-header">
@@ -67,7 +78,11 @@ function AgentRow({
       </span>
       <span className="ob-option-trail">
         <StatusBadge probe={probe} />
-        {ready && <span className={cx("ob-checkbox", selected && "is-selected")}>{selected && <CheckIcon size={12} weight="bold" />}</span>}
+        {ready && (
+          <span className={cx("ob-checkbox", selected && "is-selected")}>
+            {selected && <CheckIcon size={12} weight="bold" />}
+          </span>
+        )}
       </span>
     </button>
   );

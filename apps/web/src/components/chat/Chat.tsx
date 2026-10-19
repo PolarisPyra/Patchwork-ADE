@@ -141,7 +141,9 @@ export default function Chat({
             <h2>{project ? `What should we build in ${project.name}?` : "What's on your mind?"}</h2>
             {!project && (
               <>
-                <p className="ws-muted">This chat has no project; the agent works in a private scratch folder.</p>
+                <p className="ws-muted">
+                  This chat has no project; the agent works in a private scratch folder.
+                </p>
                 <button className="btn ws-open-project-btn" onClick={onOpenFolder}>
                   <FolderPlusIcon size={14} />
                   Open a project

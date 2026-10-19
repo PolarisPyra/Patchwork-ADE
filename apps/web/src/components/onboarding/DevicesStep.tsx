@@ -11,7 +11,9 @@ export default function DevicesStep() {
           </span>
           <span className="ob-option-text">
             <span className="ob-option-name">This computer</span>
-            <span className="ob-option-detail">Run agents and tools on your local development machine.</span>
+            <span className="ob-option-detail">
+              Run agents and tools on your local development machine.
+            </span>
           </span>
           <span className="ob-selected-tag">● Selected</span>
         </div>
@@ -22,7 +24,9 @@ export default function DevicesStep() {
           </span>
           <span className="ob-option-text">
             <span className="ob-option-name">Add a remote device</span>
-            <span className="ob-option-detail">Connect another machine or remote environment later.</span>
+            <span className="ob-option-detail">
+              Connect another machine or remote environment later.
+            </span>
           </span>
           <span className="ob-option-trail">
             <button type="button" className="link" disabled>

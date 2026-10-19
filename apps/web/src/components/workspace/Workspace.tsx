@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { XIcon } from "@phosphor-icons/react";
 import { api, defaultAgentOf, type FileChange, type Message, type Settings } from "~/api";
 import type { UpdateSettings } from "~/app/App";
@@ -39,14 +45,14 @@ const CANVAS_MIN_PX = 340;
 const CANVAS_MAX_FRACTION = 0.7;
 
 export default function Workspace({ settings, updateSettings, toggleTheme }: WorkspaceProps) {
-  const { threads, reload, selected, select, createThread, deleteThread, setModel, send } = useThreads(
-    settings.activeProjectId,
-    () => void refreshGit(),
-  );
+  const { threads, reload, selected, select, createThread, deleteThread, setModel, send } =
+    useThreads(settings.activeProjectId, () => void refreshGit());
   // The selected thread decides the project (null: a chat without a project);
   // with nothing selected, the last active project does.
   const project =
-    settings.projects.find((p) => p.id === (selected ? selected.projectId : settings.activeProjectId)) ?? null;
+    settings.projects.find(
+      (p) => p.id === (selected ? selected.projectId : settings.activeProjectId),
+    ) ?? null;
   const projectId = project?.id ?? null;
   const defaultAgent = defaultAgentOf(settings);
   // Display order stays fixed; `settings.agents` order only marks the default.
@@ -89,7 +95,8 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
 
   /** Remembers the current project so the next launch reopens it. */
   const rememberProject = async (id: string | null) => {
-    if (settings.activeProjectId !== id) await updateSettings((s) => ({ ...s, activeProjectId: id }));
+    if (settings.activeProjectId !== id)
+      await updateSettings((s) => ({ ...s, activeProjectId: id }));
   };
 
   const selectThread = (id: string) => {
@@ -158,12 +165,32 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
   });
 
   const paletteItems: PaletteItem[] = [
-    { id: "new-chat", group: "Actions", label: "New chat", hint: project ? undefined : "Ctrl T", run: newChat },
+    {
+      id: "new-chat",
+      group: "Actions",
+      label: "New chat",
+      hint: project ? undefined : "Ctrl T",
+      run: newChat,
+    },
     ...(project
-      ? [{ id: "new-task", group: "Actions", label: `New task in ${project.name}`, hint: "Ctrl T", run: () => newThreadIn(project.id) }]
+      ? [
+          {
+            id: "new-task",
+            group: "Actions",
+            label: `New task in ${project.name}`,
+            hint: "Ctrl T",
+            run: () => newThreadIn(project.id),
+          },
+        ]
       : []),
     { id: "toggle-theme", group: "Actions", label: "Toggle theme", run: toggleTheme },
-    { id: "settings", group: "Actions", label: "Open settings", hint: "Ctrl ,", run: () => setSettingsOpen(true) },
+    {
+      id: "settings",
+      group: "Actions",
+      label: "Open settings",
+      hint: "Ctrl ,",
+      run: () => setSettingsOpen(true),
+    },
     { id: "open-folder", group: "Actions", label: "Open folder…", run: openFolder },
     ...threads.map((t) => ({
       id: `task-${t.id}`,

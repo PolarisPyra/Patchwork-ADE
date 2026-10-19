@@ -234,13 +234,22 @@ export default function Canvas({
                 <ArrowSquareOutIcon size={14} />
                 Open in editor
               </button>
-              <button className="btn" onClick={() => void copyContent()} disabled={content === undefined}>
+              <button
+                className="btn"
+                onClick={() => void copyContent()}
+                disabled={content === undefined}
+              >
                 {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
                 {copied ? "Copied" : "Copy"}
               </button>
             </>
           )}
-          <button className="btn btn-icon" onClick={onClose} aria-label="Close canvas" title="Close">
+          <button
+            className="btn btn-icon"
+            onClick={onClose}
+            aria-label="Close canvas"
+            title="Close"
+          >
             <XIcon size={16} />
           </button>
         </div>

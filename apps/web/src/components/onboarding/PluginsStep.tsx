@@ -8,10 +8,25 @@ interface PluginsStepProps {
 }
 
 const PLUGINS: { key: keyof Integrations; letter: string; name: string; description: string }[] = [
-  { key: "github", letter: "G", name: "GitHub", description: "Repository access and pull requests" },
-  { key: "terminal", letter: "T", name: "Terminal", description: "Let the agent run shell commands without asking" },
+  {
+    key: "github",
+    letter: "G",
+    name: "GitHub",
+    description: "Repository access and pull requests",
+  },
+  {
+    key: "terminal",
+    letter: "T",
+    name: "Terminal",
+    description: "Let the agent run shell commands without asking",
+  },
   { key: "figma", letter: "F", name: "Figma", description: "Access design context and assets" },
-  { key: "browser", letter: "B", name: "Browser", description: "Inspect and test local applications" },
+  {
+    key: "browser",
+    letter: "B",
+    name: "Browser",
+    description: "Inspect and test local applications",
+  },
 ];
 
 export default function PluginsStep({ settings, updateSettings }: PluginsStepProps) {

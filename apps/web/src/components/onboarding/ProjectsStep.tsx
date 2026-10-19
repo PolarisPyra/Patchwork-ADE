@@ -76,8 +76,7 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
     if (await run("create", () => api.createProject(parent, trimmed))) setName("");
   };
 
-  const setActive = (id: string) =>
-    void updateSettings((s) => ({ ...s, activeProjectId: id }));
+  const setActive = (id: string) => void updateSettings((s) => ({ ...s, activeProjectId: id }));
 
   return (
     <>
@@ -91,9 +90,16 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
           <span className="ob-option-index">01</span>
           <span className="ob-option-text">
             <span className="ob-option-name">Open a local project</span>
-            <span className="ob-option-detail">Select a folder from your computer to start working.</span>
+            <span className="ob-option-detail">
+              Select a folder from your computer to start working.
+            </span>
           </span>
-          <button type="button" className="btn" disabled={busy} onClick={() => void browseExisting()}>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => void browseExisting()}
+          >
             Browse folders
           </button>
         </div>
@@ -102,7 +108,9 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
           <span className="ob-option-index">02</span>
           <span className="ob-option-text">
             <span className="ob-option-name">Create a new project</span>
-            <span className="ob-option-detail">Choose a location and initialize an empty workspace.</span>
+            <span className="ob-option-detail">
+              Choose a location and initialize an empty workspace.
+            </span>
           </span>
           <button
             type="button"
@@ -121,8 +129,15 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
           <div className="ob-create">
             <div className="ob-form-row">
               <span className="ob-form-label">Location</span>
-              <span className={cx("ob-path", !parent && "is-empty")}>{parent ?? "No location chosen"}</span>
-              <button type="button" className="btn" disabled={busy} onClick={() => void chooseParent()}>
+              <span className={cx("ob-path", !parent && "is-empty")}>
+                {parent ?? "No location chosen"}
+              </span>
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => void chooseParent()}
+              >
                 Choose…
               </button>
             </div>
@@ -177,7 +192,9 @@ export default function ProjectsStep({ settings, updateSettings }: ProjectsStepP
                     aria-pressed={active}
                     onClick={() => setActive(p.id)}
                   >
-                    <span className="ob-project-check">{active && <CheckIcon size={14} weight="bold" />}</span>
+                    <span className="ob-project-check">
+                      {active && <CheckIcon size={14} weight="bold" />}
+                    </span>
                     <span className="ob-project-name">{p.name}</span>
                     <span className="ob-project-path">{p.path}</span>
                   </button>

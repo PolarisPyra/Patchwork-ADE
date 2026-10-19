@@ -31,22 +31,25 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const load = useCallback((refresh: boolean) => {
-    setLoading(true);
-    const jobs = agents.map(async (kind) => {
-      const status = await api.detectAgent(kind).catch(() => null);
-      const entry: Entry = { status };
-      if (status?.installed && status.signedIn) {
-        try {
-          entry.usage = await api.getUsage(kind, refresh);
-        } catch (e) {
-          entry.error = errorText(e);
+  const load = useCallback(
+    (refresh: boolean) => {
+      setLoading(true);
+      const jobs = agents.map(async (kind) => {
+        const status = await api.detectAgent(kind).catch(() => null);
+        const entry: Entry = { status };
+        if (status?.installed && status.signedIn) {
+          try {
+            entry.usage = await api.getUsage(kind, refresh);
+          } catch (e) {
+            entry.error = errorText(e);
+          }
         }
-      }
-      setEntries((prev) => ({ ...prev, [kind]: entry }));
-    });
-    void Promise.all(jobs).finally(() => setLoading(false));
-  }, [agents]);
+        setEntries((prev) => ({ ...prev, [kind]: entry }));
+      });
+      void Promise.all(jobs).finally(() => setLoading(false));
+    },
+    [agents],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +84,13 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
         <div className="usage-popup" role="dialog" aria-label="Usage">
           <div className="usage-head">
             <span>Usage</span>
-            <button className="btn-icon" title="Refresh" aria-label="Refresh" onClick={() => load(true)} disabled={loading}>
+            <button
+              className="btn-icon"
+              title="Refresh"
+              aria-label="Refresh"
+              onClick={() => load(true)}
+              disabled={loading}
+            >
               <ArrowsClockwiseIcon size={14} className={loading ? "spin" : undefined} />
             </button>
           </div>
@@ -102,7 +111,9 @@ function AgentUsage({ kind, entry }: { kind: AgentKind; entry: Entry | undefined
     ? "Loading…"
     : !ready
       ? describeAgent(entry.status)
-      : (entry.error ?? usage?.error ?? (usage?.windows.length === 0 ? "No limits reported" : null));
+      : (entry.error ??
+        usage?.error ??
+        (usage?.windows.length === 0 ? "No limits reported" : null));
   return (
     <section className="usage-agent">
       <div className="usage-agent-head">
@@ -118,7 +129,10 @@ function AgentUsage({ kind, entry }: { kind: AgentKind; entry: Entry | undefined
             <span className="usage-percent">{Math.round(w.usedPercent)}%</span>
           </div>
           <div className="usage-bar">
-            <div className={`usage-bar-fill${level(w.usedPercent)}`} style={{ width: `${Math.min(100, w.usedPercent)}%` }} />
+            <div
+              className={`usage-bar-fill${level(w.usedPercent)}`}
+              style={{ width: `${Math.min(100, w.usedPercent)}%` }}
+            />
           </div>
           {w.resetsAt && <div className="usage-reset">Resets {resetsIn(w.resetsAt)}</div>}
         </div>

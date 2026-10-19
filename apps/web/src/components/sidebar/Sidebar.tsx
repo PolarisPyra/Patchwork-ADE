@@ -151,7 +151,12 @@ function TasksView({
 
       <SectionLabel
         action={
-          <button className="btn-icon" title="Open folder…" aria-label="Open folder" onClick={onOpenFolder}>
+          <button
+            className="btn-icon"
+            title="Open folder…"
+            aria-label="Open folder"
+            onClick={onOpenFolder}
+          >
             <FolderPlusIcon size={16} />
           </button>
         }
@@ -237,14 +242,24 @@ function ChangesView({ changes, onRefreshChanges, onOpenChange }: SidebarProps) 
     <>
       <div className="ws-sidebar-head">
         <span>Changes</span>
-        <button className="btn-icon" title="Refresh" aria-label="Refresh" onClick={onRefreshChanges}>
+        <button
+          className="btn-icon"
+          title="Refresh"
+          aria-label="Refresh"
+          onClick={onRefreshChanges}
+        >
           <ArrowsClockwiseIcon size={16} />
         </button>
       </div>
       <div className="ws-sidebar-scroll">
         {changes.length === 0 && <div className="ws-muted-note">No changes</div>}
         {changes.map((c) => (
-          <button key={c.path} className="ws-row ws-change" title={c.path} onClick={() => onOpenChange(c.path)}>
+          <button
+            key={c.path}
+            className="ws-row ws-change"
+            title={c.path}
+            onClick={() => onOpenChange(c.path)}
+          >
             <span className={`ws-status ws-status-${c.status}`}>{STATUS_LETTER[c.status]}</span>
             <span className="ws-change-name">
               <span>{baseName(c.path)}</span>

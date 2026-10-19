@@ -80,7 +80,13 @@ export default function Composer({
         onKeyDown={onKeyDown}
       />
       <div className="ws-composer-foot">
-        <ModelPicker agent={agent} model={model} agents={agents} models={models} onPick={onPickModel} />
+        <ModelPicker
+          agent={agent}
+          model={model}
+          agents={agents}
+          models={models}
+          onPick={onPickModel}
+        />
         <span className="ws-spacer" />
         {working ? (
           <button className="ws-send ws-stop" onClick={onStop} title="Stop" aria-label="Stop">

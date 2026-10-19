@@ -35,7 +35,8 @@ export default function App() {
   settingsRef.current = settings;
 
   const updateSettings = useCallback<UpdateSettings>(async (next) => {
-    const resolved = typeof next === "function" ? next(settingsRef.current ?? DEFAULT_SETTINGS) : next;
+    const resolved =
+      typeof next === "function" ? next(settingsRef.current ?? DEFAULT_SETTINGS) : next;
     settingsRef.current = resolved;
     setSettings(resolved);
     await api.saveSettings(resolved);
@@ -48,11 +49,7 @@ export default function App() {
   if (!settings) return null;
 
   return settings.onboarded ? (
-    <Workspace
-      settings={settings}
-      updateSettings={updateSettings}
-      toggleTheme={toggleTheme}
-    />
+    <Workspace settings={settings} updateSettings={updateSettings} toggleTheme={toggleTheme} />
   ) : (
     <Onboarding
       settings={settings}

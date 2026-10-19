@@ -52,7 +52,12 @@ interface SettingsDialogProps extends PaneProps {
   onClose: () => void;
 }
 
-export default function SettingsDialog({ settings, updateSettings, onImported, onClose }: SettingsDialogProps) {
+export default function SettingsDialog({
+  settings,
+  updateSettings,
+  onImported,
+  onClose,
+}: SettingsDialogProps) {
   const [section, setSection] = useState<Section>("appearance");
   const title = SECTIONS.find((s) => s.id === section)?.label ?? "";
   const paneProps = { settings, updateSettings };
@@ -153,7 +158,10 @@ function AgentPane({ settings, updateSettings }: PaneProps) {
       agents: st.agents.includes(kind) ? st.agents.filter((k) => k !== kind) : [...st.agents, kind],
     }));
   const makeDefault = (kind: AgentKind) =>
-    void updateSettings((st) => ({ ...st, agents: [kind, ...st.agents.filter((k) => k !== kind)] }));
+    void updateSettings((st) => ({
+      ...st,
+      agents: [kind, ...st.agents.filter((k) => k !== kind)],
+    }));
 
   return (
     <>
@@ -186,7 +194,9 @@ function AgentPane({ settings, updateSettings }: PaneProps) {
         <div className="ws-setting-row">
           <div className="ws-setting-text">
             <div className="ws-setting-title">Default for new tasks</div>
-            <div className="ws-setting-desc">You can still pick an agent per task in the composer</div>
+            <div className="ws-setting-desc">
+              You can still pick an agent per task in the composer
+            </div>
           </div>
           <div className="ws-segmented">
             {/* Fixed order: choosing a default reorders `agents`, not the buttons. */}
@@ -206,7 +216,11 @@ function AgentPane({ settings, updateSettings }: PaneProps) {
   );
 }
 
-function ImportsPane({ settings, updateSettings, onImported }: PaneProps & { onImported: () => void }) {
+function ImportsPane({
+  settings,
+  updateSettings,
+  onImported,
+}: PaneProps & { onImported: () => void }) {
   const [scans, setScans] = useState<Partial<Record<ImportSource, ImportScan | null>>>({});
   const [busy, setBusy] = useState<ImportSource | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -280,7 +294,12 @@ function ImportsPane({ settings, updateSettings, onImported }: PaneProps & { onI
 }
 
 const INTEGRATIONS: { key: keyof Integrations; label: string; desc: string; Icon: Icon }[] = [
-  { key: "github", label: "GitHub", desc: "Read repositories and pull requests", Icon: GitPullRequestIcon },
+  {
+    key: "github",
+    label: "GitHub",
+    desc: "Read repositories and pull requests",
+    Icon: GitPullRequestIcon,
+  },
   {
     key: "terminal",
     label: "Terminal",
@@ -288,7 +307,12 @@ const INTEGRATIONS: { key: keyof Integrations; label: string; desc: string; Icon
     Icon: TerminalWindowIcon,
   },
   { key: "figma", label: "Figma", desc: "Read designs from Figma files", Icon: PaintBrushIcon },
-  { key: "browser", label: "Browser", desc: "Let the agent open pages in a browser", Icon: GlobeIcon },
+  {
+    key: "browser",
+    label: "Browser",
+    desc: "Let the agent open pages in a browser",
+    Icon: GlobeIcon,
+  },
 ];
 
 function IntegrationsPane({ settings, updateSettings }: PaneProps) {
@@ -341,14 +365,22 @@ function ProjectsPane({ settings, updateSettings }: PaneProps) {
             <div className="ws-project-title">{p.name}</div>
             <div className="ws-project-path">{p.path}</div>
           </div>
-          <button className="btn-icon" title="Remove project" aria-label="Remove project" onClick={() => void remove(p.id)}>
+          <button
+            className="btn-icon"
+            title="Remove project"
+            aria-label="Remove project"
+            onClick={() => void remove(p.id)}
+          >
             <TrashIcon size={14} />
           </button>
         </div>
       ))}
       {error && <div className="ws-error-text">{error}</div>}
       <div className="ws-setup">
-        <button className="btn" onClick={() => void updateSettings((s) => ({ ...s, onboarded: false }))}>
+        <button
+          className="btn"
+          onClick={() => void updateSettings((s) => ({ ...s, onboarded: false }))}
+        >
           Run setup again
         </button>
       </div>

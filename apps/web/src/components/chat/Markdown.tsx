@@ -12,8 +12,7 @@ const FENCE = /^```\s*([\w+.-]*)/;
 const HEADING = /^(#{1,3})\s+(.*)$/;
 const BULLET = /^\s*[-*+]\s+(.*)$/;
 const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
-const INLINE =
-  /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\s][^*\n]*)\*|\[([^\]\n]+)\]\(([^)\s]+)\)/g;
+const INLINE = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\s][^*\n]*)\*|\[([^\]\n]+)\]\(([^)\s]+)\)/g;
 
 function startsBlock(line: string): boolean {
   return FENCE.test(line) || HEADING.test(line) || BULLET.test(line) || NUMBERED.test(line);
@@ -64,10 +63,20 @@ function renderInline(text: string): ReactNode[] {
   for (const m of text.matchAll(INLINE)) {
     const at = m.index ?? 0;
     if (at > last) out.push(text.slice(last, at));
-    if (m[1] !== undefined) out.push(<code key={at} className="ws-inline-code">{m[1]}</code>);
+    if (m[1] !== undefined)
+      out.push(
+        <code key={at} className="ws-inline-code">
+          {m[1]}
+        </code>,
+      );
     else if (m[2] !== undefined) out.push(<strong key={at}>{m[2]}</strong>);
     else if (m[3] !== undefined) out.push(<em key={at}>{m[3]}</em>);
-    else out.push(<span key={at} className="ws-link" title={m[5]}>{m[4]}</span>);
+    else
+      out.push(
+        <span key={at} className="ws-link" title={m[5]}>
+          {m[4]}
+        </span>,
+      );
     last = at + m[0].length;
   }
   if (last < text.length) out.push(text.slice(last));
@@ -78,7 +87,11 @@ function renderBlock(block: Block, key: number): ReactNode {
   switch (block.kind) {
     case "heading": {
       const Tag = block.level === 1 ? "h3" : block.level === 2 ? "h4" : "h5";
-      return <Tag key={key} className="ws-md-heading">{renderInline(block.text)}</Tag>;
+      return (
+        <Tag key={key} className="ws-md-heading">
+          {renderInline(block.text)}
+        </Tag>
+      );
     }
     case "code":
       return <CodeBlock key={key} lang={block.lang} code={block.code} />;
@@ -105,7 +118,13 @@ export default function Markdown({ text }: { text: string }) {
   );
 }
 
-export function CopyButton({ text, className = "ws-action" }: { text: string; className?: string }) {
+export function CopyButton({
+  text,
+  className = "ws-action",
+}: {
+  text: string;
+  className?: string;
+}) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     navigator.clipboard.writeText(text).then(

@@ -1,9 +1,4 @@
-import {
-  CaretDownIcon,
-  ChatsIcon,
-  FolderPlusIcon,
-  GitBranchIcon,
-} from "@phosphor-icons/react";
+import { CaretDownIcon, ChatsIcon, FolderPlusIcon, GitBranchIcon } from "@phosphor-icons/react";
 import { AGENT_LABELS, type Project, type Thread } from "~/api";
 import Dropdown from "~/components/workspace/Dropdown";
 import { displayTitle } from "~/lib/util";

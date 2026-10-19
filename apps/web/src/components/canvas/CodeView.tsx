@@ -1,5 +1,10 @@
 import { useMemo } from "react";
-import { describeFile, highlightLines, MAX_HIGHLIGHT_LINES, splitLines } from "~/components/canvas/highlight";
+import {
+  describeFile,
+  highlightLines,
+  MAX_HIGHLIGHT_LINES,
+  splitLines,
+} from "~/components/canvas/highlight";
 
 interface CodeViewProps {
   path: string;

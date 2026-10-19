@@ -49,8 +49,7 @@ const STEPS = [
   {
     label: "Devices",
     title: "Configure your devices",
-    subtitle:
-      "Choose where tasks run and how Patchwork connects to your development environments.",
+    subtitle: "Choose where tasks run and how Patchwork connects to your development environments.",
     helper: "More devices can be added later.",
   },
 ];
@@ -216,16 +215,16 @@ export default function Onboarding({
             type="button"
             className="btn btn-icon"
             onClick={toggleTheme}
-            title={resolvedTheme === "dark" ? "Dark theme (switch to light)" : "Light theme (switch to dark)"}
+            title={
+              resolvedTheme === "dark"
+                ? "Dark theme (switch to light)"
+                : "Light theme (switch to dark)"
+            }
             aria-label="Toggle theme"
           >
             {resolvedTheme === "dark" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
           </button>
-          <button
-            type="button"
-            className="btn btn-ghost ob-skip"
-            onClick={() => void complete()}
-          >
+          <button type="button" className="btn btn-ghost ob-skip" onClick={() => void complete()}>
             Skip setup
           </button>
         </div>

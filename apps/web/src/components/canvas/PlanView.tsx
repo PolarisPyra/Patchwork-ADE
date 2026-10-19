@@ -1,9 +1,4 @@
-import {
-  CheckIcon,
-  CircleIcon,
-  CircleNotchIcon,
-  XIcon,
-} from "@phosphor-icons/react";
+import { CheckIcon, CircleIcon, CircleNotchIcon, XIcon } from "@phosphor-icons/react";
 import type { Message, StepStatus } from "~/api";
 
 function StepIcon({ status }: { status: StepStatus }) {

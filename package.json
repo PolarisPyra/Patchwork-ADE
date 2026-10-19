@@ -9,6 +9,11 @@
     "build": "pnpm --filter patchwork-desktop build",
     "typecheck": "pnpm --filter patchwork-web typecheck",
     "test": "cargo test --workspace",
-    "tauri": "pnpm --filter patchwork-desktop tauri"
+    "tauri": "pnpm --filter patchwork-desktop tauri",
+    "format": "prettier --write --log-level warn \"apps/**/*.tsx\"",
+    "format:check": "prettier --check \"apps/**/*.tsx\""
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10"
   }
 }
