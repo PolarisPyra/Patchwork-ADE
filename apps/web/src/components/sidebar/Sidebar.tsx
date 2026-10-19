@@ -8,6 +8,7 @@ import {
   FolderPlusIcon,
   GearSixIcon,
   GitDiffIcon,
+  MagnifyingGlassIcon,
   PlusIcon,
   TrashIcon,
   type Icon,
@@ -50,7 +51,7 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
           aria-pressed={view === v}
           onClick={() => onSelect(v)}
         >
-          <Icon size={18} />
+          <Icon size={20} />
         </button>
       ))}
       <button
@@ -59,7 +60,7 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
         aria-label="Settings"
         onClick={onOpenSettings}
       >
-        <GearSixIcon size={18} />
+        <GearSixIcon size={20} />
       </button>
     </nav>
   );
@@ -85,11 +86,18 @@ interface SidebarProps {
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
+  /** Opens the command palette. */
+  onOpenPalette: () => void;
 }
 
 export default function Sidebar(props: SidebarProps) {
   return (
     <aside className="ws-sidebar">
+      <button className="ws-sidebar-search" onClick={props.onOpenPalette}>
+        <MagnifyingGlassIcon size={16} />
+        Search…
+        <kbd className="kbd">Ctrl K</kbd>
+      </button>
       {props.view === "tasks" ? <TasksView {...props} /> : <ChangesView {...props} />}
       <UsagePopover agents={props.agents} />
     </aside>
@@ -130,7 +138,7 @@ function TasksView({
       <SectionLabel
         action={
           <button className="btn-icon" title="New chat" aria-label="New chat" onClick={onNewChat}>
-            <PlusIcon size={14} />
+            <PlusIcon size={16} />
           </button>
         }
       >
@@ -144,7 +152,7 @@ function TasksView({
       <SectionLabel
         action={
           <button className="btn-icon" title="Open folder…" aria-label="Open folder" onClick={onOpenFolder}>
-            <FolderPlusIcon size={14} />
+            <FolderPlusIcon size={16} />
           </button>
         }
       >
@@ -158,9 +166,9 @@ function TasksView({
           <div key={p.id}>
             <div className="ws-row ws-project-row-tree" title={p.path} onClick={() => toggle(p.id)}>
               <span className="ws-slot">
-                <CaretRightIcon size={13} className={open ? "ws-rotated" : undefined} />
+                <CaretRightIcon size={15} className={open ? "ws-rotated" : undefined} />
               </span>
-              <FolderIcon size={13} className="ws-icon-muted" />
+              <FolderIcon size={15} className="ws-icon-muted" />
               <span className="ws-row-title">{p.name}</span>
               <button
                 className="btn-icon ws-row-action"
@@ -171,7 +179,7 @@ function TasksView({
                   onNewTask(p.id);
                 }}
               >
-                <PlusIcon size={13} />
+                <PlusIcon size={15} />
               </button>
             </div>
             {open && (
@@ -207,7 +215,7 @@ function ThreadRow({
       onClick={() => onSelectThread(thread.id)}
     >
       <span className="ws-slot">
-        {isWorking(thread) && <CircleNotchIcon size={13} className="spin ws-icon-accent" />}
+        {isWorking(thread) && <CircleNotchIcon size={15} className="spin ws-icon-accent" />}
       </span>
       <span className="ws-row-title">{thread.title}</span>
       <span className="ws-row-time">{formatRelative(last?.createdAt ?? thread.createdAt)}</span>
@@ -220,7 +228,7 @@ function ThreadRow({
           onDeleteThread(thread.id);
         }}
       >
-        <TrashIcon size={13} />
+        <TrashIcon size={15} />
       </button>
     </div>
   );
@@ -232,7 +240,7 @@ function ChangesView({ changes, onRefreshChanges, onOpenChange }: SidebarProps) 
       <div className="ws-sidebar-head">
         <span>Changes</span>
         <button className="btn-icon" title="Refresh" aria-label="Refresh" onClick={onRefreshChanges}>
-          <ArrowsClockwiseIcon size={14} />
+          <ArrowsClockwiseIcon size={16} />
         </button>
       </div>
       <div className="ws-sidebar-scroll">

@@ -1,4 +1,4 @@
-import { CaretRightIcon, CircleNotchIcon, GitBranchIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, CircleNotchIcon, GitBranchIcon, MoonIcon, SunIcon } from "@phosphor-icons/react";
 import { AGENT_LABELS, type AgentKind, type Project } from "~/api";
 
 interface StatusBarProps {
@@ -9,6 +9,7 @@ interface StatusBarProps {
   working: boolean;
   resolvedTheme: "light" | "dark";
   onOpenChanges: () => void;
+  toggleTheme: () => void;
 }
 
 export default function StatusBar({
@@ -19,6 +20,7 @@ export default function StatusBar({
   working,
   resolvedTheme,
   onOpenChanges,
+  toggleTheme,
 }: StatusBarProps) {
   return (
     <footer className="ws-statusbar">
@@ -46,7 +48,14 @@ export default function StatusBar({
           "Idle"
         )}
       </span>
-      <span>{resolvedTheme === "dark" ? "Dark" : "Light"}</span>
+      <button
+        className="ws-status-link"
+        title={resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        onClick={toggleTheme}
+      >
+        {resolvedTheme === "dark" ? <MoonIcon size={12} /> : <SunIcon size={12} />}
+        {resolvedTheme === "dark" ? "Dark" : "Light"}
+      </button>
     </footer>
   );
 }

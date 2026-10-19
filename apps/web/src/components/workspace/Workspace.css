@@ -158,34 +158,6 @@
   color: var(--text-muted);
 }
 
-.ws-toolbar-right {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ws-search {
-  width: 200px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
-  color: var(--text-subtle);
-  font-size: var(--fs-sm);
-  cursor: pointer;
-}
-.ws-search:hover {
-  background: var(--bg-hover);
-}
-.ws-search .kbd {
-  margin-left: auto;
-}
-
 .ws-segmented {
   display: inline-flex;
   overflow: hidden;
@@ -364,6 +336,11 @@
 /* ---- sidebar ------------------------------------------------------------ */
 
 .ws-sidebar {
+  /* Text in the sidebar runs 1px larger than the rest of the UI, for readability. */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  font-size: var(--fs-md);
   flex: none;
   width: 264px;
   min-height: 0;
@@ -371,6 +348,29 @@
   flex-direction: column;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
+}
+
+.ws-sidebar-search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  margin: 12px 8px 2px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.ws-sidebar-search:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.ws-sidebar-search .kbd {
+  margin-left: auto;
 }
 
 .ws-sidebar-head {
@@ -432,7 +432,7 @@
 
 .ws-slot {
   flex: none;
-  width: 14px;
+  width: 16px;
   display: inline-flex;
   justify-content: center;
 }
@@ -1019,6 +1019,9 @@ h5.ws-md-heading {
 }
 
 .ws-status-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   height: 18px;
   padding: 0 4px;
   border: none;

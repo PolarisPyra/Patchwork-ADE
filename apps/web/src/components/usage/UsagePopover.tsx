@@ -74,7 +74,7 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <ChartBarIcon size={16} />
+        <ChartBarIcon size={18} />
         <span>Usage</span>
       </button>
       {open && (

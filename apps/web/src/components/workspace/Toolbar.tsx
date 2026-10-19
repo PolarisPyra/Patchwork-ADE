@@ -3,9 +3,6 @@ import {
   ChatsIcon,
   FolderPlusIcon,
   GitBranchIcon,
-  MagnifyingGlassIcon,
-  MoonIcon,
-  SunIcon,
 } from "@phosphor-icons/react";
 import { AGENT_LABELS, type Project, type Thread } from "~/api";
 import Dropdown from "~/components/workspace/Dropdown";
@@ -34,11 +31,8 @@ interface ToolbarProps {
   projects: Project[];
   branch: string | null;
   thread: Thread | null;
-  resolvedTheme: "light" | "dark";
   onSelectProject: (id: string) => void;
   onOpenFolder: () => void;
-  onOpenPalette: () => void;
-  toggleTheme: () => void;
 }
 
 export default function Toolbar({
@@ -46,15 +40,9 @@ export default function Toolbar({
   projects,
   branch,
   thread,
-  resolvedTheme,
   onSelectProject,
   onOpenFolder,
-  onOpenPalette,
-  toggleTheme,
 }: ToolbarProps) {
-  const pickTheme = (t: "light" | "dark") => {
-    if (t !== resolvedTheme) toggleTheme();
-  };
   const name = project?.name ?? "";
 
   return (
@@ -125,31 +113,6 @@ export default function Toolbar({
         )}
       </div>
 
-      <div className="ws-toolbar-right">
-        <button className="ws-search" onClick={onOpenPalette}>
-          <MagnifyingGlassIcon size={14} />
-          Search…
-          <kbd className="kbd">Ctrl K</kbd>
-        </button>
-        <div className="ws-segmented" role="group" aria-label="Theme">
-          <button
-            className={`ws-seg${resolvedTheme === "light" ? " active" : ""}`}
-            title="Light theme"
-            aria-pressed={resolvedTheme === "light"}
-            onClick={() => pickTheme("light")}
-          >
-            <SunIcon size={14} />
-          </button>
-          <button
-            className={`ws-seg${resolvedTheme === "dark" ? " active" : ""}`}
-            title="Dark theme"
-            aria-pressed={resolvedTheme === "dark"}
-            onClick={() => pickTheme("dark")}
-          >
-            <MoonIcon size={14} />
-          </button>
-        </div>
-      </div>
     </header>
   );
 }

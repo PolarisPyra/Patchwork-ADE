@@ -191,11 +191,8 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
         projects={settings.projects}
         branch={branch}
         thread={selected}
-        resolvedTheme={resolvedTheme}
         onSelectProject={selectProject}
         onOpenFolder={openFolder}
-        onOpenPalette={() => setPaletteOpen(true)}
-        toggleTheme={toggleTheme}
       />
 
       <div className="ws-body" ref={bodyRef}>
@@ -220,6 +217,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
             onOpenFolder={openFolder}
             onRefreshChanges={() => attempt(refreshGit)}
             onOpenChange={(path) => openCanvasAt(path, null, "diff")}
+            onOpenPalette={() => setPaletteOpen(true)}
           />
         )}
 
@@ -269,6 +267,7 @@ export default function Workspace({ settings, updateSettings, resolvedTheme, tog
         working={isWorking(selected)}
         resolvedTheme={resolvedTheme}
         onOpenChanges={() => setView("changes")}
+        toggleTheme={toggleTheme}
       />
 
       {error && (
