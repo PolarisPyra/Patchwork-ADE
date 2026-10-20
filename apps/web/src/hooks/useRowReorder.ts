@@ -21,8 +21,11 @@ export interface RowDrag extends DropTarget {
   dragging: boolean;
 }
 
-const LINE_ABOVE = "shadow-[inset_0_2px_0_0_var(--accent)]";
-const LINE_BELOW = "shadow-[inset_0_-2px_0_0_var(--accent)]";
+// A bar in the gap between rows, so it reads as a line between items rather than an edge.
+const LINE =
+  "relative before:pointer-events-none before:absolute before:inset-x-0 before:h-0.5 before:rounded-full before:bg-accent before:content-['']";
+const LINE_ABOVE = `${LINE} before:-top-[3px]`;
+const LINE_BELOW = `${LINE} before:-bottom-[3px]`;
 const OUTLINE = "shadow-[inset_0_0_0_1px_var(--accent)]";
 
 /**

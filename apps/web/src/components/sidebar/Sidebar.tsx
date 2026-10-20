@@ -140,6 +140,18 @@ export default function Sidebar(props: SidebarProps) {
   );
 }
 
+/** Animates its children open and closed. Stays mounted so the height can transition. */
+function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={`grid transition-[grid-template-rows] duration-200 ease-out ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+      inert={!open}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
 function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between px-1.5 pt-2.5 pb-1 text-[length:var(--fs-xs)] tracking-[0.06em] text-fg-muted uppercase">
@@ -343,7 +355,10 @@ function TasksView({
               onContextMenu={(e) => openMenu(e, { kind: "project", id: p.id })}
             >
               <span className="inline-flex w-4 flex-none justify-center">
-                <CaretRightIcon size={15} className={open ? "rotate-90" : undefined} />
+                <CaretRightIcon
+                  size={15}
+                  className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+                />
               </span>
               <FolderIcon size={15} className="text-fg-subtle" />
               {editing ? (
@@ -380,8 +395,8 @@ function TasksView({
                 <PlusIcon size={15} />
               </button>
             </div>
-            {open && (
-              <div className="pt-0.5 pb-1.5 pl-3.5">
+            <Collapse open={open}>
+              <div className="py-1 pl-3.5">
                 {tasks.length === 0 && projectFolders.length === 0 && (
                   <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">
                     No tasks yet
@@ -402,17 +417,17 @@ function TasksView({
                     <div key={f.id}>
                       <div
                         {...target.attrs}
-                        className={`group mt-1 flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 text-fg-muted hover:bg-hover ${target.edge}`}
+                        className={`group my-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 py-1 text-fg hover:bg-hover ${target.edge}`}
                         onClick={() => toggle(key)}
                         onContextMenu={(e) => openMenu(e, { kind: "folder", id: f.id })}
                       >
                         <span className="inline-flex w-4 flex-none justify-center">
                           <CaretRightIcon
                             size={13}
-                            className={folderOpen ? "rotate-90" : undefined}
+                            className={`transition-transform duration-200 ${folderOpen ? "rotate-90" : ""}`}
                           />
                         </span>
-                        <FolderIcon size={14} className="text-fg-subtle" />
+                        <FolderIcon size={14} className="text-fg-muted" />
                         {folderEditing ? (
                           <InlineName
                             initial={f.name}
@@ -427,17 +442,17 @@ function TasksView({
                           </span>
                         )}
                       </div>
-                      {folderOpen && (
-                        <div className="pb-0.5 pl-3.5">
+                      <Collapse open={folderOpen}>
+                        <div className="pb-1 pl-3.5">
                           {inside.map((t) => taskRow(t, f.id, inside))}
                         </div>
-                      )}
+                      </Collapse>
                     </div>
                   );
                 })}
                 {topLevel.map((t) => taskRow(t, null, topLevel))}
               </div>
-            )}
+            </Collapse>
           </div>
         );
       })}
