@@ -280,6 +280,18 @@ pub struct Thread {
     /// Sidebar order, lower first. Kept by the store; the UI gets threads already sorted.
     #[serde(skip)]
     pub position: i64,
+    /// The folder this task is in; None for the project's top level.
+    #[serde(default)]
+    pub folder_id: Option<String>,
+}
+
+/// A folder inside a project. Its threads are those whose `folder_id` names it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Folder {
+    pub id: String,
+    pub project_id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

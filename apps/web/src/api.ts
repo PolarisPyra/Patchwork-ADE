@@ -142,6 +142,15 @@ export interface Thread {
   createdAt: number;
   messages: Message[];
   goal: Goal | null;
+  /** The folder this task is in; null for the project's top level. */
+  folderId: string | null;
+}
+
+/** A folder inside a project; its tasks are the threads whose `folderId` is its id. */
+export interface Folder {
+  id: string;
+  projectId: string;
+  name: string;
 }
 
 export interface FileChange {
@@ -278,8 +287,15 @@ export const api = {
 
   /** All threads (project tasks and project-less chats), in sidebar order. */
   listThreads: () => invoke<Thread[]>("list_threads"),
-  /** Sets the sidebar order of one group of threads, given in their new order. */
-  reorderThreads: (ids: string[]) => invoke<void>("reorder_threads", { ids }),
+  /** Puts threads in a folder (null: the top level) in the given order. */
+  reorderThreads: (ids: string[], folderId: string | null) =>
+    invoke<void>("reorder_threads", { ids, folderId }),
+  listFolders: () => invoke<Folder[]>("list_folders"),
+  createFolder: (projectId: string, name: string) =>
+    invoke<Folder>("create_folder", { projectId, name }),
+  renameFolder: (id: string, name: string) => invoke<void>("rename_folder", { id, name }),
+  /** Its tasks move to the project's top level. */
+  removeFolder: (id: string) => invoke<void>("remove_folder", { id }),
   createThread: (
     projectId: string | null,
     agent: AgentKind,

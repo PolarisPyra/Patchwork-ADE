@@ -106,6 +106,7 @@ pub fn to_thread(session: Session, project_id: Option<String>) -> Thread {
         session_id: Some(session.session_id),
         created_at: session.created_at,
         position: -(session.created_at as i64),
+        folder_id: None,
         messages: session
             .messages
             .into_iter()

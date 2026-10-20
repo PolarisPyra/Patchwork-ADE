@@ -137,9 +137,49 @@ impl Server {
         ts
     }
 
-    /// Puts `ids` (one group's threads, in their new order) first in that order.
-    pub fn reorder_threads(&self, ids: &[String]) -> Res<()> {
-        self.store.reorder_threads(ids)
+    /// Puts `ids` in `folder_id` (None: the top level) in their new order.
+    pub fn reorder_threads(&self, ids: &[String], folder_id: Option<&str>) -> Res<()> {
+        if let Some(folder_id) = folder_id {
+            self.folder(folder_id)?;
+        }
+        self.store.reorder_threads(ids, folder_id)
+    }
+
+    // ---- folders ---------------------------------------------------------
+
+    pub fn list_folders(&self) -> Vec<Folder> {
+        self.store.folders()
+    }
+
+    fn folder(&self, id: &str) -> Res<Folder> {
+        self.store
+            .folders()
+            .into_iter()
+            .find(|f| f.id == id)
+            .ok_or_else(|| format!("unknown folder {id}"))
+    }
+
+    pub fn create_folder(&self, project_id: &str, name: &str) -> Res<Folder> {
+        self.project_root(project_id)?;
+        let folder = Folder {
+            id: new_id(),
+            project_id: project_id.into(),
+            name: clean_name(name)?,
+        };
+        self.store.create_folder(folder.clone())?;
+        Ok(folder)
+    }
+
+    pub fn rename_folder(&self, id: &str, name: &str) -> Res<()> {
+        let name = clean_name(name)?;
+        self.folder(id)?;
+        self.store.rename_folder(id, &name)
+    }
+
+    /// Its tasks move to the project's top level.
+    pub fn remove_folder(&self, id: &str) -> Res<()> {
+        self.folder(id)?;
+        self.store.delete_folder(id)
     }
 
     pub fn create_thread(
@@ -170,6 +210,7 @@ impl Server {
             messages: vec![],
             goal: None,
             position: -(created_at as i64),
+            folder_id: None,
         };
         self.store.insert_threads(vec![thread.clone()])?;
         Ok(thread)

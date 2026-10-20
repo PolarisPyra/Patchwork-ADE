@@ -14,7 +14,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use crate::types::{Message, MessageStatus, Settings, Thread};
+use crate::types::{Folder, Message, MessageStatus, Settings, Thread};
 
 const DB_FILE: &str = "patchwork.db";
 
@@ -26,6 +26,7 @@ struct Inner {
     conn: Connection,
     settings: Settings,
     threads: Vec<Thread>,
+    folders: Vec<Folder>,
 }
 
 type Res<T> = Result<T, String>;
@@ -107,11 +108,13 @@ impl Store {
         .map_err(err)?;
         let settings = load_settings(&conn).map_err(err)?;
         let threads = load_threads(&conn).map_err(err)?;
+        let folders = load_folders(&conn).map_err(err)?;
         Ok(Self {
             inner: Mutex::new(Inner {
                 conn,
                 settings,
                 threads,
+                folders,
             }),
         })
     }
@@ -188,14 +191,72 @@ impl Store {
         Ok(())
     }
 
-    /// Sets the sidebar order to `ids` (the threads of one group, in their new order).
-    pub fn reorder_threads(&self, ids: &[String]) -> Res<()> {
+    pub fn folders(&self) -> Vec<Folder> {
+        self.lock().folders.clone()
+    }
+
+    pub fn create_folder(&self, folder: Folder) -> Res<()> {
+        let mut inner = self.lock();
+        inner
+            .conn
+            .execute(
+                "INSERT INTO folders (id, project_id, name, position)
+                 VALUES (?1, ?2, ?3,
+                         (SELECT COALESCE(MAX(position), -1) + 1 FROM folders WHERE project_id = ?2))",
+                params![folder.id, folder.project_id, folder.name],
+            )
+            .map_err(err)?;
+        inner.folders.push(folder);
+        Ok(())
+    }
+
+    pub fn rename_folder(&self, id: &str, name: &str) -> Res<()> {
+        let mut inner = self.lock();
+        inner
+            .conn
+            .execute(
+                "UPDATE folders SET name = ?1 WHERE id = ?2",
+                params![name, id],
+            )
+            .map_err(err)?;
+        if let Some(folder) = inner.folders.iter_mut().find(|f| f.id == id) {
+            folder.name = name.into();
+        }
+        Ok(())
+    }
+
+    /// Removes a folder. Its tasks move to the project's top level.
+    pub fn delete_folder(&self, id: &str) -> Res<()> {
+        let mut inner = self.lock();
+        let tx = inner.conn.transaction().map_err(err)?;
+        // Back to the default order at the top level: newest first, as for a new task.
+        tx.execute(
+            "UPDATE threads SET folder_id = NULL, position = -created_at WHERE folder_id = ?1",
+            [id],
+        )
+        .map_err(err)?;
+        tx.execute("DELETE FROM folders WHERE id = ?1", [id])
+            .map_err(err)?;
+        tx.commit().map_err(err)?;
+        inner.folders.retain(|f| f.id != id);
+        for t in &mut inner.threads {
+            if t.folder_id.as_deref() == Some(id) {
+                t.folder_id = None;
+                t.position = -(t.created_at as i64);
+            }
+        }
+        Ok(())
+    }
+
+    /// Puts `ids` in `folder_id` (None: the top level) in that order. The ids are the
+    /// whole destination list, so a thread that came from elsewhere joins it here.
+    pub fn reorder_threads(&self, ids: &[String], folder_id: Option<&str>) -> Res<()> {
         let mut inner = self.lock();
         let tx = inner.conn.transaction().map_err(err)?;
         for (i, id) in ids.iter().enumerate() {
             tx.execute(
-                "UPDATE threads SET position = ?1 WHERE id = ?2",
-                params![i as i64, id],
+                "UPDATE threads SET position = ?1, folder_id = ?2 WHERE id = ?3",
+                params![i as i64, folder_id, id],
             )
             .map_err(err)?;
         }
@@ -203,6 +264,7 @@ impl Store {
         for t in &mut inner.threads {
             if let Some(i) = ids.iter().position(|id| *id == t.id) {
                 t.position = i as i64;
+                t.folder_id = folder_id.map(String::from);
             }
         }
         Ok(())
@@ -218,6 +280,7 @@ impl Store {
         Ok(())
     }
 
+    /// Deletes a project's tasks and folders.
     pub fn delete_project_threads(&self, project_id: &str) -> Res<()> {
         let mut inner = self.lock();
         inner
@@ -225,8 +288,13 @@ impl Store {
             .execute("DELETE FROM threads WHERE project_id = ?1", [project_id])
             .map_err(err)?;
         inner
+            .conn
+            .execute("DELETE FROM folders WHERE project_id = ?1", [project_id])
+            .map_err(err)?;
+        inner
             .threads
             .retain(|t| t.project_id.as_deref() != Some(project_id));
+        inner.folders.retain(|f| f.project_id != project_id);
         Ok(())
     }
 }
@@ -256,8 +324,8 @@ fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO threads
              (id, project_id, title, agent, model, session_id, created_at, access_mode, goal,
-              position)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+              position, folder_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
          ON CONFLICT (id) DO UPDATE SET project_id = excluded.project_id,
              title = excluded.title, agent = excluded.agent, model = excluded.model,
              session_id = excluded.session_id, access_mode = excluded.access_mode,
@@ -272,7 +340,8 @@ fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
             t.created_at,
             enc(&t.access_mode),
             t.goal.as_ref().map(json),
-            t.position
+            t.position,
+            t.folder_id
         ],
     )?;
     Ok(())
@@ -332,10 +401,24 @@ fn load_settings(conn: &Connection) -> rusqlite::Result<Settings> {
     Ok(settings)
 }
 
+fn load_folders(conn: &Connection) -> rusqlite::Result<Vec<Folder>> {
+    let mut stmt = conn.prepare("SELECT id, project_id, name FROM folders ORDER BY position")?;
+    let folders = stmt
+        .query_map([], |r| {
+            Ok(Folder {
+                id: r.get(0)?,
+                project_id: r.get(1)?,
+                name: r.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(folders)
+}
+
 fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
     let mut stmt = conn.prepare(
         "SELECT id, project_id, title, agent, model, session_id, created_at, access_mode, goal,
-                position
+                position, folder_id
          FROM threads ORDER BY position",
     )?;
     let mut threads: Vec<Thread> = stmt
@@ -354,6 +437,7 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                     .get::<_, Option<String>>(8)?
                     .and_then(|g| serde_json::from_str(&g).ok()),
                 position: r.get(9)?,
+                folder_id: r.get(10)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -463,6 +547,7 @@ mod tests {
             messages,
             goal: None,
             position: 0,
+            folder_id: None,
         }
     }
 

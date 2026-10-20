@@ -56,6 +56,10 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     createThread,
     deleteThread,
     renameThread,
+    folders,
+    createFolder,
+    renameFolder,
+    removeFolder,
     reorderThreads,
     setModel,
     setAccessMode,
@@ -129,7 +133,13 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         projects: ids.flatMap((id) => s.projects.find((p) => p.id === id) ?? []),
       })),
     );
-  const reorderThreadsTo = (ids: string[]) => attempt(() => reorderThreads(ids));
+  const reorderThreadsTo = (ids: string[], folderId: string | null) =>
+    attempt(() => reorderThreads(ids, folderId));
+  const newFolder = (projectId: string) =>
+    createFolder(projectId).catch((e: unknown) => {
+      setError(errorText(e));
+      return null;
+    });
 
   /** Remembers the current project so the next launch reopens it. */
   const rememberProject = async (id: string | null) => {
@@ -283,6 +293,10 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             onRemoveProject={removeProjectNow}
             onReorderProjects={reorderProjects}
             onReorderThreads={reorderThreadsTo}
+            folders={folders}
+            onNewFolder={newFolder}
+            onRenameFolder={(id, name) => attempt(() => renameFolder(id, name))}
+            onRemoveFolder={(id) => attempt(() => removeFolder(id))}
             onOpenFolder={openFolder}
             onRefreshChanges={() => attempt(refreshGit)}
             onOpenChange={(path) => openCanvasAt(path, null, "diff")}

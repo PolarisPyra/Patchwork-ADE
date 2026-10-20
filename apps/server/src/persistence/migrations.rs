@@ -58,6 +58,16 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE threads ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
     UPDATE threads SET position = -created_at;
     ",
+    // 7: folders inside a project. A thread names its folder, or none for the top level.
+    "
+    CREATE TABLE folders (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL
+    );
+    ALTER TABLE threads ADD COLUMN folder_id TEXT;
+    ",
 ];
 
 /// Brings the schema up to date. Returns the version the database was at before.

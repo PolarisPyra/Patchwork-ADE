@@ -22,6 +22,7 @@ import {
   api,
   type AgentKind,
   type FileChange,
+  type Folder,
   type Project,
   type Thread,
 } from "~/api";
@@ -100,8 +101,13 @@ interface SidebarProps {
   onRemoveProject: (id: string) => void;
   /** Project ids in their new order. */
   onReorderProjects: (ids: string[]) => void;
-  /** Thread ids of one group (chats, or one project's tasks) in their new order. */
-  onReorderThreads: (ids: string[]) => void;
+  /** Thread ids of one list (chats, a project's top level, or a folder) in their new order. */
+  onReorderThreads: (ids: string[], folderId: string | null) => void;
+  folders: Folder[];
+  /** Creates a folder in a project; null if that failed. */
+  onNewFolder: (projectId: string) => Promise<Folder | null>;
+  onRenameFolder: (id: string, name: string) => void;
+  onRemoveFolder: (id: string) => void;
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
@@ -111,9 +117,9 @@ interface SidebarProps {
   onOpenPalette: () => void;
 }
 
-/** A row a context menu acts on: a project, or a task or chat. */
+/** A row a context menu acts on: a project, a folder, or a task or chat. */
 interface Target {
-  kind: "project" | "thread";
+  kind: "project" | "folder" | "thread";
   id: string;
 }
 
@@ -146,6 +152,7 @@ function SectionLabel({ children, action }: { children: ReactNode; action?: Reac
 function TasksView({
   projects,
   threads,
+  folders,
   selectedId,
   onNewTask,
   onNewChat,
@@ -156,13 +163,16 @@ function TasksView({
   onRemoveProject,
   onReorderProjects,
   onReorderThreads,
+  onNewFolder,
+  onRenameFolder,
+  onRemoveFolder,
   onOpenFolder,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [menu, setMenu] = useState<{ x: number; y: number; target: Target } | null>(null);
   const [renaming, setRenaming] = useState<Target | null>(null);
-  const reorder = useRowReorder((group, ids) =>
-    group === PROJECTS_GROUP ? onReorderProjects(ids) : onReorderThreads(ids),
+  const reorder = useRowReorder((group, ids, folderId) =>
+    group === PROJECTS_GROUP ? onReorderProjects(ids) : onReorderThreads(ids, folderId),
   );
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -194,6 +204,18 @@ function TasksView({
           if (thread) await removeThread(thread);
           return;
         }
+        if (target.kind === "folder") {
+          const name = folders.find((f) => f.id === target.id)?.name ?? "this folder";
+          if (
+            await confirm(`Remove ${name}? Its tasks move to the top of the project.`, {
+              title: "Remove folder",
+              kind: "warning",
+            })
+          ) {
+            onRemoveFolder(target.id);
+          }
+          return;
+        }
         const name = projects.find((p) => p.id === target.id)?.name ?? "this project";
         if (
           await confirm(`Remove ${name} and its tasks?`, {
@@ -212,6 +234,7 @@ function TasksView({
     const trimmed = name.trim();
     if (!trimmed || trimmed === current) return;
     if (target.kind === "thread") onRenameThread(target.id, trimmed);
+    else if (target.kind === "folder") onRenameFolder(target.id, trimmed);
     else onRenameProject(target.id, trimmed);
   };
   const rowProps = {
@@ -222,6 +245,17 @@ function TasksView({
     onContextMenu: openMenu,
     onCommitRename: commitRename,
     onCancelRename: () => setRenaming(null),
+  };
+  /** New folders open for renaming, in an expanded project so they show. */
+  const addFolder = async (projectId: string) => {
+    const folder = await onNewFolder(projectId);
+    if (!folder) return;
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.delete(projectId);
+      return next;
+    });
+    setRenaming({ kind: "folder", id: folder.id });
   };
 
   return (
@@ -239,7 +273,12 @@ function TasksView({
         <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No chats yet</div>
       )}
       {chats.map((t) => (
-        <ThreadRow key={t.id} thread={t} {...rowProps} drag={reorder(CHATS_GROUP, t.id, chatIds)} />
+        <ThreadRow
+          key={t.id}
+          thread={t}
+          {...rowProps}
+          drag={reorder.row(CHATS_GROUP, t.id, chatIds, null)}
+        />
       ))}
       {menu && (
         <ContextMenu
@@ -269,12 +308,29 @@ function TasksView({
       )}
       {projects.map((p) => {
         const open = !collapsed.has(p.id);
-        const tasks = threads.filter((t) => t.projectId === p.id);
         const editing = renaming?.kind === "project" && renaming.id === p.id;
-        const drag = reorder(
+        const drag = reorder.row(
           PROJECTS_GROUP,
           p.id,
           projects.map((x) => x.id),
+          null,
+        );
+        const tasks = threads.filter((t) => t.projectId === p.id);
+        const projectFolders = folders.filter((f) => f.projectId === p.id);
+        const group = `${TASKS_GROUP_PREFIX}${p.id}`;
+        const topLevel = tasks.filter((t) => t.folderId === null);
+        const taskRow = (t: Thread, folderId: string | null, list: Thread[]) => (
+          <ThreadRow
+            key={t.id}
+            thread={t}
+            {...rowProps}
+            drag={reorder.row(
+              group,
+              t.id,
+              list.map((x) => x.id),
+              folderId,
+            )}
+          />
         );
         return (
           <div key={p.id}>
@@ -303,6 +359,17 @@ function TasksView({
               )}
               <button
                 className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex"
+                title={`New folder in ${p.name}`}
+                aria-label={`New folder in ${p.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void addFolder(p.id);
+                }}
+              >
+                <FolderPlusIcon size={15} />
+              </button>
+              <button
+                className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex"
                 title={`New task in ${p.name}`}
                 aria-label={`New task in ${p.name}`}
                 onClick={(e) => {
@@ -315,23 +382,60 @@ function TasksView({
             </div>
             {open && (
               <div className="pt-0.5 pb-1.5 pl-3.5">
-                {tasks.length === 0 && (
+                {tasks.length === 0 && projectFolders.length === 0 && (
                   <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">
                     No tasks yet
                   </div>
                 )}
-                {tasks.map((t) => (
-                  <ThreadRow
-                    key={t.id}
-                    thread={t}
-                    {...rowProps}
-                    drag={reorder(
-                      `${TASKS_GROUP_PREFIX}${p.id}`,
-                      t.id,
-                      tasks.map((x) => x.id),
-                    )}
-                  />
-                ))}
+                {projectFolders.map((f) => {
+                  const key = `folder:${f.id}`;
+                  const inside = tasks.filter((t) => t.folderId === f.id);
+                  const folderOpen = !collapsed.has(key);
+                  const folderEditing = renaming?.kind === "folder" && renaming.id === f.id;
+                  const target = reorder.folder(
+                    group,
+                    key,
+                    inside.map((t) => t.id),
+                    f.id,
+                  );
+                  return (
+                    <div key={f.id}>
+                      <div
+                        {...target.attrs}
+                        className={`group mt-1 flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 text-fg-muted hover:bg-hover ${target.edge}`}
+                        onClick={() => toggle(key)}
+                        onContextMenu={(e) => openMenu(e, { kind: "folder", id: f.id })}
+                      >
+                        <span className="inline-flex w-4 flex-none justify-center">
+                          <CaretRightIcon
+                            size={13}
+                            className={folderOpen ? "rotate-90" : undefined}
+                          />
+                        </span>
+                        <FolderIcon size={14} className="text-fg-subtle" />
+                        {folderEditing ? (
+                          <InlineName
+                            initial={f.name}
+                            onCommit={(name) =>
+                              commitRename({ kind: "folder", id: f.id }, name, f.name)
+                            }
+                            onCancel={() => setRenaming(null)}
+                          />
+                        ) : (
+                          <span className="min-w-0 flex-1 truncate text-[length:var(--fs-sm)]">
+                            {f.name}
+                          </span>
+                        )}
+                      </div>
+                      {folderOpen && (
+                        <div className="pb-0.5 pl-3.5">
+                          {inside.map((t) => taskRow(t, f.id, inside))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {topLevel.map((t) => taskRow(t, null, topLevel))}
               </div>
             )}
           </div>

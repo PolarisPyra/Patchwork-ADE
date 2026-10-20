@@ -6,6 +6,7 @@ import {
   type AgentEvent,
   type AgentKind,
   type Attachment,
+  type Folder,
   type Message,
   type StepStatus,
   type Thread,
@@ -116,6 +117,7 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
  */
 export function useThreads(initialProjectId: string | null, onTurnCompleted: () => void) {
   const [threads, setThreads] = useState<Thread[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const turnDone = useRef(onTurnCompleted);
   const initialProject = useRef(initialProjectId);
@@ -127,10 +129,11 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
   // Load once; select the newest thread of the initial project (or chat).
   useEffect(() => {
     let cancelled = false;
-    api.listThreads().then(
-      (list) => {
+    Promise.all([api.listThreads(), api.listFolders()]).then(
+      ([list, folderList]) => {
         if (cancelled) return;
         setThreads(list);
+        setFolders(folderList);
         setSelectedId(list.find((t) => t.projectId === initialProject.current)?.id ?? null);
       },
       () => {
@@ -142,8 +145,15 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     };
   }, []);
 
-  /** Re-reads every thread from the backend, e.g. after importing. */
-  const reload = useCallback(() => api.listThreads().then(setThreads), []);
+  /** Re-reads every thread and folder from the backend, e.g. after importing. */
+  const reload = useCallback(
+    () =>
+      Promise.all([api.listThreads(), api.listFolders()]).then(([list, folderList]) => {
+        setThreads(list);
+        setFolders(folderList);
+      }),
+    [],
+  );
 
   // Subscribe once for the app's lifetime; events for unknown threads are ignored.
   useEffect(() => {
@@ -187,16 +197,27 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)));
   }
 
-  /** Moves `ids` (one group's threads) into that order; other threads keep their slots. */
-  async function reorderThreads(ids: string[]): Promise<void> {
-    setThreads((prev) => {
-      const byId = new Map(prev.map((t) => [t.id, t]));
-      const moved = ids.map((id) => byId.get(id)).filter((t): t is Thread => t !== undefined);
-      const movedIds = new Set(moved.map((t) => t.id));
-      let next = 0;
-      return prev.map((t) => (movedIds.has(t.id) ? moved[next++]! : t));
-    });
-    await api.reorderThreads(ids);
+  async function createFolder(projectId: string): Promise<Folder> {
+    const folder = await api.createFolder(projectId, "New folder");
+    setFolders((prev) => [...prev, folder]);
+    return folder;
+  }
+
+  async function renameFolder(id: string, name: string): Promise<void> {
+    await api.renameFolder(id, name);
+    setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f)));
+  }
+
+  async function removeFolder(id: string): Promise<void> {
+    await api.removeFolder(id);
+    setFolders((prev) => prev.filter((f) => f.id !== id));
+    setThreads(await api.listThreads());
+  }
+
+  /** Puts threads in a folder (null: the top level) in `ids` order, then re-reads the order. */
+  async function reorderThreads(ids: string[], folderId: string | null): Promise<void> {
+    await api.reorderThreads(ids, folderId);
+    setThreads(await api.listThreads());
   }
 
   async function setModel(id: string, agent: AgentKind, model: string | null): Promise<void> {
@@ -234,12 +255,16 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
 
   return {
     threads,
+    folders,
     reload,
     selected,
     select: setSelectedId,
     createThread,
     deleteThread,
     renameThread,
+    createFolder,
+    renameFolder,
+    removeFolder,
     reorderThreads,
     setModel,
     setAccessMode,
