@@ -375,6 +375,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       <StatusBar
         project={project}
         branch={branch}
+        threadTitle={selected ? displayTitle(selected.title) : null}
         changeCount={changes.length}
         agent={selected?.agent ?? defaultAgent}
         working={isWorking(selected)}

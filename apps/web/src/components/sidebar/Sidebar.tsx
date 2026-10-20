@@ -654,12 +654,14 @@ function ChangeRow({ change, onOpen }: { change: FileChange; onOpen: () => void 
         onClick={onOpen}
       >
         <span className="min-w-0 flex-1 truncate">{name}</span>
-        {/* Fixed-width columns keep the counts and pencils lined up across rows. */}
-        <span className="flex flex-none items-center gap-1 text-[length:var(--fs-xs)] tabular-nums">
-          <span className="w-6 text-right text-success">+{change.additions}</span>
-          <span className="w-6 text-right text-danger">−{change.deletions}</span>
+        {/* The icon column has a fixed width, so the icons line up across rows. */}
+        <span className="flex flex-none items-center gap-2 text-[length:var(--fs-xs)] tabular-nums">
+          <span className="flex items-center gap-1">
+            <span className="text-success">+{change.additions}</span>
+            <span className="text-danger">−{change.deletions}</span>
+          </span>
           <span className="flex w-3 justify-center">
-            <PencilSimpleIcon size={12} className="text-fg-muted" aria-label="Edited" />
+            <GitDiffIcon size={12} className="text-fg-muted" aria-label="Changed" />
           </span>
         </span>
       </button>

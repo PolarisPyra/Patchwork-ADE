@@ -161,7 +161,7 @@ export default function Composer({
 
   return (
     <div
-      className={`relative flex flex-col gap-2 rounded-[var(--radius-lg)] border bg-editor pt-3.5 pr-3 pb-2.5 pl-3 focus-within:border-accent ${dropping ? "border-dashed border-accent" : "border-border-strong"}`}
+      className={`relative flex flex-col gap-2 rounded-[8px] border bg-editor pt-3.5 pr-3 pb-2.5 pl-3 focus-within:border-accent ${dropping ? "border-dashed border-accent" : "border-border-strong"}`}
     >
       {menuOpen && (
         <div className="absolute right-0 bottom-full left-0 mb-1.5 flex flex-col gap-px rounded-[var(--radius)] border border-border bg-panel p-1 shadow-[var(--shadow-popup)]">
