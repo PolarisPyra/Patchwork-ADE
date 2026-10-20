@@ -75,7 +75,7 @@ export default function Messages({
     }, []),
     getItemKey: useCallback((index: number) => messagesRef.current[index]!.id, []),
     anchorTo: "end",
-    followOnAppend: true,
+    followOnAppend: false,
     scrollEndThreshold: 80,
     overscan: 6,
     directDomUpdates: true,
@@ -87,7 +87,7 @@ export default function Messages({
   });
 
   // Start at the latest message and jump to it again after each send. Agent output
-  // follows only while the reader is already at the end (followOnAppend).
+  // is not followed while streaming; the reader scrolls on their own.
   const lastUserMessageId = [...messages].reverse().find((m) => m.role === "user")?.id;
   useLayoutEffect(() => {
     virtualizer.scrollToEnd();
