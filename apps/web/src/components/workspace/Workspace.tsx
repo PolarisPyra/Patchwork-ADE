@@ -270,7 +270,6 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             onOpenFolder={openFolder}
             onRefreshChanges={() => attempt(refreshGit)}
             onOpenChange={(path) => openCanvasAt(path, null, "diff")}
-            onOpenFile={(path) => openCanvasAt(path, null, "code")}
             onOpenPalette={() => setPaletteOpen(true)}
           />
         )}

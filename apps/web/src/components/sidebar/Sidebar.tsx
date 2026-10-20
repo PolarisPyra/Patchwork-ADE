@@ -39,22 +39,6 @@ const STRIPE: { view: SidebarView; label: string; Icon: Icon }[] = [
   { view: "changes", label: "Changes", Icon: GitDiffIcon },
 ];
 
-const STATUS_LETTER: Record<FileChange["status"], string> = {
-  modified: "M",
-  added: "A",
-  untracked: "U",
-  deleted: "D",
-  renamed: "R",
-};
-
-const STATUS_COLOR: Record<FileChange["status"], string> = {
-  modified: "text-accent-text",
-  added: "text-success",
-  untracked: "text-success",
-  deleted: "text-danger",
-  renamed: "text-accent-text",
-};
-
 interface StripeProps {
   view: SidebarView | null;
   onSelect: (view: SidebarView) => void;
@@ -111,8 +95,6 @@ interface SidebarProps {
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
-  /** Opens a file's current contents, for files with no uncommitted change. */
-  onOpenFile: (path: string) => void;
   /** Files of the reply the Changes view was opened from, if any. */
   changeFocus: string[] | null;
   /** Opens the command palette. */
@@ -470,20 +452,16 @@ function ChangeRow({
 }) {
   const name = baseName(change.path);
   return (
-    <div className="group flex min-h-[26px] items-center gap-1 rounded-[var(--radius-sm)] py-0.5 pr-1 pl-3 hover:bg-hover">
+    <div className="group flex min-h-[26px] items-center gap-1 rounded-[var(--radius-sm)] py-0.5 pr-1 pl-1.5 hover:bg-hover">
       <button
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-fg text-left"
         title={change.path}
         onClick={onOpen}
       >
-        <span
-          className={`w-3.5 flex-none text-center font-[family-name:var(--font-mono)] text-[length:var(--fs-xs)] font-bold ${STATUS_COLOR[change.status]}`}
-        >
-          {STATUS_LETTER[change.status]}
-        </span>
         <span className="min-w-0 flex-1 truncate">{name}</span>
         <span className="text-success">+{change.additions}</span>
         <span className="text-danger">−{change.deletions}</span>
+        <PencilSimpleIcon size={12} className="flex-none text-fg-muted" aria-label="Edited" />
       </button>
       <button
         className="btn-icon opacity-0 group-hover:opacity-100 focus:opacity-100"
@@ -512,12 +490,9 @@ function ChangesView({
   changeFocus,
   onRefreshChanges,
   onOpenChange,
-  onOpenFile,
 }: SidebarProps) {
   const [error, setError] = useState<string | null>(null);
   const pinned = changes.filter((c) => changeFocus?.includes(c.path));
-  // Files of the reply that git no longer reports as changed, because they have been committed.
-  const committed = (changeFocus ?? []).filter((p) => !changes.some((c) => c.path === p));
   const folders = new Map<string, FileChange[]>();
   for (const c of changes) {
     if (pinned.includes(c)) continue;
@@ -595,7 +570,7 @@ function ChangesView({
         {changes.length === 0 && (
           <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No changes</div>
         )}
-        {(pinned.length > 0 || committed.length > 0) && (
+        {pinned.length > 0 && (
           <div className="flex flex-col gap-px rounded-[var(--radius)] border border-accent bg-selected-muted p-1">
             <div className="flex items-center justify-between gap-1 px-1.5 pt-0.5 pb-1">
               <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.04em] text-accent-text uppercase">
@@ -609,17 +584,6 @@ function ChangesView({
               )}
             </div>
             {pinned.map(row)}
-            {committed.map((path) => (
-              <button
-                key={path}
-                className="flex min-h-[26px] cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-3 py-0.5 text-fg text-left hover:bg-hover"
-                title={path}
-                onClick={() => onOpenFile(path)}
-              >
-                <span className="min-w-0 flex-1 truncate">{baseName(path)}</span>
-                <span className="text-[length:var(--fs-xs)] text-fg-subtle">committed</span>
-              </button>
-            ))}
           </div>
         )}
         {[...folders]
