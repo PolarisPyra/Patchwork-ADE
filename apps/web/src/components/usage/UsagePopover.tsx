@@ -27,25 +27,32 @@ type Entry = { usage?: ProviderUsage; error?: string; status?: AgentStatus | nul
 export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<Partial<Record<AgentKind, Entry>>>({});
-  const [loading, setLoading] = useState(false);
+  /** Agents whose usage is still being read; each one finishes on its own. */
+  const [pending, setPending] = useState<AgentKind[]>([]);
+  const inFlight = useRef(new Set<AgentKind>());
   const ref = useRef<HTMLDivElement>(null);
 
   const load = useCallback(
     (refresh: boolean) => {
-      setLoading(true);
-      const jobs = agents.map(async (kind) => {
-        const status = await api.detectAgent(kind).catch(() => null);
-        const entry: Entry = { status };
-        if (status?.installed && status.signedIn) {
-          try {
-            entry.usage = await api.getUsage(kind, refresh);
-          } catch (e) {
-            entry.error = errorText(e);
+      // An agent still being read is skipped, so a slow one is not asked twice.
+      agents
+        .filter((kind) => !inFlight.current.has(kind))
+        .forEach(async (kind) => {
+          inFlight.current.add(kind);
+          setPending((prev) => [...prev, kind]);
+          const status = await api.detectAgent(kind).catch(() => null);
+          const entry: Entry = { status };
+          if (status?.installed && status.signedIn) {
+            try {
+              entry.usage = await api.getUsage(kind, refresh);
+            } catch (e) {
+              entry.error = errorText(e);
+            }
           }
-        }
-        setEntries((prev) => ({ ...prev, [kind]: entry }));
-      });
-      void Promise.all(jobs).finally(() => setLoading(false));
+          setEntries((prev) => ({ ...prev, [kind]: entry }));
+          inFlight.current.delete(kind);
+          setPending((prev) => prev.filter((k) => k !== kind));
+        });
     },
     [agents],
   );
@@ -91,9 +98,11 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
               title="Refresh"
               aria-label="Refresh"
               onClick={() => load(true)}
-              disabled={loading}
             >
-              <ArrowsClockwiseIcon size={14} className={loading ? "spin" : undefined} />
+              <ArrowsClockwiseIcon
+                size={14}
+                className={pending.length > 0 ? "spin" : undefined}
+              />
             </button>
           </div>
           {agents.length === 0 && (

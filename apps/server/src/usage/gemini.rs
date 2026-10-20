@@ -2,14 +2,16 @@
 
 use serde_json::Value;
 
-use crate::provider::probe;
+use crate::provider::probe_until;
 use crate::time::parse_rfc3339_ms;
 use crate::types::*;
 
 pub fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, String> {
-    let p = probe(
+    // The CLI prints one JSON object and then keeps running, so stop once that object is complete.
+    let p = probe_until(
         AgentKind::Gemini,
         &["-p", "/usage", "--output-format", "json"],
+        |stdout| serde_json::from_str::<Value>(stdout.trim()).is_ok(),
     )
     .ok_or("Antigravity CLI is not installed")?;
     let v: Value = serde_json::from_str(p.stdout.trim()).map_err(|_| {

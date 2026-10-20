@@ -8,7 +8,9 @@ pub mod model_manifest;
 
 use std::io::Read;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
@@ -87,6 +89,13 @@ pub struct Probe {
 /// Runs the agent CLI with `args`. Returns None if it cannot start or exceeds
 /// `PROBE_TIMEOUT` (the process group is killed in that case).
 pub fn probe(kind: AgentKind, args: &[&str]) -> Option<Probe> {
+    probe_until(kind, args, |_| false)
+}
+
+/// Like `probe`, but also ends the process once `done` accepts the stdout so far, and returns
+/// that output as a success. Some CLIs print their answer and then keep running, so waiting
+/// for them to exit would only ever reach the timeout.
+pub fn probe_until(kind: AgentKind, args: &[&str], done: impl Fn(&str) -> bool) -> Option<Probe> {
     let mut cmd = agent_command(kind).ok()?;
     cmd.args(args)
         .stdin(Stdio::null())
@@ -95,41 +104,66 @@ pub fn probe(kind: AgentKind, args: &[&str]) -> Option<Probe> {
     #[cfg(unix)]
     cmd.process_group(0);
     let mut child = cmd.spawn().ok()?;
-    let mut stdout = child.stdout.take()?;
-    let mut stderr = child.stderr.take()?;
-    let out_reader = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = stdout.read_to_end(&mut buf);
-        buf
-    });
-    let err_reader = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = stderr.read_to_end(&mut buf);
-        buf
-    });
+    let (out, out_reader) = read_pipe(child.stdout.take()?);
+    let (err, err_reader) = read_pipe(child.stderr.take()?);
 
     let deadline = Instant::now() + PROBE_TIMEOUT;
-    let exit = loop {
+    let success = loop {
         match child.try_wait() {
             Ok(Some(status)) => {
                 // Kill leftover group members so a grandchild cannot hold the pipes open.
                 signal_process_group(child.id(), libc::SIGKILL);
-                break status;
+                let _ = out_reader.join();
+                let _ = err_reader.join();
+                break status.success();
+            }
+            Ok(None) if done(&text(&out)) => {
+                stop(&mut child);
+                break true;
             }
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
             _ => {
-                signal_process_group(child.id(), libc::SIGKILL);
-                let _ = child.kill();
-                let _ = child.wait();
+                stop(&mut child);
                 return None;
             }
         }
     };
     Some(Probe {
-        success: exit.success(),
-        stdout: String::from_utf8_lossy(&out_reader.join().unwrap_or_default()).into_owned(),
-        stderr: String::from_utf8_lossy(&err_reader.join().unwrap_or_default()).into_owned(),
+        success,
+        stdout: text(&out),
+        stderr: text(&err),
     })
+}
+
+/// Kills the CLI and anything it started in its process group.
+fn stop(child: &mut Child) {
+    signal_process_group(child.id(), libc::SIGKILL);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Copies a pipe into a shared buffer on its own thread, so a probe can read what has arrived
+/// without waiting for the pipe to close.
+fn read_pipe(mut pipe: impl Read + Send + 'static) -> (Arc<Mutex<Vec<u8>>>, JoinHandle<()>) {
+    let buf = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&buf);
+    let handle = std::thread::spawn(move || {
+        let mut chunk = [0u8; 4096];
+        while let Ok(n) = pipe.read(&mut chunk) {
+            if n == 0 {
+                break;
+            }
+            sink.lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .extend_from_slice(&chunk[..n]);
+        }
+    });
+    (buf, handle)
+}
+
+fn text(buf: &Mutex<Vec<u8>>) -> String {
+    let bytes = buf.lock().unwrap_or_else(PoisonError::into_inner);
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 pub fn detect_agent(kind: AgentKind) -> AgentStatus {
