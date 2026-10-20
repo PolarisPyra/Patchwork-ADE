@@ -76,9 +76,9 @@ export default function AccessPicker({
           aria-label={`Access: ${current.label}`}
           onClick={toggle}
         >
-          <current.Icon size={14} />
+          <current.Icon size={16} />
           <span>{current.label}</span>
-          <CaretDownIcon size={12} />
+          <CaretDownIcon size={14} />
         </button>
       )}
     >

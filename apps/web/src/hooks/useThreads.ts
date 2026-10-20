@@ -54,6 +54,10 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
       const { messageId, text } = event;
       return updateMessage(thread, messageId, (m) => ({ ...m, text: m.text + text }));
     }
+    case "thinking": {
+      const { messageId, text } = event;
+      return updateMessage(thread, messageId, (m) => ({ ...m, thinking: m.thinking + text }));
+    }
     case "toolStarted": {
       const { messageId, tool } = event;
       return updateMessage(thread, messageId, (m) => ({ ...m, tools: [...m.tools, tool] }));
@@ -100,6 +104,7 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
         ...m,
         status,
         error,
+        finishedAt: endedAt,
         tools: m.tools.map((t) =>
           t.status === "running" ? { ...t, status: toolEnd, endedAt } : t,
         ),

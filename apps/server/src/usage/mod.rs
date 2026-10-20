@@ -6,6 +6,7 @@
 
 pub mod claude;
 mod codex;
+mod gemini;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, PoisonError};
@@ -57,13 +58,8 @@ fn fetch(kind: AgentKind) -> Result<ProviderUsage, Failure> {
     match kind {
         AgentKind::Claude => claude::usage(empty(kind)),
         AgentKind::Codex => codex::usage(empty(kind)).map_err(Failure::from),
-        AgentKind::Gemini => Err("Antigravity CLI doesn't report usage limits".into()),
+        AgentKind::Gemini => gemini::usage(empty(kind)).map_err(Failure::from),
     }
-}
-
-/// Codex and Gemini are read from local files, so only Claude is cached.
-fn is_remote(kind: AgentKind) -> bool {
-    kind == AgentKind::Claude
 }
 
 struct Entry {
@@ -83,12 +79,6 @@ pub struct UsageCache {
 impl UsageCache {
     /// Usage for `kind`. `refresh` asks for new numbers, still subject to throttling.
     pub fn get(&self, kind: AgentKind, refresh: bool) -> ProviderUsage {
-        if !is_remote(kind) {
-            return fetch(kind).unwrap_or_else(|f| ProviderUsage {
-                error: Some(f.message),
-                ..empty(kind)
-            });
-        }
         self.get_with(kind, refresh, Instant::now(), || fetch(kind))
     }
 
@@ -103,10 +93,11 @@ impl UsageCache {
         if let Some(e) = lock().get(&kind) {
             let age = now.saturating_duration_since(e.fetched);
             let blocked = e.blocked_until.is_some_and(|until| now < until);
+            // Only an explicit refresh fetches; opening the popup shows the last numbers.
             // Numbers the agent reported are as current as a fetch, so they are not
             // fetched again, even on refresh, while fresh.
-            let fresh = age < FRESH_FOR && (!refresh || e.reported);
-            if blocked || age < MIN_REFRESH || fresh {
+            let fresh = age < FRESH_FOR && e.reported;
+            if !refresh || blocked || age < MIN_REFRESH || fresh {
                 return e.usage.clone();
             }
         }
@@ -206,12 +197,15 @@ mod tests {
         let first = cache.get_with(AgentKind::Claude, false, t0, || Ok(usage_with(10.0)));
         assert_eq!(first.windows[0].used_percent, 10.0);
 
-        // Reopening within the fresh window, or refreshing within a minute, does not fetch.
+        // Reopening never fetches, and refreshing within a minute does not either.
         let soon = t0 + Duration::from_secs(30);
         let again = cache.get_with(AgentKind::Claude, true, soon, || panic!("fetched"));
         assert_eq!(again.windows[0].used_percent, 10.0);
         let later = t0 + Duration::from_secs(120);
         cache.get_with(AgentKind::Claude, false, later, || panic!("fetched"));
+        cache.get_with(AgentKind::Claude, false, t0 + FRESH_FOR, || {
+            panic!("fetched")
+        });
 
         // An explicit refresh after a minute does fetch.
         let refreshed = cache.get_with(AgentKind::Claude, true, later, || Ok(usage_with(20.0)));
@@ -225,7 +219,7 @@ mod tests {
         cache.get_with(AgentKind::Claude, false, t0, || Ok(usage_with(10.0)));
 
         let t1 = t0 + FRESH_FOR;
-        let limited = cache.get_with(AgentKind::Claude, false, t1, || {
+        let limited = cache.get_with(AgentKind::Claude, true, t1, || {
             Err(Failure {
                 message: "rate limited".into(),
                 retry_after: Some(Duration::from_secs(600)),

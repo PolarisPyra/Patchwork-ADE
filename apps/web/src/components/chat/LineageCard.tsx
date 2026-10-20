@@ -62,7 +62,7 @@ export function compactElapsed(ms: number): string {
 }
 
 /** Full duration for the details card: "42s", "3m 05s", "2h 14m". */
-function fullElapsed(ms: number): string {
+export function fullElapsed(ms: number): string {
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}s`;
   if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;

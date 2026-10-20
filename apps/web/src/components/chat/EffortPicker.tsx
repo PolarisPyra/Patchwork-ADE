@@ -1,4 +1,4 @@
-import { BrainIcon, CaretDownIcon } from "@phosphor-icons/react";
+import { LightbulbIcon, CaretDownIcon } from "@phosphor-icons/react";
 import type { AgentKind } from "~/api";
 import Dropdown from "~/components/workspace/Dropdown";
 import { CHIP_CLASS } from "~/components/chat/ModelPicker";
@@ -70,9 +70,9 @@ export default function EffortPicker({
           title="Thinking"
           onClick={toggle}
         >
-          <BrainIcon size={14} />
+          <LightbulbIcon size={16} />
           <span>{label}</span>
-          <CaretDownIcon size={12} />
+          <CaretDownIcon size={14} />
         </button>
       )}
     >

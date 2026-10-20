@@ -102,6 +102,10 @@ export interface Message {
   attachments: Attachment[];
   /** Sent while a turn was running, steering it. */
   steer: boolean;
+  /** The agent's reasoning while it works; not stored, so empty after a reload. */
+  thinking: string;
+  /** When the reply finished (ms since epoch); null while it runs. */
+  finishedAt: number | null;
 }
 
 /** Something dropped into the composer, sent to the agent with the message. */
@@ -199,6 +203,7 @@ export type AgentEvent =
   | { type: "goalUpdated"; goal: Goal | null }
   | { type: "messageStarted"; message: Message }
   | { type: "textDelta"; messageId: string; text: string }
+  | { type: "thinking"; messageId: string; text: string }
   | { type: "toolStarted"; messageId: string; tool: ToolCall }
   | { type: "toolFinished"; messageId: string; toolId: string; isError: boolean }
   | { type: "planUpdated"; messageId: string; steps: PlanStep[] }

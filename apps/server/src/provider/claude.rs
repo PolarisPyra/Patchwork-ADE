@@ -287,6 +287,15 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                     out.push(text_delta(message_id, text));
                 }
             }
+            if parent.is_none() && delta["type"] == "thinking_delta" {
+                let text = delta["thinking"].as_str().unwrap_or_default();
+                if !text.is_empty() {
+                    out.push(Parsed::Event(AgentEvent::Thinking {
+                        message_id: message_id.into(),
+                        text: text.into(),
+                    }));
+                }
+            }
         }
         // Command output such as `/goal` comes as a whole synthetic message, not streamed.
         Some("assistant") if parent.is_none() && v["message"]["model"] == "<synthetic>" => {

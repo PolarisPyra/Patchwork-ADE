@@ -124,6 +124,8 @@ pub fn to_thread(session: Session, project_id: Option<String>) -> Thread {
                 approvals: vec![],
                 attachments: vec![],
                 steer: false,
+                thinking: String::new(),
+                finished_at: None,
             })
             .collect(),
         goal: None,

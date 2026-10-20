@@ -17,7 +17,7 @@ const PROVIDER_NAMES: Record<AgentKind, string> = {
   gemini: "Antigravity",
 };
 export const CHIP_CLASS =
-  "inline-flex h-6 cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 py-0 text-[length:var(--fs-sm)] text-fg-muted hover:bg-hover hover:text-fg [&_span]:max-w-[180px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap";
+  "inline-flex h-7 cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 py-0 text-[length:var(--fs-md)] font-medium text-fg-muted hover:bg-hover hover:text-fg [&_span]:max-w-[180px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap";
 const favoriteKey = "patchwork-model-favorites";
 /** Favorites saved before model ids came from the model manifest used CLI aliases. */
 const LEGACY_FAVORITES: Record<string, string> = {
@@ -61,9 +61,9 @@ export default function ModelPicker(props: Props) {
         aria-label={`Choose model: ${label}`}
         onClick={() => setOpen(!open)}
       >
-        <ProviderLogos kind={props.agent} size={14} />
+        <ProviderLogos kind={props.agent} size={16} />
         <span>{label}</span>
-        <CaretDownIcon size={12} />
+        <CaretDownIcon size={14} />
       </button>
       {open &&
         createPortal(
@@ -319,9 +319,7 @@ function PickerPopup({
                 >
                   <ProviderLogos kind={kind} size={12} />
                   <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                    {item.id === null
-                      ? (item.defaultModel ?? "CLI default — unresolved")
-                      : PROVIDER_NAMES[kind]}
+                    {item.id === null ? (item.defaultModel ?? "CLI default") : PROVIDER_NAMES[kind]}
                   </span>
                 </span>
               </span>

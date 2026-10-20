@@ -72,6 +72,8 @@ const MIGRATIONS: &[&str] = &[
     "CREATE TABLE app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
     // 9: the thread's reasoning effort; NULL leaves the agent's default.
     "ALTER TABLE threads ADD COLUMN effort TEXT;",
+    // 10: when a reply finished, so the timeline can say how long it worked.
+    "ALTER TABLE messages ADD COLUMN finished_at INTEGER;",
 ];
 
 /// Brings the schema up to date. Returns the version the database was at before.

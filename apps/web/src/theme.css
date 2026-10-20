@@ -410,30 +410,28 @@
   }
 }
 
-/* A highlight sweeping across the label of something still running. */
+/* A slanted band of light sweeping across the label of something still running. */
 .tool-shine {
   color: transparent;
-  background-image:
-    linear-gradient(to right, transparent, var(--text), transparent),
-    linear-gradient(var(--text-muted), var(--text-muted));
-  background-size:
-    4.5rem 100%,
-    100% 100%;
-  background-repeat: no-repeat;
+  background-image: linear-gradient(
+    105deg,
+    var(--text-muted) 40%,
+    var(--text) 50%,
+    var(--text-muted) 60%
+  );
+  background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
-  animation: tool-shine 2.2s steps(30) infinite;
+  animation: tool-shine 1.6s linear infinite;
 }
 @keyframes tool-shine {
+  /* With a 250% background, the band is fully off the label at both ends (100% and 0%),
+     so one pass crosses all of it. */
   from {
-    background-position:
-      -4.5rem 0,
-      0 0;
+    background-position: 100% 0;
   }
   to {
-    background-position:
-      calc(100% + 4.5rem) 0,
-      0 0;
+    background-position: 0% 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {

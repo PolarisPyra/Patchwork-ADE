@@ -190,7 +190,9 @@ pub fn parse(v: &Value, spec: &TurnSpec, message_id: &str) -> Vec<Parsed> {
             out.push(tool_finished(message_id, id, v["status"] == "error"));
         }
         Some("error") if v["severity"] != "warning" => {
-            let message = v["message"].as_str().unwrap_or("Antigravity CLI reported an error");
+            let message = v["message"]
+                .as_str()
+                .unwrap_or("Antigravity CLI reported an error");
             out.push(Parsed::Error(message.into()));
         }
         Some("result") if v["status"] == "error" => {

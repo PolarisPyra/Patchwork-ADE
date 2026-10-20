@@ -410,12 +410,12 @@ fn save_message(
     tx.execute(
         "INSERT INTO messages
              (id, thread_id, position, role, text, created_at, status, tools, plan, files, error,
-              approvals, attachments, steer)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+              approvals, attachments, steer, finished_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
          ON CONFLICT (id) DO UPDATE SET position = excluded.position, text = excluded.text,
              status = excluded.status, tools = excluded.tools, plan = excluded.plan,
              files = excluded.files, error = excluded.error, approvals = excluded.approvals,
-             attachments = excluded.attachments",
+             attachments = excluded.attachments, finished_at = excluded.finished_at",
         params![
             m.id,
             thread_id,
@@ -430,7 +430,8 @@ fn save_message(
             m.error,
             json(&m.approvals),
             json(&m.attachments),
-            m.steer
+            m.steer,
+            m.finished_at
         ],
     )?;
     Ok(())
@@ -498,7 +499,7 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
         .collect::<rusqlite::Result<_>>()?;
     let mut stmt = conn.prepare(
         "SELECT id, role, text, created_at, status, tools, plan, files, error, approvals,
-                attachments, steer
+                attachments, steer, finished_at
          FROM messages WHERE thread_id = ?1 ORDER BY position",
     )?;
     for t in &mut threads {
@@ -517,6 +518,8 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                     approvals: from_json(r.get(9)?),
                     attachments: from_json(r.get(10)?),
                     steer: r.get(11)?,
+                    finished_at: r.get(12)?,
+                    thinking: String::new(),
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -586,6 +589,8 @@ mod tests {
             approvals: vec![],
             attachments: vec![],
             steer: false,
+            thinking: String::new(),
+            finished_at: None,
         }
     }
 

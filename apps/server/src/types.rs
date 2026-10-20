@@ -257,6 +257,12 @@ pub struct Message {
     /// Sent while a turn was running, to steer that turn rather than start one.
     #[serde(default)]
     pub steer: bool,
+    /// The agent's reasoning while it works. Live only: it is not stored.
+    #[serde(default)]
+    pub thinking: String,
+    /// When the reply finished (ms since epoch); None while it runs.
+    #[serde(default)]
+    pub finished_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -405,6 +411,11 @@ pub enum AgentEvent {
     },
     /// Append `text` to the message body.
     TextDelta {
+        message_id: String,
+        text: String,
+    },
+    /// Part of the agent's reasoning, shown while it works and not stored.
+    Thinking {
         message_id: String,
         text: String,
     },

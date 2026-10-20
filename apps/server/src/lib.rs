@@ -386,6 +386,8 @@ impl Server {
             approvals: vec![],
             attachments: attachments.clone(),
             steer: false,
+            thinking: String::new(),
+            finished_at: None,
         };
         // Stored before the agent sees it, so its answer is stored after it.
         let m = msg.clone();

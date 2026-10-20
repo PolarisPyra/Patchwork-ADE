@@ -37,7 +37,7 @@ import {
 import type { CanvasTab } from "~/components/canvas/Canvas";
 import AttachmentChip, { AttachmentTile } from "~/components/chat/AttachmentChip";
 import { ACTION_CLASS, CopyButton } from "~/components/chat/CopyButton";
-import { compactElapsed, isActive, titleOf } from "~/components/chat/LineageCard";
+import { compactElapsed, fullElapsed, isActive, titleOf } from "~/components/chat/LineageCard";
 import ProviderLogos from "~/components/ProviderLogos";
 import { formatClock } from "~/lib/util";
 
@@ -252,22 +252,33 @@ const AssistantMessage = memo(function AssistantMessage({
   const streaming = message.status === "streaming";
   const subagents = message.tools.filter((t) => t.subagent && !t.parent);
   const actions = message.tools.filter((t) => !t.parent && !t.subagent);
-  const live = streaming ? actions.filter((t) => t.status === "running").at(-1) : undefined;
+  // The newest call still running, including calls a subagent is making.
+  const running = streaming
+    ? message.tools.filter((t) => t.status === "running" && !t.subagent).at(-1)
+    : undefined;
+  const live = useHeldTool(running);
   return (
     <section className="flex min-w-0 flex-col gap-2.5">
       {/* While streaming, WorkingRow shows the agent instead, after the latest message. */}
-      {!streaming && <AgentLabel agent={agent} status={message.status} />}
+      {!streaming && (
+        <AgentLabel
+          agent={agent}
+          status={message.status}
+          workedMs={message.finishedAt === null ? null : message.finishedAt - message.createdAt}
+        />
+      )}
       {message.text && (
         <Suspense fallback={<div className="whitespace-pre-wrap">{message.text}</div>}>
           <Markdown text={message.text} />
         </Suspense>
       )}
+      {streaming && message.thinking && <ThinkingLine text={message.thinking} />}
       {message.plan.length > 0 && <PlanList steps={message.plan} />}
       {subagents.length > 0 && (
         <SubagentGroup subagents={subagents} tools={message.tools} agent={agent} />
       )}
       {actions.length > 0 && <ToolActivity tools={actions} />}
-      {live && <LiveTool tool={live} />}
+      {streaming && live && <LiveTool tool={live} />}
       {message.approvals.map((approval) => (
         <ApprovalCard key={approval.id} approval={approval} onRespond={onRespond} />
       ))}
@@ -346,13 +357,22 @@ function ApprovalCard({
   );
 }
 
-function AgentLabel({ agent, status }: { agent: AgentKind; status: MessageStatus }) {
+function AgentLabel({
+  agent,
+  status,
+  workedMs,
+}: {
+  agent: AgentKind;
+  status: MessageStatus;
+  /** How long the reply ran, once it has finished. */
+  workedMs: number | null;
+}) {
   return (
     <header className="flex items-center gap-2">
       <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.05em] text-fg-muted uppercase">
         {AGENT_LABELS[agent]}
       </span>
-      <StatusBadge status={status} />
+      <StatusBadge status={status} workedMs={workedMs} />
     </header>
   );
 }
@@ -360,12 +380,12 @@ function AgentLabel({ agent, status }: { agent: AgentKind; status: MessageStatus
 function WorkingRow({ agent }: { agent: AgentKind }) {
   return (
     <section className="flex min-w-0 flex-col gap-2.5">
-      <AgentLabel agent={agent} status="streaming" />
+      <AgentLabel agent={agent} status="streaming" workedMs={null} />
     </section>
   );
 }
 
-function StatusBadge({ status }: { status: MessageStatus }) {
+function StatusBadge({ status, workedMs }: { status: MessageStatus; workedMs: number | null }) {
   switch (status) {
     case "streaming":
       return (
@@ -379,6 +399,7 @@ function StatusBadge({ status }: { status: MessageStatus }) {
         <span className="badge badge-accent">
           <CheckIcon size={12} />
           Task complete
+          {workedMs !== null && ` · Worked for ${fullElapsed(workedMs)}`}
         </span>
       );
     case "error":
@@ -441,6 +462,37 @@ function ToolActivity({ tools }: { tools: ToolCall[] }) {
       )}
     </div>
   );
+}
+
+/** The end of the agent's reasoning so far, muted, while it works. */
+function ThinkingLine({ text }: { text: string }) {
+  const tail = text.replace(/\s+/g, " ").trim().slice(-280);
+  return (
+    <p className="m-0 line-clamp-3 px-1 text-[length:var(--fs-sm)] text-fg-muted italic">{tail}</p>
+  );
+}
+
+/** Shortest time a call stays on the live line, so a quick one can still be read. */
+const MIN_SHOW_MS = 1500;
+
+/**
+ * The call the live line shows. A new call replaces the shown one only after it has been
+ * up for MIN_SHOW_MS. When nothing is running the last one stays, so the line does not
+ * blink out between calls.
+ */
+function useHeldTool(running: ToolCall | undefined): ToolCall | undefined {
+  const [shown, setShown] = useState(running);
+  const shownSince = useRef(Date.now());
+  useEffect(() => {
+    if (!running || running.id === shown?.id) return;
+    const wait = Math.max(0, MIN_SHOW_MS - (Date.now() - shownSince.current));
+    const id = window.setTimeout(() => {
+      shownSince.current = Date.now();
+      setShown(running);
+    }, wait);
+    return () => window.clearTimeout(id);
+  }, [running, shown]);
+  return shown;
 }
 
 /** The call running now, its label shimmering until it ends. */

@@ -486,6 +486,8 @@ fn assistant_message() -> Message {
         approvals: vec![],
         attachments: vec![],
         steer: false,
+        thinking: String::new(),
+        finished_at: None,
     }
 }
 
@@ -718,6 +720,14 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                     stream_error.get_or_insert(message);
                 }
                 Parsed::Event(mut event) => {
+                    // Reasoning is shown as it streams, but not saved.
+                    if let AgentEvent::Thinking { .. } = &event {
+                        turn.server.emit(AgentEventEnvelope {
+                            thread_id: turn.thread_id.clone(),
+                            event,
+                        });
+                        continue;
+                    }
                     match &mut event {
                         // Separate successive text blocks so they do not run together. Gemini
                         // and Claude stream a block as chunks, so chunks after the first stay
@@ -952,6 +962,7 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
             return;
         }
         AgentEvent::TextDelta { message_id, .. }
+        | AgentEvent::Thinking { message_id, .. }
         | AgentEvent::ToolStarted { message_id, .. }
         | AgentEvent::ToolFinished { message_id, .. }
         | AgentEvent::PlanUpdated { message_id, .. }
@@ -965,6 +976,7 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
     };
     match event {
         AgentEvent::TextDelta { text, .. } => msg.text.push_str(text),
+        AgentEvent::Thinking { text, .. } => msg.thinking.push_str(text),
         AgentEvent::ToolStarted { tool, .. } => msg.tools.push(tool.clone()),
         AgentEvent::ToolFinished {
             tool_id, is_error, ..
@@ -1001,6 +1013,7 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
         AgentEvent::TurnCompleted { status, error, .. } => {
             msg.status = *status;
             msg.error = error.clone();
+            msg.finished_at = Some(now_ms());
             // Unanswered requests lapse with the turn.
             for approval in msg
                 .approvals
