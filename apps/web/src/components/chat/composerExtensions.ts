@@ -59,8 +59,8 @@ const FileMention = Mention.extend({
 });
 
 /**
- * Styles a line that starts with `#`, `##`, `###` or `> ` in place. The text stays a plain
- * paragraph with its markers, so the line does not break and the draft keeps its Markdown.
+ * Styles a line that starts with `#`, `##`, `###` or `>` as soon as the marker is typed. The text
+ * stays a plain paragraph with its markers, so the line does not break and the draft keeps its Markdown.
  */
 const MarkdownLine = Extension.create({
   name: "markdownLine",
@@ -72,8 +72,8 @@ const MarkdownLine = Extension.create({
             const decorations: Decoration[] = [];
             state.doc.descendants((node, pos) => {
               if (node.type.name !== "paragraph") return true;
-              const heading = /^(#{1,3}) /.exec(node.textContent);
-              const quote = node.textContent.startsWith("> ");
+              const heading = /^(#{1,3})(?=\s|$)/.exec(node.textContent);
+              const quote = /^>\s?/.exec(node.textContent);
               const className = heading
                 ? `composer-heading-${heading[1].length}`
                 : quote
@@ -82,9 +82,13 @@ const MarkdownLine = Extension.create({
               if (className) {
                 decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: className }));
               }
-              // Hide the `> ` marker on screen; the text keeps it so the draft stays Markdown.
+              // Hide the `>` marker on screen; the text keeps it so the draft stays Markdown.
               if (quote) {
-                decorations.push(Decoration.inline(pos + 1, pos + 3, { class: "composer-quote-marker" }));
+                decorations.push(
+                  Decoration.inline(pos + 1, pos + 1 + quote[0].length, {
+                    class: "composer-quote-marker",
+                  }),
+                );
               }
               return false;
             });

@@ -11,6 +11,7 @@ import {
   keepDraftText,
   type MentionSuggestion,
 } from "~/components/chat/composerExtensions";
+import FormatBar from "~/components/chat/FormatBar";
 import ModelPicker from "~/components/chat/ModelPicker";
 
 interface ComposerProps {
@@ -410,6 +411,7 @@ export default function Composer({
         <EffortPicker agent={agent} effort={effort} onPick={onPickEffort} />
         <AccessPicker mode={accessMode} onPick={onPickAccess} />
         <span className="flex-1" />
+        <FormatBar editor={editor} />
         {working && (
           <button
             className="grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-selected-muted text-fg enabled:hover:bg-accent-hover"

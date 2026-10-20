@@ -21,7 +21,13 @@ function level(percent: number): string {
   return "bg-accent";
 }
 
-type Entry = { usage?: ProviderUsage; error?: string; status?: AgentStatus | null };
+type Entry = {
+  usage?: ProviderUsage;
+  error?: string;
+  status?: AgentStatus | null;
+  /** Why an explicit refresh did not bring new numbers. */
+  refreshNote?: string;
+};
 
 /** Sidebar footer button that opens subscription usage for each connected agent. */
 export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
@@ -35,24 +41,45 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
   const load = useCallback(
     (refresh: boolean) => {
       // An agent still being read is skipped, so a slow one is not asked twice.
-      agents
-        .filter((kind) => !inFlight.current.has(kind))
-        .forEach(async (kind) => {
-          inFlight.current.add(kind);
-          setPending((prev) => [...prev, kind]);
-          const status = await api.detectAgent(kind).catch(() => null);
-          const entry: Entry = { status };
-          if (status?.installed && status.signedIn) {
-            try {
-              entry.usage = await api.getUsage(kind, refresh);
-            } catch (e) {
-              entry.error = errorText(e);
-            }
+      agents.forEach(async (kind) => {
+        if (inFlight.current.has(kind)) {
+          if (refresh) {
+            setEntries((prev) => ({
+              ...prev,
+              [kind]: { ...prev[kind], refreshNote: "Still reading; refresh skipped." },
+            }));
           }
-          setEntries((prev) => ({ ...prev, [kind]: entry }));
-          inFlight.current.delete(kind);
-          setPending((prev) => prev.filter((k) => k !== kind));
+          return;
+        }
+        inFlight.current.add(kind);
+        setPending((prev) => [...prev, kind]);
+        const status = await api.detectAgent(kind).catch(() => null);
+        const entry: Entry = { status };
+        if (status?.installed && status.signedIn) {
+          try {
+            entry.usage = await api.getUsage(kind, refresh);
+          } catch (e) {
+            entry.error = errorText(e);
+          }
+        }
+        setEntries((prev) => {
+          // The backend returns the last numbers when it throttles a refresh, so the
+          // same reading time means no new numbers came back.
+          const before = prev[kind]?.usage?.updatedAt;
+          const after = entry.usage?.updatedAt;
+          const throttled = refresh && before != null && after === before;
+          if (throttled) {
+            const time = new Date(after).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            });
+            entry.refreshNote = `Refresh is limited; showing numbers from ${time}.`;
+          }
+          return { ...prev, [kind]: entry };
         });
+        inFlight.current.delete(kind);
+        setPending((prev) => prev.filter((k) => k !== kind));
+      });
     },
     [agents],
   );
@@ -135,6 +162,9 @@ function AgentUsage({ kind, entry }: { kind: AgentKind; entry: Entry | undefined
         {usage?.plan && <span className="badge">{usage.plan}</span>}
       </div>
       {note && <div className="text-fg-muted text-[length:var(--fs-sm)]">{note}</div>}
+      {entry?.refreshNote && (
+        <div className="text-fg-subtle text-[length:var(--fs-xs)]">{entry.refreshNote}</div>
+      )}
       {usage?.windows.map((w) => (
         <div key={w.label} className="flex flex-col gap-1 text-[length:var(--fs-sm)]">
           <div className="flex justify-between">
