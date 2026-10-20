@@ -143,7 +143,7 @@ pub struct PlanStep {
     pub status: StepStatus,
 }
 
-/// How much an agent may do without asking, like T3 Code's runtime modes.
+/// How much an agent may do without asking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum AccessMode {

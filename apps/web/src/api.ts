@@ -74,7 +74,7 @@ export interface PlanStep {
   status: StepStatus;
 }
 
-/** How much an agent may do without asking, like T3 Code's runtime modes. */
+/** How much an agent may do without asking. */
 export type AccessMode = "supervised" | "auto-accept-edits" | "auto" | "full-access";
 
 export type ApprovalStatus = "pending" | "allowed" | "denied";

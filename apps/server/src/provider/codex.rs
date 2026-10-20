@@ -203,7 +203,7 @@ fn goal_reply(spec: &TurnSpec, result: &Value) -> String {
     }
 }
 
-/// T3 Code's approval policy and sandbox for each access mode.
+/// The approval policy, reviewer, and sandbox for each access mode.
 fn turn_start(spec: &TurnSpec, thread_id: &str, text: &str) -> String {
     let (policy, reviewer, sandbox) = match spec.mode {
         AccessMode::Supervised => ("untrusted", "user", "readOnly"),
