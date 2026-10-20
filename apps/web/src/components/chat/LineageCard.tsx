@@ -19,7 +19,52 @@ function latestTurnTools(thread: Thread): ToolCall[] {
   return turn?.tools ?? [];
 }
 
-/** Parent agent on top, the subagents it spawned below, each with its model, status, and actions. */
+/** The subagent a call is nested in, if any. */
+function spawnerOf(tool: ToolCall, tools: ToolCall[]): ToolCall | undefined {
+  return tools.find((t) => t.id === tool.parent && t.subagent);
+}
+
+/** One subagent, its own actions, and the subagents it started. */
+function SubagentNode({ tool, tools }: { tool: ToolCall; tools: ToolCall[] }) {
+  const actions = tools.filter((t) => t.parent === tool.id && !t.subagent);
+  const children = tools.filter((t) => t.parent === tool.id && t.subagent);
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <div className="flex items-center gap-2">
+        <span className={`h-2 w-2 flex-none rounded-full ${DOT_COLOR[tool.status]}`} />
+        <span className="flex-1 truncate font-medium">{tool.subagent?.kind}</span>
+        <span className="truncate text-fg-muted">{tool.subagent?.model ?? "inherits"}</span>
+      </div>
+      {tool.subagent?.description && (
+        <div className="truncate pl-4 text-fg-subtle" title={tool.subagent.description}>
+          {tool.subagent.description}
+        </div>
+      )}
+      {actions.length > 0 && (
+        <ul className="m-0 mt-0.5 flex list-none flex-col gap-px pl-4 font-[family-name:var(--font-mono)] text-[12px] text-fg-muted">
+          {actions.slice(0, SHOWN_ACTIONS).map((a) => (
+            <li key={a.id} className="flex min-w-0 gap-1.5">
+              <span className="flex-none">{a.name}</span>
+              <span className="min-w-0 truncate">{a.summary}</span>
+            </li>
+          ))}
+          {actions.length > SHOWN_ACTIONS && (
+            <li className="pl-0">+{actions.length - SHOWN_ACTIONS} more</li>
+          )}
+        </ul>
+      )}
+      {children.length > 0 && (
+        <div className="mt-1 ml-1 flex flex-col gap-2 border-l-2 border-border pl-3">
+          {children.map((child) => (
+            <SubagentNode key={child.id} tool={child} tools={tools} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The agent on top, the subagents it spawned below, and any subagents those started. */
 export default function LineageCard({ thread, working }: { thread: Thread; working: boolean }) {
   const [open, setOpen] = useState(true);
   const tools = latestTurnTools(thread);
@@ -27,6 +72,11 @@ export default function LineageCard({ thread, working }: { thread: Thread; worki
   // Shown while the reply is working. Background subagents report done as soon as they
   // are launched, so their own status can't tell whether they are still running.
   if (!working || subagents.length === 0) return null;
+
+  // Subagents started directly by the agent; nested ones appear under their spawner.
+  const topLevel = subagents.filter((t) => !spawnerOf(t, tools));
+  // The agent is running only while one of its subagents has not returned yet.
+  const spawning = subagents.some((t) => t.status === "running");
 
   return (
     <div className="absolute top-3 right-4 z-10 w-[260px] rounded-[var(--radius-lg)] border border-border bg-panel text-[length:var(--fs-sm)] shadow-[var(--shadow-popup)]">
@@ -47,42 +97,13 @@ export default function LineageCard({ thread, working }: { thread: Thread; worki
             <span className="flex-1 truncate font-semibold">{AGENT_LABELS[thread.agent]}</span>
             <span className="truncate text-fg-muted">{thread.model ?? "default model"}</span>
             <span
-              className={`h-2 w-2 flex-none rounded-full ${working ? DOT_COLOR.running : DOT_COLOR.done}`}
+              className={`h-2 w-2 flex-none rounded-full ${spawning ? DOT_COLOR.running : DOT_COLOR.done}`}
             />
           </div>
           <div className="ml-3 flex flex-col gap-2 border-l-2 border-border pl-3">
-            {subagents.map((tool) => {
-              const actions = tools.filter((t) => t.parent === tool.id);
-              return (
-                <div key={tool.id} className="flex min-w-0 flex-col gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 flex-none rounded-full ${DOT_COLOR[tool.status]}`} />
-                    <span className="flex-1 truncate font-medium">{tool.subagent?.kind}</span>
-                    <span className="truncate text-fg-muted">
-                      {tool.subagent?.model ?? "inherits"}
-                    </span>
-                  </div>
-                  {tool.subagent?.description && (
-                    <div className="truncate pl-4 text-fg-subtle" title={tool.subagent.description}>
-                      {tool.subagent.description}
-                    </div>
-                  )}
-                  {actions.length > 0 && (
-                    <ul className="m-0 mt-0.5 flex list-none flex-col gap-px pl-4 font-[family-name:var(--font-mono)] text-[12px] text-fg-muted">
-                      {actions.slice(0, SHOWN_ACTIONS).map((a) => (
-                        <li key={a.id} className="flex min-w-0 gap-1.5">
-                          <span className="flex-none">{a.name}</span>
-                          <span className="min-w-0 truncate">{a.summary}</span>
-                        </li>
-                      ))}
-                      {actions.length > SHOWN_ACTIONS && (
-                        <li className="pl-0">+{actions.length - SHOWN_ACTIONS} more</li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
+            {topLevel.map((tool) => (
+              <SubagentNode key={tool.id} tool={tool} tools={tools} />
+            ))}
           </div>
         </div>
       )}
