@@ -31,7 +31,11 @@ export default function DevicesStep() {
             </span>
           </span>
           <span className="flex flex-none items-center gap-3">
-            <button type="button" className="link disabled:cursor-default disabled:opacity-50 disabled:hover:no-underline" disabled>
+            <button
+              type="button"
+              className="link disabled:cursor-default disabled:opacity-50 disabled:hover:no-underline"
+              disabled
+            >
               + Add
             </button>
             <span className="badge">Coming soon</span>

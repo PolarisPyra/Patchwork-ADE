@@ -141,7 +141,8 @@ function PickerPopup({
   }, [anchor]);
 
   useLayoutEffect(() => {
-    setHighlight(0);
+    const current = rows.findIndex(({ kind, item }) => kind === agent && item.id === model);
+    setHighlight(searching || current < 0 ? 0 : current);
     if (list.current) list.current.scrollTop = 0;
   }, [rowsKey]);
   useEffect(() => {
@@ -195,7 +196,9 @@ function PickerPopup({
         ? (highlight + (event.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length
         : 0;
       setHighlight(next);
-      list.current?.querySelectorAll("[data-model-row]")[next]?.scrollIntoView({ block: "nearest" });
+      list.current
+        ?.querySelectorAll("[data-model-row]")
+        [next]?.scrollIntoView({ block: "nearest" });
     } else if (event.target === input.current && event.key === "Enter") {
       event.preventDefault();
       choose(highlight);
@@ -287,7 +290,7 @@ function PickerPopup({
         <div
           ref={list}
           id="ws-model-options"
-          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-1.5 pr-px pb-1.5 pl-2 [scrollbar-gutter:stable]"
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain py-1.5 px-2 [scrollbar-gutter:stable]"
           role="listbox"
           aria-label="Models"
         >
@@ -352,7 +355,9 @@ function PickerPopup({
               </button>
             </div>
           ))}
-          {!rows.length && <div className="p-2 text-center text-[14px] text-fg-subtle">No models found</div>}
+          {!rows.length && (
+            <div className="p-2 text-center text-[14px] text-fg-subtle">No models found</div>
+          )}
         </div>
       </div>
     </div>

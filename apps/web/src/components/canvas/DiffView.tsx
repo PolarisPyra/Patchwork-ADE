@@ -78,7 +78,9 @@ export default function DiffView({ diff }: { diff: string }) {
             <span className="flex-none min-w-[48px] pr-2 text-right text-fg-subtle select-none tabular-nums">
               {row.newNo ?? ""}
             </span>
-            <span className="flex-none w-5 text-center text-fg-subtle select-none">{MARKERS[row.kind]}</span>
+            <span className="flex-none w-5 text-center text-fg-subtle select-none">
+              {MARKERS[row.kind]}
+            </span>
             <span className="flex-[1_0_auto] whitespace-pre">{row.text}</span>
           </div>
         ),

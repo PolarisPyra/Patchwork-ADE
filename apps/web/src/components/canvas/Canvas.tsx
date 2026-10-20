@@ -196,7 +196,10 @@ export default function Canvas({
     }
     if (result.error !== undefined) {
       return (
-        <div className="flex items-center justify-center h-full min-h-[120px] p-6 text-center text-fg-muted" title={result.error}>
+        <div
+          className="flex items-center justify-center h-full min-h-[120px] p-6 text-center text-fg-muted"
+          title={result.error}
+        >
           {activeTab === "code"
             ? "This file can't be displayed. It may have been deleted or is binary."
             : "The diff for this file could not be loaded."}
@@ -257,7 +260,10 @@ export default function Canvas({
         </div>
       </header>
 
-      <nav className="flex items-center gap-1 flex-none h-10 px-3 border-b border-border overflow-x-auto" role="tablist">
+      <nav
+        className="flex items-center gap-1 flex-none h-10 px-3 border-b border-border overflow-x-auto"
+        role="tablist"
+      >
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -275,7 +281,10 @@ export default function Canvas({
       <div className="flex-1 min-h-0 overflow-auto selectable">{renderBody()}</div>
 
       {actionError && (
-        <div className="flex-none py-2 px-5 border-t border-border text-danger text-[length:var(--fs-sm)] select-text" role="alert">
+        <div
+          className="flex-none py-2 px-5 border-t border-border text-danger text-[length:var(--fs-sm)] select-text"
+          role="alert"
+        >
           {actionError}
         </div>
       )}

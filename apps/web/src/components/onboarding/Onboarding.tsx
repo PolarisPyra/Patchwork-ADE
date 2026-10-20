@@ -225,7 +225,11 @@ export default function Onboarding({
           >
             {resolvedTheme === "dark" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
           </button>
-          <button type="button" className="btn btn-ghost text-fg-muted" onClick={() => void complete()}>
+          <button
+            type="button"
+            className="btn btn-ghost text-fg-muted"
+            onClick={() => void complete()}
+          >
             Skip setup
           </button>
         </div>
@@ -237,7 +241,9 @@ export default function Onboarding({
             {current.title}
           </h1>
           <p className="mt-2 mb-0 text-[length:var(--fs-lg)] text-fg-muted">{current.subtitle}</p>
-          <section className="card mt-6 flex min-h-[520px] flex-col gap-4 bg-editor p-6">{renderStep()}</section>
+          <section className="card mt-6 flex min-h-[520px] flex-col gap-4 bg-editor p-6">
+            {renderStep()}
+          </section>
         </div>
       </main>
 

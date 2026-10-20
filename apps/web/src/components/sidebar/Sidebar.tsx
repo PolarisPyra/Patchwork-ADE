@@ -297,7 +297,9 @@ function TasksView({
             {open && (
               <div className="pt-0.5 pb-1.5 pl-3.5">
                 {tasks.length === 0 && (
-                  <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No tasks yet</div>
+                  <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">
+                    No tasks yet
+                  </div>
                 )}
                 {tasks.map((t) => (
                   <ThreadRow key={t.id} thread={t} {...rowProps} />

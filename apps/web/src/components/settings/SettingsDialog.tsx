@@ -63,7 +63,10 @@ export default function SettingsDialog({
   const paneProps = { settings, updateSettings };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(0,0,0,0.4)]" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(0,0,0,0.4)]"
+      onMouseDown={onClose}
+    >
       <div
         className="flex h-[460px] max-h-[calc(100vh_-_48px)] w-[640px] max-w-[calc(100vw_-_48px)] overflow-hidden rounded-[var(--radius-lg)] border border-border-strong bg-elevated shadow-[var(--shadow-popup)]"
         role="dialog"
@@ -114,7 +117,9 @@ function AppearancePane({ settings, updateSettings }: PaneProps) {
     <div className="flex items-center gap-3 border-b border-border py-2.5">
       <div className="min-w-0 flex-1">
         <div className="font-semibold">Theme</div>
-        <div className="text-[length:var(--fs-sm)] text-fg-muted">Light, dark, or follow the system setting</div>
+        <div className="text-[length:var(--fs-sm)] text-fg-muted">
+          Light, dark, or follow the system setting
+        </div>
       </div>
       <div className="inline-flex overflow-hidden rounded-[var(--radius-sm)] border border-border-strong">
         {THEMES.map((t) => (

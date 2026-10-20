@@ -42,7 +42,10 @@ export default function CommandPalette({ items, onClose }: CommandPaletteProps) 
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-start justify-center pt-[15vh]" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-[90] flex items-start justify-center pt-[15vh]"
+      onMouseDown={onClose}
+    >
       <div
         className="flex max-h-[60vh] w-[560px] max-w-[calc(100vw_-_32px)] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-border-strong bg-elevated shadow-[var(--shadow-popup)]"
         role="dialog"

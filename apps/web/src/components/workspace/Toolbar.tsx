@@ -59,7 +59,9 @@ export default function Toolbar({
                   <ChatsIcon size={12} />
                 </span>
               )}
-              <span className="max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap font-semibold">{project?.name ?? "No project"}</span>
+              <span className="max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap font-semibold">
+                {project?.name ?? "No project"}
+              </span>
               <CaretDownIcon size={14} />
             </button>
           )}

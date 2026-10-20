@@ -28,7 +28,12 @@ export default function AgentStep({
     <>
       <div className="flex items-center justify-between">
         <span className="text-[length:var(--fs-md)] font-semibold">Available coding agents</span>
-        <button type="button" className="link disabled:cursor-default disabled:opacity-50 disabled:hover:no-underline" disabled={checking} onClick={onRecheck}>
+        <button
+          type="button"
+          className="link disabled:cursor-default disabled:opacity-50 disabled:hover:no-underline"
+          disabled={checking}
+          onClick={onRecheck}
+        >
           <ArrowClockwiseIcon size={14} className={checking ? "spin" : undefined} />
           Check again
         </button>
