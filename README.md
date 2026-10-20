@@ -27,6 +27,57 @@ cargo test --workspace                    # unit tests (parsers, importers, pers
 cargo test -p patchwork-server -- --ignored  # live turns against the real agent CLIs
 ```
 
+## Releases
+
+Changelog entries and release notes come from the commit history with
+[git-cliff](https://git-cliff.org/), configured in `cliff.toml`. Each commit is sorted into
+a group by the start of its subject line, and commits that start with `Release`, `Bump`,
+`Merge`, or `Chore` are left out. Words that don't match a group go under **Other**, so write
+commit subjects with a leading verb, for example `Add ...`, `Fix ...`, or `Change ...`.
+
+The tag sets the app version, so you never bump version numbers by hand. The version in the
+repo stays at `0.1.0` as a placeholder, which means a local build reports that version.
+
+To cut a release:
+
+1. Preview the notes for the new version. Nothing is written:
+
+   ```sh
+   git cliff --unreleased --tag v0.2.0
+   ```
+
+2. Regenerate the changelog. Use a full rewrite rather than `--prepend`, because
+   `CHANGELOG.md` already has an Unreleased section and prepending would duplicate it:
+
+   ```sh
+   git cliff --tag v0.2.0 -o CHANGELOG.md
+   ```
+
+3. Commit the changelog, then tag and push. The release commit's subject is skipped by git-cliff,
+   so it doesn't appear in the notes:
+
+   ```sh
+   git add CHANGELOG.md
+   git commit -m "Release v0.2.0"
+   git tag -a v0.2.0 -m "Patchwork 0.2.0"
+   git push origin main v0.2.0
+   ```
+
+Pushing the tag starts the **Release AppImage** workflow (`.github/workflows/release-appimage.yml`).
+Before it builds, the workflow writes the tag's version (`0.2.0`) into `package.json`,
+`apps/desktop/package.json`, `apps/desktop/src-tauri/tauri.conf.json`,
+`apps/desktop/src-tauri/Cargo.toml`, and `apps/server/Cargo.toml`. It then builds the AppImage on
+Ubuntu 22.04, runs `git cliff --latest` for the release notes, and creates a GitHub release named
+`Patchwork v0.2.0` with the AppImage attached. Pushes to `main` do not build anything.
+
+To check the build without making a release, run the workflow by hand from the Actions tab
+(**Run workflow**). It builds the files as they are, so it uses the placeholder version, and
+creates no release.
+
+Don't edit `CHANGELOG.md` by hand, since the next regeneration overwrites it. Tags must start
+with `v` followed by a digit, such as `v0.2.0`, because that is the pattern git-cliff and the
+workflow both look for.
+
 ## Layout
 
 The repo is split into `apps/web`, `apps/server`, and `apps/desktop`:
