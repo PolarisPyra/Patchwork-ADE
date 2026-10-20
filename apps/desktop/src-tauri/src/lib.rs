@@ -141,6 +141,11 @@ fn cancel_turn(server: Srv, thread_id: String) {
 }
 
 #[tauri::command]
+fn stop_subagent(server: Srv, thread_id: String, tool_id: String) -> Res<()> {
+    server.stop_subagent(&thread_id, &tool_id)
+}
+
+#[tauri::command]
 fn stop_goal(server: Srv, thread_id: String) -> Res<()> {
     server.stop_goal(&thread_id)
 }
@@ -248,6 +253,7 @@ pub fn run() {
             allow_preview,
             cancel_turn,
             stop_goal,
+            stop_subagent,
             respond_approval,
             scan_imports,
             import_threads,

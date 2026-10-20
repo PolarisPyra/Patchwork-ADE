@@ -239,7 +239,9 @@ export default function Chat({
       className={`relative flex min-h-0 min-w-0 flex-1 flex-col${isNew ? " justify-center" : ""}`}
       ref={rootRef}
     >
-      {thread && <LineageCard thread={thread} working={working} />}
+      {thread && (
+        <LineageCard thread={thread} working={working} onDisconnect={stop} onError={setError} />
+      )}
       <div className={`flex min-h-0 flex-col ${isNew ? "flex-none overflow-y-auto" : "flex-1"}`}>
         {!isNew ? (
           <Messages

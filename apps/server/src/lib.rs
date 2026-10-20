@@ -289,6 +289,10 @@ impl Server {
         self.runner.cancel(thread_id, pause);
     }
 
+    pub fn stop_subagent(&self, thread_id: &str, tool_id: &str) -> Res<()> {
+        self.runner.stop_subagent(thread_id, tool_id)
+    }
+
     /// Stops the turn working on the goal, if any, and forgets the goal.
     pub fn stop_goal(&self, thread_id: &str) -> Res<()> {
         self.cancel_turn(thread_id);

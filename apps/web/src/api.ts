@@ -56,6 +56,9 @@ export interface ToolCall {
   subagent: SubAgent | null;
   /** The subagent call (its id) this call ran inside, if any. */
   parent: string | null;
+  /** When the call started and ended (ms since epoch); null if unknown. */
+  startedAt: number | null;
+  endedAt: number | null;
 }
 
 /** A subagent an agent started, e.g. with Claude Code's Task tool. */
@@ -297,6 +300,9 @@ export const api = {
   /** Lets the webview show an attached image as a thumbnail. */
   allowPreview: (path: string) => invoke<void>("allow_preview", { path }),
   cancelTurn: (threadId: string) => invoke<void>("cancel_turn", { threadId }),
+  /** Stops one running subagent (Claude only). */
+  stopSubagent: (threadId: string, toolId: string) =>
+    invoke<void>("stop_subagent", { threadId, toolId }),
   /** Cancels the running turn, if any, and clears the goal. */
   stopGoal: (threadId: string) => invoke<void>("stop_goal", { threadId }),
   respondApproval: (threadId: string, approvalId: string, allow: boolean) =>

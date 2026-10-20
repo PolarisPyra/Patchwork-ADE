@@ -114,6 +114,16 @@ fn user_line(text: &str, images: &[Image], priority: Option<&str>) -> String {
     message.to_string()
 }
 
+/// Asks Claude to stop one of its subagents.
+pub fn stop_task(task_id: &str) -> String {
+    serde_json::json!({
+        "type": "control_request",
+        "request_id": crate::types::new_id(),
+        "request": {"subtype": "stop_task", "task_id": task_id},
+    })
+    .to_string()
+}
+
 pub fn approval_reply(reply: &Value, allow: bool) -> String {
     let decision = if allow {
         serde_json::json!({"behavior": "allow", "updatedInput": reply["input"]})
@@ -235,6 +245,24 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
     // Messages from inside a subagent name the Agent call they belong to.
     let parent = v["parent_tool_use_id"].as_str();
     match v["type"].as_str() {
+        Some("system") if v["subtype"] == "task_started" => {
+            if let (Some(tool_id), Some(task_id)) =
+                (v["tool_use_id"].as_str(), v["task_id"].as_str())
+            {
+                out.push(Parsed::TaskStarted {
+                    tool_id: tool_id.into(),
+                    task_id: task_id.into(),
+                });
+            }
+        }
+        Some("system") if v["subtype"] == "task_notification" => {
+            if let Some(tool_id) = v["tool_use_id"].as_str() {
+                out.push(Parsed::TaskEnded {
+                    tool_id: tool_id.into(),
+                    failed: v["status"] != "completed",
+                });
+            }
+        }
         Some("system") if v["subtype"] == "init" => {
             if let Some(id) = v["session_id"].as_str() {
                 out.push(Parsed::SessionId(id.into()));

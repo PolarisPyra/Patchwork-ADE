@@ -38,6 +38,9 @@ struct FollowUp {
 /// Steering messages written to the agent that it has not yet answered, oldest first.
 type Steers = Arc<Mutex<VecDeque<FollowUp>>>;
 
+/// Subagents the agent started: tool call id → the agent's own task id.
+type Tasks = Arc<Mutex<HashMap<String, String>>>;
+
 /// Messages the agent could not take mid-turn; they start the next turn.
 type Queue = Arc<Mutex<Vec<FollowUp>>>;
 
@@ -63,6 +66,7 @@ struct RunningTurn {
     native_turn: NativeTurn,
     steers: Steers,
     queue: Queue,
+    tasks: Tasks,
 }
 
 #[derive(Default)]
@@ -155,6 +159,7 @@ impl Runner {
         let native_turn = NativeTurn::default();
         let steers = Steers::default();
         let queue = Queue::default();
+        let tasks = Tasks::default();
         let turn = Turn {
             server: server.clone(),
             thread_id: thread_id.clone(),
@@ -167,6 +172,7 @@ impl Runner {
             native_turn: native_turn.clone(),
             steers: steers.clone(),
             queue: queue.clone(),
+            tasks: tasks.clone(),
             root,
             session_id,
             model,
@@ -189,6 +195,7 @@ impl Runner {
                     native_turn,
                     steers,
                     queue,
+                    tasks,
                 },
             );
         turn.publish(AgentEvent::MessageStarted { message });
@@ -253,6 +260,26 @@ impl Runner {
             .unwrap_or_else(PoisonError::into_inner)
             .push(follow_up);
         Delivery::Queued
+    }
+
+    /// Stops one subagent of the running turn, leaving the rest of the turn going.
+    pub fn stop_subagent(&self, thread_id: &str, tool_id: &str) -> Result<(), String> {
+        let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+        let turn = turns
+            .get(thread_id)
+            .ok_or("This turn is no longer running")?;
+        let line = turn
+            .tasks
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(tool_id)
+            .and_then(|task| provider::stop_subagent(turn.agent, task))
+            .ok_or("This subagent can't be stopped")?;
+        if write_line(&turn.stdin, &line) {
+            Ok(())
+        } else {
+            Err("This turn no longer accepts input".into())
+        }
     }
 
     /// Stops the turn and drops the messages waiting for it. `last_line` is written
@@ -358,6 +385,7 @@ struct Turn {
     native_turn: NativeTurn,
     steers: Steers,
     queue: Queue,
+    tasks: Tasks,
     root: String,
     session_id: Option<String>,
     model: Option<String>,
@@ -488,6 +516,9 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
     let mut last_was_text = false;
     // Tool id → the message it was started in, which a steer may since have moved on from.
     let mut tool_owner: HashMap<String, String> = HashMap::new();
+    // Subagents still running, and whether the call of one sent to the background, which
+    // returns at once, failed; it is reported finished when the subagent ends.
+    let mut running_tasks: HashMap<String, Option<bool>> = HashMap::new();
     // Every message of the turn: the first reply, then one per steering message taken.
     let mut segments = vec![turn.message_id.clone()];
     let mut stream_error: Option<String> = None;
@@ -630,6 +661,25 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                     }
                     turn.session_id = Some(id);
                 }
+                Parsed::TaskStarted { tool_id, task_id } => {
+                    running_tasks.insert(tool_id.clone(), None);
+                    turn.tasks
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .insert(tool_id, task_id);
+                }
+                Parsed::TaskEnded { tool_id, failed } => {
+                    if let Some(Some(call_failed)) = running_tasks.remove(&tool_id)
+                        && let Some(owner) = tool_owner.get(&tool_id)
+                    {
+                        turn.save_text(&mut unsaved);
+                        turn.publish(AgentEvent::ToolFinished {
+                            message_id: owner.clone(),
+                            tool_id,
+                            is_error: failed || call_failed,
+                        });
+                    }
+                }
                 Parsed::TurnStarted(id) => {
                     ended = false;
                     *turn
@@ -665,10 +715,14 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                         AgentEvent::ToolFinished {
                             tool_id,
                             message_id,
-                            ..
+                            is_error,
                         } => {
                             if let Some(owner) = tool_owner.get(tool_id) {
                                 message_id.clone_from(owner);
+                            }
+                            if let Some(held) = running_tasks.get_mut(tool_id.as_str()) {
+                                *held = Some(*is_error);
+                                continue;
                             }
                         }
                         _ => {}
@@ -880,6 +934,7 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
             tool_id, is_error, ..
         } => {
             if let Some(tool) = msg.tools.iter_mut().find(|t| t.id == *tool_id) {
+                tool.ended_at = Some(now_ms());
                 tool.status = if *is_error {
                     StepStatus::Error
                 } else {
@@ -930,6 +985,7 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
                 .filter(|t| t.status == StepStatus::Running)
             {
                 tool.status = tool_end;
+                tool.ended_at = Some(now_ms());
             }
             for step in msg
                 .plan

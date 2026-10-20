@@ -117,6 +117,11 @@ pub struct ToolCall {
     /// The subagent call (its `id`) this call ran inside, if any.
     #[serde(default)]
     pub parent: Option<String>,
+    /// When the call started and ended, in Unix epoch milliseconds.
+    #[serde(default)]
+    pub started_at: Option<u64>,
+    #[serde(default)]
+    pub ended_at: Option<u64>,
 }
 
 /// A subagent an agent started, e.g. with Claude Code's Task tool.

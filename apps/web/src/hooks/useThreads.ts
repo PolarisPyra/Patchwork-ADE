@@ -59,7 +59,7 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
       const status: StepStatus = isError ? "error" : "done";
       return updateMessage(thread, messageId, (m) => ({
         ...m,
-        tools: m.tools.map((t) => (t.id === toolId ? { ...t, status } : t)),
+        tools: m.tools.map((t) => (t.id === toolId ? { ...t, status, endedAt: Date.now() } : t)),
       }));
     }
     case "planUpdated": {
@@ -91,11 +91,14 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
       const { messageId, status, error } = event;
       // Nothing can still be running once the turn has ended (mirrors runner.rs).
       const toolEnd = status === "complete" ? "done" : "error";
+      const endedAt = Date.now();
       return updateMessage(thread, messageId, (m) => ({
         ...m,
         status,
         error,
-        tools: m.tools.map((t) => (t.status === "running" ? { ...t, status: toolEnd } : t)),
+        tools: m.tools.map((t) =>
+          t.status === "running" ? { ...t, status: toolEnd, endedAt } : t,
+        ),
         plan: m.plan.map((s) => (s.status === "running" ? { ...s, status: "pending" } : s)),
         approvals: m.approvals.map((a) =>
           a.status === "pending" ? { ...a, status: "denied" } : a,

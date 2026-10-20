@@ -266,6 +266,11 @@ pub fn goal_pause(agent: AgentKind, session_id: &str) -> Option<String> {
     (agent == AgentKind::Codex).then(|| codex::goal_pause(session_id))
 }
 
+/// The stdin line that stops one subagent, for agents that can.
+pub fn stop_subagent(agent: AgentKind, task_id: &str) -> Option<String> {
+    (agent == AgentKind::Claude).then(|| claude::stop_task(task_id))
+}
+
 /// `/goal`, alone or with arguments, which runs as a turn of its own.
 pub fn is_goal_command(text: &str) -> bool {
     text.trim_start()
@@ -316,6 +321,16 @@ pub fn approval_reply(agent: AgentKind, reply: &Value, allow: bool) -> String {
 pub enum Parsed {
     Event(AgentEvent),
     SessionId(String),
+    /// The agent's own id for the subagent that the tool call `tool_id` started.
+    TaskStarted {
+        tool_id: String,
+        task_id: String,
+    },
+    /// That subagent ended, which for one sent to the background is after its tool call.
+    TaskEnded {
+        tool_id: String,
+        failed: bool,
+    },
     /// The agent's id for the turn now running, which a steering message must name.
     TurnStarted(String),
     /// The turn failed with this message.
@@ -387,6 +402,8 @@ fn tool_started(
             status: StepStatus::Running,
             subagent,
             parent: parent.map(String::from),
+            started_at: Some(now_ms()),
+            ended_at: None,
         },
     })
 }
