@@ -2,13 +2,12 @@ import {
   lazy,
   memo,
   Suspense,
-  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import {
   ArrowClockwiseIcon,
   ArrowDownIcon,
@@ -69,128 +68,77 @@ export default function Messages({
   onRespond,
 }: MessagesProps) {
   const { messages } = thread;
-  const parentRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<LegendListRef>(null);
   const [atEnd, setAtEnd] = useState(true);
-  // Read through a ref so the callbacks below keep one identity. getItemKey is a
-  // dependency of the virtualizer's measurement memo, so a new function per streamed
-  // token would rebuild every row's measurement. The virtualizer still sees new rows
-  // through count and its edge-key check.
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
 
   // The agent's working row follows the latest message, after any steering messages.
+  // A null row is the working row.
   const working = messages.some((m) => m.role === "assistant" && m.status === "streaming");
-  const rowCount = messages.length + (working ? 1 : 0);
+  const rows: (Message | null)[] = working ? [...messages, null] : messages;
 
-  const virtualizer = useVirtualizer({
-    count: rowCount,
-    getScrollElement: () => parentRef.current,
-    // Close to the real height so the first measurement barely moves scrollTop.
-    estimateSize: useCallback((index: number) => {
-      const message = messagesRef.current[index];
-      if (!message) return 40;
-      return message.role === "user"
-        ? Math.min(900, 60 + Math.ceil(message.text.length / 70) * 22)
-        : Math.min(900, 120 + Math.ceil(message.text.length / 90) * 22);
-    }, []),
-    getItemKey: useCallback((index: number) => messagesRef.current[index]?.id ?? "working", []),
-    anchorTo: "end",
-    followOnAppend: false,
-    scrollEndThreshold: 80,
-    overscan: 20,
-    directDomUpdates: true,
-    // Rows are placed with `top` rather than translate3d, which makes WebKit give every
-    // row its own compositing layer; positions are written only when the range changes.
-    directDomUpdatesMode: "position",
-    // Runs after the virtualizer reads each scroll event, so isAtEnd() sees the new position.
-    onChange: (instance) => setAtEnd(instance.isAtEnd()),
-  });
-
-  // The banner above the composer and the window size change the viewport height without
-  // a scroll, so the rows are measured again when it changes.
-  useLayoutEffect(() => {
-    const el = parentRef.current;
-    if (!el) return;
-    // A growing composer shrinks this viewport. Someone at the end should stay there, so the
-    // scroll-to-bottom button does not appear for a viewport change they did not make.
-    const observer = new ResizeObserver(() => {
-      const wasAtEnd = virtualizer.isAtEnd();
-      virtualizer.measure();
-      if (wasAtEnd) virtualizer.scrollToEnd();
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [virtualizer]);
+  useEffect(() => listRef.current?.getState().listen("isAtEnd", setAtEnd), []);
 
   // Start at the latest message and jump to it again after each send. Agent output
   // is not followed while streaming; the reader scrolls on their own.
   const lastUserMessageId = [...messages].reverse().find((m) => m.role === "user")?.id;
   useLayoutEffect(() => {
-    virtualizer.scrollToEnd();
-  }, [lastUserMessageId, virtualizer]);
+    void listRef.current?.scrollToEnd();
+  }, [lastUserMessageId]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
-        {/* With directDomUpdates the virtualizer writes this container's height and each
-            row's top itself, so neither is set here. */}
-        <div ref={virtualizer.containerRef} style={{ position: "relative", width: "100%" }}>
-          {virtualizer.getVirtualItems().map((item) => {
-            const message = messages[item.index];
-            if (!message) {
-              return (
-                <div
-                  key={item.key}
-                  ref={virtualizer.measureElement}
-                  data-index={item.index}
-                  className="px-6"
-                  style={{ position: "absolute", left: 0, width: "100%" }}
-                >
-                  <div className="flex max-w-[820px] flex-col pb-5">
-                    <WorkingRow agent={thread.agent} />
-                  </div>
-                </div>
-              );
-            }
-            const previous = messages[item.index - 1];
+      <LegendList
+        ref={listRef}
+        data={rows}
+        keyExtractor={(row) => row?.id ?? "working"}
+        getItemType={(row) => row?.role ?? "working"}
+        estimatedItemSize={90}
+        initialScrollAtEnd
+        maintainScrollAtEnd
+        maintainVisibleContentPosition
+        className="min-h-0 flex-1 overflow-x-hidden [overflow-anchor:none]"
+        renderItem={({ item, index }) => {
+          if (!item) {
             return (
-              <div
-                key={item.key}
-                ref={virtualizer.measureElement}
-                data-index={item.index}
-                className="px-6"
-                style={{ position: "absolute", left: 0, width: "100%" }}
-              >
-                <div
-                  className={`flex flex-col pb-5${item.index === 0 ? " pt-6" : ""}${message.role === "user" ? "" : " max-w-[820px]"}`}
-                >
-                  {message.role === "user" ? (
-                    <UserMessage message={message} />
-                  ) : (
-                    <AssistantMessage
-                      message={message}
-                      agent={thread.agent}
-                      changes={changes}
-                      retryMessage={previous?.role === "user" ? previous : null}
-                      busy={busy}
-                      onOpenCanvas={onOpenCanvas}
-                      onShowChanges={onShowChanges}
-                      onRetry={onRetry}
-                      onRespond={onRespond}
-                    />
-                  )}
+              <div className="px-6">
+                <div className="flex max-w-[820px] flex-col pb-5">
+                  <WorkingRow agent={thread.agent} />
                 </div>
               </div>
             );
-          })}
-        </div>
-      </div>
+          }
+          const previous = messages[index - 1];
+          return (
+            <div className="px-6">
+              <div
+                className={`flex flex-col pb-5${index === 0 ? " pt-6" : ""}${item.role === "user" ? "" : " max-w-[820px]"}`}
+              >
+                {item.role === "user" ? (
+                  <UserMessage message={item} />
+                ) : (
+                  <AssistantMessage
+                    message={item}
+                    agent={thread.agent}
+                    changes={changes}
+                    retryMessage={previous?.role === "user" ? previous : null}
+                    busy={busy}
+                    onOpenCanvas={onOpenCanvas}
+                    onShowChanges={onShowChanges}
+                    onRetry={onRetry}
+                    onRespond={onRespond}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        }}
+      />
       {!atEnd && (
         <button
           type="button"
           className="absolute bottom-3 left-1/2 grid h-8 w-8 -translate-x-1/2 cursor-pointer place-items-center rounded-full border border-border bg-panel text-fg shadow-[var(--shadow-popup)] hover:bg-hover"
           aria-label="Jump to latest message"
-          onClick={() => virtualizer.scrollToEnd({ behavior: "smooth" })}
+          onClick={() => void listRef.current?.scrollToEnd({ animated: true })}
         >
           <ArrowDownIcon size={14} />
         </button>

@@ -111,7 +111,11 @@ pub fn probe(kind: AgentKind, args: &[&str]) -> Option<Probe> {
     let deadline = Instant::now() + PROBE_TIMEOUT;
     let exit = loop {
         match child.try_wait() {
-            Ok(Some(status)) => break status,
+            Ok(Some(status)) => {
+                // Kill leftover group members so a grandchild cannot hold the pipes open.
+                signal_process_group(child.id(), libc::SIGKILL);
+                break status;
+            }
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
             _ => {
                 signal_process_group(child.id(), libc::SIGKILL);

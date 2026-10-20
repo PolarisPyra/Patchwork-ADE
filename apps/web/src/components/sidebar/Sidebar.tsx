@@ -364,6 +364,7 @@ function TasksView({
             key={t.id}
             thread={t}
             {...rowProps}
+            nested={folderId !== null}
             drag={reorder.row(
               group,
               t.id,
@@ -492,7 +493,7 @@ function TasksView({
                         </button>
                       </div>
                       <Collapse open={folderOpen}>
-                        <div className="pt-1" {...start.attrs}>
+                        <div className="pt-2.5" {...start.attrs}>
                           {inside.map((t) => taskRow(t, f.id, inside))}
                         </div>
                       </Collapse>
@@ -555,6 +556,7 @@ function ThreadRow({
   onCommitRename,
   onCancelRename,
   drag,
+  nested = false,
 }: {
   thread: Thread;
   selectedId: string | null;
@@ -565,6 +567,7 @@ function ThreadRow({
   onCommitRename: (target: Target, name: string, current: string) => void;
   onCancelRename: () => void;
   drag: RowDrag;
+  nested?: boolean;
 }) {
   const editing = renaming?.kind === "thread" && renaming.id === thread.id;
   const selected = thread.id === selectedId;
@@ -574,7 +577,7 @@ function ThreadRow({
     <div
       {...drag.attrs}
       draggable={!editing}
-      className={`group flex min-h-[26px] w-full cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none mb-1.5 px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
+      className={`group flex min-h-[26px] cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none mb-1.5 ${nested ? "ml-6 mr-1.5" : "mx-1.5"} px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
       onClick={() => onSelectThread(thread.id)}
       onContextMenu={(e) => onContextMenu(e, { kind: "thread", id: thread.id })}
     >

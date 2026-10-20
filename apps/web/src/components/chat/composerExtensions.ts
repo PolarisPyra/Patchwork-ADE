@@ -62,7 +62,9 @@ export type MentionSuggestion = MentionOptions["suggestion"];
 export function composerExtensions(placeholder: string, mentionSuggestion: MentionSuggestion) {
   return [
     // Links keep their Markdown form; clicking one in a draft does not open it.
-    StarterKit.configure({ link: { openOnClick: false, autolink: false } }),
+    // Dropped files become attachments (see Chat.tsx), so the drop cursor would point at a
+    // place nothing is inserted.
+    StarterKit.configure({ dropcursor: false, link: { openOnClick: false, autolink: false } }),
     TaskList,
     TaskItem.configure({ nested: true }),
     TableKit,
