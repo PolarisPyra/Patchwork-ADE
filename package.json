@@ -7,6 +7,7 @@
     "dev": "pnpm --filter patchwork-desktop dev",
     "dev:web": "pnpm --filter patchwork-web dev",
     "build": "pnpm --filter patchwork-desktop build",
+    "build:appimage": "pnpm --filter patchwork-desktop tauri build --bundles appimage",
     "typecheck": "pnpm --filter patchwork-web typecheck",
     "test": "cargo test --workspace",
     "tauri": "pnpm --filter patchwork-desktop tauri",
