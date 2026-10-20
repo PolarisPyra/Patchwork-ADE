@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type UIEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FolderPlusIcon } from "@phosphor-icons/react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
@@ -71,9 +71,7 @@ export default function Chat({
   const [pick, setPick] = useState<NewThreadOptions | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const stickToBottom = useRef(true);
 
   const key = thread?.id ?? "new";
   const keyRef = useRef(key);
@@ -94,15 +92,6 @@ export default function Chat({
   const working = sending || isWorking(thread);
   // Before the first message any connected agent's models are offered.
   const offered = agents.includes(agent) ? agents : [agent, ...agents];
-
-  useEffect(() => {
-    stickToBottom.current = true;
-  }, [thread?.id]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
-  }, [thread?.id, thread?.messages]);
 
   useEffect(() => {
     keyRef.current = key;
@@ -157,16 +146,10 @@ export default function Chat({
     };
   }, []);
 
-  function onScroll(e: UIEvent<HTMLDivElement>) {
-    const el = e.currentTarget;
-    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-  }
-
   async function dispatch(text: string, files: Attachment[], restoreOnError: boolean) {
     const sentKey = key;
     setError(null);
     setSending(true);
-    stickToBottom.current = true;
     try {
       await onSend(text, files, newOpts);
     } catch (e) {
@@ -229,13 +212,10 @@ export default function Chat({
       ref={rootRef}
     >
       {thread && <LineageCard thread={thread} working={working} />}
-      <div
-        className={`min-h-0 overflow-y-auto ${isNew ? "flex-none" : "flex-1"}`}
-        ref={scrollRef}
-        onScroll={onScroll}
-      >
+      <div className={`flex min-h-0 flex-col ${isNew ? "flex-none overflow-y-auto" : "flex-1"}`}>
         {!isNew ? (
           <Messages
+            key={thread.id}
             thread={thread}
             changes={changes}
             busy={working}

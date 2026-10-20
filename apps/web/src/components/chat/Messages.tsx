@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowClockwiseIcon,
+  ArrowDownIcon,
   CaretRightIcon,
   CheckCircleIcon,
   CheckIcon,
@@ -52,25 +54,80 @@ export default function Messages({
   onRespond,
 }: MessagesProps) {
   const { messages } = thread;
+  const parentRef = useRef<HTMLDivElement>(null);
+  const [atEnd, setAtEnd] = useState(true);
+
+  const virtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 120,
+    getItemKey: useCallback((index: number) => messages[index]!.id, [messages]),
+    anchorTo: "end",
+    followOnAppend: true,
+    scrollEndThreshold: 80,
+    overscan: 6,
+    directDomUpdates: true,
+    // Runs after the virtualizer reads each scroll event, so isAtEnd() sees the new position.
+    onChange: (instance) => setAtEnd(instance.isAtEnd()),
+  });
+
+  // Start at the latest message and jump to it again after each send. Agent output
+  // follows only while the reader is already at the end (followOnAppend).
+  const lastUserMessageId = [...messages].reverse().find((m) => m.role === "user")?.id;
+  useLayoutEffect(() => {
+    virtualizer.scrollToEnd();
+  }, [lastUserMessageId, virtualizer]);
+
   return (
-    <div className="mx-auto flex max-w-[820px] flex-col gap-5 p-6">
-      {messages.map((message, i) =>
-        message.role === "user" ? (
-          <UserMessage key={message.id} message={message} />
-        ) : (
-          <AssistantMessage
-            key={message.id}
-            message={message}
-            agent={thread.agent}
-            changes={changes}
-            retryMessage={messages[i - 1]?.role === "user" ? messages[i - 1] : null}
-            busy={busy}
-            onOpenCanvas={onOpenCanvas}
-            onShowChanges={onShowChanges}
-            onRetry={onRetry}
-            onRespond={onRespond}
-          />
-        ),
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
+        {/* With directDomUpdates the virtualizer writes this container's height and each
+            row's translate3d itself, so neither is set here. */}
+        <div ref={virtualizer.containerRef} style={{ position: "relative", width: "100%" }}>
+          {virtualizer.getVirtualItems().map((item) => {
+            const message = messages[item.index]!;
+            const previous = messages[item.index - 1];
+            return (
+              <div
+                key={item.key}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                className="px-6"
+                style={{ position: "absolute", top: 0, left: 0, width: "100%" }}
+              >
+                <div
+                  className={`mx-auto flex max-w-[820px] flex-col pb-5${item.index === 0 ? " pt-6" : ""}`}
+                >
+                  {message.role === "user" ? (
+                    <UserMessage message={message} />
+                  ) : (
+                    <AssistantMessage
+                      message={message}
+                      agent={thread.agent}
+                      changes={changes}
+                      retryMessage={previous?.role === "user" ? previous : null}
+                      busy={busy}
+                      onOpenCanvas={onOpenCanvas}
+                      onShowChanges={onShowChanges}
+                      onRetry={onRetry}
+                      onRespond={onRespond}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {!atEnd && (
+        <button
+          type="button"
+          className="absolute bottom-3 left-1/2 grid h-8 w-8 -translate-x-1/2 cursor-pointer place-items-center rounded-full border border-border bg-panel text-fg shadow-[var(--shadow-popup)] hover:bg-hover"
+          aria-label="Jump to latest message"
+          onClick={() => virtualizer.scrollToEnd({ behavior: "smooth" })}
+        >
+          <ArrowDownIcon size={14} />
+        </button>
       )}
     </div>
   );
