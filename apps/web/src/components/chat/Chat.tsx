@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FolderPlusIcon } from "@phosphor-icons/react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
@@ -16,7 +16,7 @@ import type { CanvasTab } from "~/components/canvas/Canvas";
 import { lastAccessMode } from "~/components/chat/AccessPicker";
 import GoalBanner from "~/components/chat/GoalBanner";
 import LineageCard from "~/components/chat/LineageCard";
-import Composer from "~/components/chat/Composer";
+import Composer, { type HistoryEntry } from "~/components/chat/Composer";
 import Messages from "~/components/chat/Messages";
 import { isWorking, type NewThreadOptions } from "~/hooks/useThreads";
 import { errorText } from "~/lib/util";
@@ -93,6 +93,17 @@ export default function Chat({
   const working = sending || isWorking(thread);
   // Before the first message any connected agent's models are offered.
   const offered = agents.includes(agent) ? agents : [agent, ...agents];
+  // What the user sent in this chat, for Up/Down in the composer; repeats count once.
+  const history = useMemo(() => {
+    const entries: HistoryEntry[] = [];
+    for (const m of thread?.messages ?? []) {
+      const text = m.text.trim();
+      if (m.role !== "user" || !text) continue;
+      if (entries.at(-1)?.text === text) entries.pop();
+      entries.push({ id: m.id, text });
+    }
+    return entries;
+  }, [thread?.messages]);
 
   useEffect(() => {
     keyRef.current = key;
@@ -303,6 +314,7 @@ export default function Chat({
           attachments={attachments}
           onRemoveAttachment={(i) => setAttachments(attachments.filter((_, j) => j !== i))}
           dropping={dropping}
+          history={history}
         />
       </div>
     </div>

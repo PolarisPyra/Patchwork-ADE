@@ -24,6 +24,19 @@ interface ComposerProps {
   onRemoveAttachment: (index: number) => void;
   /** A drag is hovering over the chat; the composer shows where it will land. */
   dropping: boolean;
+  /** The chat's earlier messages, oldest first, recalled with the arrow keys. */
+  history: HistoryEntry[];
+}
+
+export interface HistoryEntry {
+  id: string;
+  text: string;
+}
+
+/** The recalled history entry, while the draft still holds it unchanged. */
+interface Recalled {
+  id: string;
+  text: string;
 }
 
 /** Slash commands offered while the draft is a single "/word". */
@@ -66,6 +79,7 @@ export default function Composer({
   attachments,
   onRemoveAttachment,
   dropping,
+  history,
 }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // Grow with the content; CSS min/max-height keep it between about 3 and 14 rows.
@@ -88,7 +102,40 @@ export default function Composer({
     onChange(`${name} `);
   }
 
+  const recalled = useRef<Recalled | null>(null);
+
+  /** Up from an empty draft recalls the previous message, Down the next; past the newest,
+   * the draft empties. Editing a recalled message leaves the history. */
+  function stepHistory(e: KeyboardEvent<HTMLTextAreaElement>): boolean {
+    const back = e.key === "ArrowUp";
+    if ((!back && e.key !== "ArrowDown") || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) {
+      return false;
+    }
+    if (e.nativeEvent.isComposing || attachments.length > 0) return false;
+    const el = e.currentTarget;
+    const at = recalled.current?.text === value ? recalled.current : null;
+    const index = at ? history.findIndex((h) => h.id === at.id) : -1;
+    if (index < 0 && (value.length > 0 || !back)) return false;
+    // Within a multi-line message the arrows move between its lines first.
+    if (el.selectionStart !== el.selectionEnd) return false;
+    const caret = el.selectionStart;
+    if (back ? value.lastIndexOf("\n", caret - 1) !== -1 : value.indexOf("\n", caret) !== -1) {
+      return false;
+    }
+    const next = back ? history[index < 0 ? history.length - 1 : index - 1] : history[index + 1];
+    if (back && !next) return false;
+    recalled.current = next ?? null;
+    const text = next?.text ?? "";
+    onChange(text);
+    requestAnimationFrame(() => ref.current?.setSelectionRange(text.length, text.length));
+    return true;
+  }
+
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!menuOpen && stepHistory(e)) {
+      e.preventDefault();
+      return;
+    }
     if (menuOpen) {
       if (e.key === "Escape") {
         e.preventDefault();
