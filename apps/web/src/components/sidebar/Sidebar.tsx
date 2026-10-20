@@ -412,6 +412,12 @@ function TasksView({
                   const inside = tasks.filter((t) => t.folderId === f.id);
                   const folderOpen = !collapsed.has(key);
                   const folderEditing = renaming?.kind === "folder" && renaming.id === f.id;
+                  const start = reorder.start(
+                    group,
+                    inside[0]?.id,
+                    inside.map((x) => x.id),
+                    f.id,
+                  );
                   const target = reorder.folder(
                     group,
                     key,
@@ -422,7 +428,7 @@ function TasksView({
                     <div key={f.id}>
                       <div
                         {...target.attrs}
-                        className={`group mb-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 py-1 text-fg hover:bg-hover ${target.edge}`}
+                        className={`group flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 py-1 text-fg hover:bg-hover ${target.edge}`}
                         onClick={() => toggle(key)}
                         onContextMenu={(e) => openMenu(e, { kind: "folder", id: f.id })}
                       >
@@ -463,7 +469,9 @@ function TasksView({
                         </button>
                       </div>
                       <Collapse open={folderOpen}>
-                        <div className="pl-3.5">{inside.map((t) => taskRow(t, f.id, inside))}</div>
+                        <div className="pt-1 pl-3.5" {...start.attrs}>
+                          {inside.map((t) => taskRow(t, f.id, inside))}
+                        </div>
                       </Collapse>
                     </div>
                   );

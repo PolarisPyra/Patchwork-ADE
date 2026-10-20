@@ -4,7 +4,7 @@ import { useState, type DragEvent } from "react";
 export interface DropTarget {
   attrs: {
     onDragOver: (e: DragEvent<HTMLElement>) => void;
-    onDragLeave: () => void;
+    onDragLeave: (e: DragEvent<HTMLElement>) => void;
     onDrop: (e: DragEvent<HTMLElement>) => void;
     onDragEnd: () => void;
   };
@@ -39,6 +39,11 @@ export function useRowReorder(
   const [drag, setDrag] = useState<{ group: string; id: string } | null>(null);
   const [target, setTarget] = useState<{ key: string; after: boolean } | null>(null);
 
+  // Clears the drop line only when the pointer leaves the element, not when it moves onto a child.
+  const leave = (e: DragEvent<HTMLElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTarget(null);
+  };
+
   const end = () => {
     setDrag(null);
     setTarget(null);
@@ -68,7 +73,7 @@ export function useRowReorder(
           const next = { key: id, after: isBelowMiddle(e) };
           setTarget((cur) => (cur?.key === next.key && cur.after === next.after ? cur : next));
         },
-        onDragLeave: () => setTarget(null),
+        onDragLeave: leave,
         onDrop: (e) => {
           if (!drag || !accepts()) return;
           e.preventDefault();
@@ -96,7 +101,7 @@ export function useRowReorder(
           e.dataTransfer.dropEffect = "move";
           setTarget((cur) => (cur?.key === key ? cur : { key, after: false }));
         },
-        onDragLeave: () => setTarget(null),
+        onDragLeave: leave,
         onDrop: (e) => {
           if (!drag || !accepts()) return;
           e.preventDefault();
@@ -109,5 +114,50 @@ export function useRowReorder(
     };
   };
 
-  return { row, folder };
+  /**
+   * Handlers for the empty space above a list's first row (the list element itself, not
+   * its rows). A drop there puts the dragged row first in the list `ids`.
+   */
+  const start = (
+    group: string,
+    firstId: string | undefined,
+    ids: string[],
+    folderId: string | null,
+  ): DropTarget => {
+    // Only the space above the first row counts; the gaps between rows belong to the list too.
+    const aboveFirst = (e: DragEvent<HTMLElement>) => {
+      const first = e.currentTarget.firstElementChild;
+      return first !== null && e.clientY < first.getBoundingClientRect().top;
+    };
+    const accepts = (e: DragEvent<HTMLElement>) =>
+      drag !== null &&
+      drag.group === group &&
+      drag.id !== firstId &&
+      e.target === e.currentTarget &&
+      aboveFirst(e);
+
+    return {
+      attrs: {
+        onDragOver: (e) => {
+          if (!accepts(e) || firstId === undefined) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setTarget((cur) =>
+            cur?.key === firstId && !cur.after ? cur : { key: firstId, after: false },
+          );
+        },
+        onDragLeave: leave,
+        onDrop: (e) => {
+          if (!drag || !accepts(e)) return;
+          e.preventDefault();
+          onReorder(group, [drag.id, ...ids.filter((other) => other !== drag.id)], folderId);
+          end();
+        },
+        onDragEnd: end,
+      },
+      edge: "",
+    };
+  };
+
+  return { row, folder, start };
 }
