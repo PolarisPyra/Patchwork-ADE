@@ -302,7 +302,6 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       <Toolbar
         project={project}
         projects={settings.projects}
-        branch={branch}
         onSelectProject={selectProject}
         onOpenFolder={openFolder}
       />

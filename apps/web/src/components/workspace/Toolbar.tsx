@@ -1,4 +1,4 @@
-import { CaretDownIcon, ChatsIcon, FolderPlusIcon, GitBranchIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, ChatsIcon, FolderPlusIcon } from "@phosphor-icons/react";
 import type { Project } from "~/api";
 import Dropdown from "~/components/workspace/Dropdown";
 
@@ -24,7 +24,6 @@ function initials(name: string): string {
 interface ToolbarProps {
   project: Project | null;
   projects: Project[];
-  branch: string | null;
   onSelectProject: (id: string) => void;
   onOpenFolder: () => void;
 }
@@ -32,14 +31,13 @@ interface ToolbarProps {
 export default function Toolbar({
   project,
   projects,
-  branch,
   onSelectProject,
   onOpenFolder,
 }: ToolbarProps) {
   const name = project?.name ?? "";
 
   return (
-    <header className="flex min-w-0 items-center gap-1.5 border-b border-border bg-app pr-2 pl-[calc((var(--stripe-w)_-_1px_-_20px)/2_-_4px)]">
+    <header className="flex min-w-0 items-center gap-1.5 border-b border-border bg-app pr-2 pl-[calc((var(--stripe-w)_+_4px_-_20px)/2_-_4px)]">
       <div className="flex min-w-0 items-center gap-1.5">
         <Dropdown
           trigger={({ toggle }) => (
@@ -97,19 +95,6 @@ export default function Toolbar({
             </>
           )}
         </Dropdown>
-
-        {branch && (
-          <>
-            <span className="mx-1 h-4 w-px flex-none bg-border" />
-            <span
-              className="inline-flex min-w-0 max-w-[200px] items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap text-fg-muted text-[length:var(--fs-sm)]"
-              title="Current branch"
-            >
-              <GitBranchIcon size={14} />
-              {branch}
-            </span>
-          </>
-        )}
       </div>
     </header>
   );
