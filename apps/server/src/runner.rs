@@ -542,6 +542,25 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
         let Ok(value) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
+        // A message Claude took after it had already ended its reply (while a background
+        // subagent kept it running) is answered from here on, below that message.
+        if ended
+            && turn.agent == AgentKind::Claude
+            && !turn
+                .steers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .is_empty()
+        {
+            turn.steers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clear();
+            turn.next_segment(&mut unsaved);
+            segments.push(turn.message_id.clone());
+            (has_text, last_was_text) = (false, false);
+            ended = false;
+        }
         let parsed = provider::parse_line(turn.agent, &value, &turn.spec(), &turn.message_id);
         for item in parsed {
             match item {
@@ -598,7 +617,10 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                     if stream_error.is_some() {
                         goal_run = false;
                     }
-                    if !goal_run {
+                    // Claude stays up while a subagent it sent to the background works, and
+                    // takes messages meanwhile; stdin is closed once that subagent ends.
+                    let background = running_tasks.values().any(Option::is_some);
+                    if !goal_run && !background {
                         turn.close_unless_steered();
                     }
                 }
@@ -678,6 +700,10 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                             tool_id,
                             is_error: failed || call_failed,
                         });
+                    }
+                    let background = running_tasks.values().any(Option::is_some);
+                    if ended && !goal_run && !background {
+                        turn.close_unless_steered();
                     }
                 }
                 Parsed::TurnStarted(id) => {
