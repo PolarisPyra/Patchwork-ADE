@@ -79,24 +79,15 @@ pub fn configured_model() -> Option<String> {
         .map(String::from)
 }
 
-/// Antigravity's models (`agy models` prints `<id>\t<label>` lines), else the Gemini models
-/// from the fetched model manifest.
+/// Current models from the fetched model manifest: Antigravity's when its CLI is installed
+/// (its ids differ from the Gemini CLI's), else the Gemini CLI's.
 pub fn models() -> Vec<ModelOption> {
-    if antigravity_bin().is_none() {
-        return model_manifest::models("gemini");
-    }
-    let listed = probe(AgentKind::Gemini, &["models"])
-        .map(|p| p.stdout)
-        .unwrap_or_default();
-    listed
-        .lines()
-        .filter_map(|l| l.split_once('\t'))
-        .map(|(id, label)| ModelOption {
-            id: Some(id.trim().into()),
-            label: label.trim().into(),
-            default_model: None,
-        })
-        .collect()
+    let provider = if antigravity_bin().is_some() {
+        "antigravity"
+    } else {
+        "gemini"
+    };
+    model_manifest::models(provider)
 }
 
 /// Gemini runs headless, so "default" cannot ask: actions that need approval are refused.
