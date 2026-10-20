@@ -154,6 +154,60 @@ pub struct Approval {
     pub status: ApprovalStatus,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AttachmentKind {
+    Image,
+    File,
+    Folder,
+}
+
+/// Something dropped into the composer, sent to the agent with the message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    pub kind: AttachmentKind,
+    /// Absolute path on disk.
+    pub path: String,
+    /// Last path component, for display.
+    pub name: String,
+}
+
+/// Media type for the image formats the agents accept, by file extension.
+pub fn image_media_type(path: &str) -> Option<&'static str> {
+    let ext = path.rsplit_once('.')?.1.to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        _ => None,
+    }
+}
+
+impl Attachment {
+    /// Classifies a path that exists on disk.
+    pub fn from_path(path: &str) -> Result<Self, String> {
+        let meta = std::fs::metadata(path).map_err(|e| format!("{path}: {e}"))?;
+        let kind = if meta.is_dir() {
+            AttachmentKind::Folder
+        } else if image_media_type(path).is_some() {
+            AttachmentKind::Image
+        } else {
+            AttachmentKind::File
+        };
+        let name = std::path::Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.to_string());
+        Ok(Self {
+            kind,
+            path: path.to_string(),
+            name,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -174,6 +228,9 @@ pub struct Message {
     pub error: Option<String>,
     #[serde(default)]
     pub approvals: Vec<Approval>,
+    /// Files, folders, and images the user dropped into the message.
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

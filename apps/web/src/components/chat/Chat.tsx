@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type UIEvent } from "react";
 import { FolderPlusIcon } from "@phosphor-icons/react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   api,
   type AccessMode,
   type AgentKind,
+  type Attachment,
   type FileChange,
   type Message,
   type Project,
@@ -38,7 +40,7 @@ interface ChatProps {
   agents: AgentKind[];
   onOpenFolder: () => void;
   onOpenCanvas: (path: string, message: Message | null, tab: CanvasTab) => void;
-  onSend: (text: string, draft: NewThreadOptions) => Promise<void>;
+  onSend: (text: string, attachments: Attachment[], draft: NewThreadOptions) => Promise<void>;
   onCancel: (threadId: string) => Promise<void>;
   onSetModel: (threadId: string, agent: AgentKind, model: string | null) => Promise<void>;
   onSetAccessMode: (threadId: string, mode: AccessMode) => Promise<void>;
@@ -59,16 +61,23 @@ export default function Chat({
 }: ChatProps) {
   // Drafts are kept per thread ("new" when nothing is selected).
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // Files and images dropped into the composer, kept per thread like drafts.
+  const [pending, setPending] = useState<Record<string, Attachment[]>>({});
+  const [dropping, setDropping] = useState(false);
   // Agent/model/access chosen for the next thread; null means the defaults.
   const [pick, setPick] = useState<NewThreadOptions | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
   const key = thread?.id ?? "new";
+  const keyRef = useRef(key);
   const draft = drafts[key] ?? "";
   const setDraft = (text: string) => setDrafts((d) => ({ ...d, [key]: text }));
+  const attachments = pending[key] ?? [];
+  const setAttachments = (next: Attachment[]) => setPending((p) => ({ ...p, [key]: next }));
 
   const newOpts: NewThreadOptions = pick ?? {
     agent: defaultAgent,
@@ -92,22 +101,76 @@ export default function Chat({
     if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
   }, [thread?.id, thread?.messages]);
 
+  useEffect(() => {
+    keyRef.current = key;
+  }, [key]);
+
+  // Tauri hands dropped files over as paths (HTML drop events carry none), so drops are
+  // listened for on the webview and kept only when they land on the chat.
+  useEffect(() => {
+    async function attach(paths: string[]) {
+      const sentKey = keyRef.current;
+      try {
+        const found = await Promise.all(paths.map((path) => api.attachmentForPath(path)));
+        setPending((prev) => {
+          const current = prev[sentKey] ?? [];
+          const fresh = found.filter((a) => !current.some((c) => c.path === a.path));
+          return { ...prev, [sentKey]: [...current, ...fresh] };
+        });
+      } catch (e) {
+        setError(errorText(e));
+      }
+    }
+    function overChat(position: { x: number; y: number }) {
+      const el = rootRef.current;
+      if (!el) return false;
+      // Positions are physical pixels; the chat's rect is in CSS pixels.
+      const scale = window.devicePixelRatio;
+      const r = el.getBoundingClientRect();
+      const x = position.x / scale;
+      const y = position.y / scale;
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    }
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWebview()
+      .onDragDropEvent(({ payload }) => {
+        if (payload.type === "leave") {
+          setDropping(false);
+        } else if (payload.type === "drop") {
+          setDropping(false);
+          if (overChat(payload.position)) void attach(payload.paths);
+        } else {
+          setDropping(overChat(payload.position));
+        }
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   function onScroll(e: UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
     stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
   }
 
-  async function dispatch(text: string, restoreOnError: boolean) {
+  async function dispatch(text: string, files: Attachment[], restoreOnError: boolean) {
     const sentKey = key;
     setError(null);
     setSending(true);
     stickToBottom.current = true;
     try {
-      await onSend(text, newOpts);
+      await onSend(text, files, newOpts);
     } catch (e) {
       setError(errorText(e));
       if (restoreOnError) {
         setDrafts((d) => (d[sentKey] ? d : { ...d, [sentKey]: text }));
+        setPending((p) => (p[sentKey] ? p : { ...p, [sentKey]: files }));
       }
     } finally {
       setSending(false);
@@ -116,13 +179,14 @@ export default function Chat({
 
   function submit() {
     const text = draft.trim();
-    if (!text || working) return;
+    if ((!text && attachments.length === 0) || working) return;
     setDraft("");
-    void dispatch(text, true);
+    setAttachments([]);
+    void dispatch(text, attachments, true);
   }
 
-  function retry(text: string) {
-    if (!working) void dispatch(text, false);
+  function retry(message: Message) {
+    if (!working) void dispatch(message.text, message.attachments, false);
   }
 
   function stop() {
@@ -157,7 +221,10 @@ export default function Chat({
 
   const isNew = !thread || empty;
   return (
-    <div className={`flex min-h-0 min-w-0 flex-1 flex-col${isNew ? " justify-center" : ""}`}>
+    <div
+      className={`flex min-h-0 min-w-0 flex-1 flex-col${isNew ? " justify-center" : ""}`}
+      ref={rootRef}
+    >
       <div
         className={`min-h-0 overflow-y-auto ${isNew ? "flex-none" : "flex-1"}`}
         ref={scrollRef}
@@ -217,6 +284,9 @@ export default function Chat({
           onPickModel={pickModel}
           accessMode={accessMode}
           onPickAccess={pickAccess}
+          attachments={attachments}
+          onRemoveAttachment={(i) => setAttachments(attachments.filter((_, j) => j !== i))}
+          dropping={dropping}
         />
       </div>
     </div>

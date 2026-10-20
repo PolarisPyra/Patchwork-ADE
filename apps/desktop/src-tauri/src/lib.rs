@@ -112,8 +112,18 @@ fn set_thread_access_mode(server: Srv, id: String, mode: AccessMode) -> Res<()> 
 }
 
 #[tauri::command]
-fn send_message(server: Srv, thread_id: String, text: String) -> Res<Message> {
-    server.send_message(thread_id, text)
+fn send_message(
+    server: Srv,
+    thread_id: String,
+    text: String,
+    attachments: Vec<Attachment>,
+) -> Res<Message> {
+    server.send_message(thread_id, text, attachments)
+}
+
+#[tauri::command]
+fn attachment_for_path(path: String) -> Res<Attachment> {
+    Attachment::from_path(&path)
 }
 
 #[tauri::command]
@@ -220,6 +230,7 @@ pub fn run() {
             set_thread_model,
             set_thread_access_mode,
             send_message,
+            attachment_for_path,
             cancel_turn,
             respond_approval,
             scan_imports,

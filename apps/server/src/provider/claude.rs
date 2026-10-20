@@ -82,11 +82,18 @@ pub fn turn_args(spec: &TurnSpec) -> Vec<String> {
     args
 }
 
-/// The stream-json input line carrying the prompt.
-pub fn user_message(text: &str) -> String {
+/// The stream-json input line carrying the prompt and any attached images.
+pub fn user_message(text: &str, images: &[Image]) -> String {
+    let mut content = vec![serde_json::json!({"type": "text", "text": text})];
+    content.extend(images.iter().map(|i| {
+        serde_json::json!({
+            "type": "image",
+            "source": {"type": "base64", "media_type": i.media_type, "data": i.data}
+        })
+    }));
     serde_json::json!({
         "type": "user",
-        "message": {"role": "user", "content": [{"type": "text", "text": text}]},
+        "message": {"role": "user", "content": content},
         "parent_tool_use_id": null,
         "session_id": "",
     })
@@ -358,6 +365,23 @@ mod tests {
     }
 
     #[test]
+    fn user_message_carries_images_as_base64_blocks() {
+        let images = [Image {
+            media_type: "image/png",
+            data: "AAAA".into(),
+        }];
+        let line: Value = serde_json::from_str(&user_message("look", &images)).unwrap();
+        assert_eq!(
+            line["message"]["content"][0],
+            json!({"type": "text", "text": "look"})
+        );
+        assert_eq!(
+            line["message"]["content"][1],
+            json!({"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AAAA"}})
+        );
+    }
+
+    #[test]
     fn claude_args_include_resume_model_and_mode() {
         let mut spec = TurnSpec {
             root: "/abs",
@@ -365,6 +389,8 @@ mod tests {
             model: Some("opus"),
             text: "do it",
             mode: AccessMode::FullAccess,
+            attachments: &[],
+            images: &[],
         };
         assert_eq!(
             turn_args(&spec),

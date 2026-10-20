@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowUpIcon, SquareIcon } from "@phosphor-icons/react";
-import { api, type AccessMode, type AgentKind, type ModelOption } from "~/api";
+import { api, type AccessMode, type AgentKind, type Attachment, type ModelOption } from "~/api";
 import AccessPicker from "~/components/chat/AccessPicker";
+import AttachmentChip from "~/components/chat/AttachmentChip";
 import ModelPicker from "~/components/chat/ModelPicker";
 
 interface ComposerProps {
@@ -19,6 +20,10 @@ interface ComposerProps {
   onPickModel: (agent: AgentKind, model: string | null) => void;
   accessMode: AccessMode;
   onPickAccess: (mode: AccessMode) => void;
+  attachments: Attachment[];
+  onRemoveAttachment: (index: number) => void;
+  /** A drag is hovering over the chat; the composer shows where it will land. */
+  dropping: boolean;
 }
 
 /** Models per agent, fetched once per agent kind. */
@@ -55,6 +60,9 @@ export default function Composer({
   onPickModel,
   accessMode,
   onPickAccess,
+  attachments,
+  onRemoveAttachment,
+  dropping,
 }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // Grow with the content; CSS min/max-height keep it between about 3 and 14 rows.
@@ -74,7 +82,16 @@ export default function Composer({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-[var(--radius-lg)] border border-border-strong bg-editor pt-3.5 pr-3 pb-2.5 pl-3 focus-within:border-accent">
+    <div
+      className={`flex flex-col gap-2 rounded-[var(--radius-lg)] border bg-editor pt-3.5 pr-3 pb-2.5 pl-3 focus-within:border-accent ${dropping ? "border-dashed border-accent" : "border-border-strong"}`}
+    >
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-1.5">
+          {attachments.map((a, i) => (
+            <AttachmentChip key={a.path} attachment={a} onRemove={() => onRemoveAttachment(i)} />
+          ))}
+        </div>
+      )}
       <textarea
         ref={ref}
         className="min-h-16 max-h-[280px] resize-none overflow-y-auto border-none bg-transparent px-1.5 py-0 text-fg text-[length:var(--fs-md)] leading-[20px] placeholder:text-fg-subtle outline-none selectable"
@@ -107,7 +124,7 @@ export default function Composer({
           <button
             className="grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-accent text-on-accent enabled:hover:bg-accent-hover disabled:cursor-default disabled:bg-selected-muted disabled:text-fg-subtle"
             onClick={onSubmit}
-            disabled={!value.trim()}
+            disabled={!value.trim() && attachments.length === 0}
             title="Send"
             aria-label="Send"
           >

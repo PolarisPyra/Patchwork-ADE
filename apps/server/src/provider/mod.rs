@@ -173,6 +173,62 @@ pub struct TurnSpec<'a> {
     pub model: Option<&'a str>,
     pub text: &'a str,
     pub mode: AccessMode,
+    pub attachments: &'a [Attachment],
+    /// The image attachments, read from disk by `load_images`.
+    pub images: &'a [Image],
+}
+
+/// An attached image, base64-encoded for the agent's input.
+pub struct Image {
+    pub media_type: &'static str,
+    pub data: String,
+}
+
+/// Largest image sent to an agent; the agents reject bigger ones.
+const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Reads and encodes every image attachment.
+pub fn load_images(attachments: &[Attachment]) -> Result<Vec<Image>, String> {
+    use base64::Engine;
+    attachments
+        .iter()
+        .filter(|a| a.kind == AttachmentKind::Image)
+        .map(|a| {
+            let media_type = image_media_type(&a.path).ok_or("Not an image")?;
+            let size = std::fs::metadata(&a.path)
+                .map_err(|e| format!("{}: {e}", a.name))?
+                .len();
+            if size > MAX_IMAGE_BYTES {
+                return Err(format!("{} is larger than 5 MB", a.name));
+            }
+            let bytes = std::fs::read(&a.path).map_err(|e| format!("{}: {e}", a.name))?;
+            let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+            Ok(Image { media_type, data })
+        })
+        .collect()
+}
+
+/// The prompt the agent reads: the message, then the paths of what was attached,
+/// so the agent can open files and folders with its own tools.
+pub fn prompt(spec: &TurnSpec) -> String {
+    if spec.attachments.is_empty() {
+        return spec.text.to_string();
+    }
+    let lines: Vec<String> = spec
+        .attachments
+        .iter()
+        .map(|a| {
+            let kind = match a.kind {
+                AttachmentKind::Image => "image",
+                AttachmentKind::File => "file",
+                AttachmentKind::Folder => "folder",
+            };
+            format!("- {} ({kind})", a.path)
+        })
+        .collect();
+    format!("{}\n\nAttached:\n{}", spec.text, lines.join("\n"))
+        .trim_start()
+        .to_string()
 }
 
 /// Command-line arguments for one turn.
@@ -188,7 +244,7 @@ pub fn turn_args(agent: AgentKind, spec: &TurnSpec) -> Vec<String> {
 /// agent takes no input, and stdin is closed.
 pub fn turn_input(agent: AgentKind, spec: &TurnSpec) -> Vec<String> {
     match agent {
-        AgentKind::Claude => vec![claude::user_message(spec.text)],
+        AgentKind::Claude => vec![claude::user_message(&prompt(spec), spec.images)],
         AgentKind::Codex => codex::turn_input(spec),
         AgentKind::Gemini => vec![],
     }
@@ -306,4 +362,61 @@ fn summarize(input: &Value, root: &str) -> String {
         })
         .map(|s| one_line(&s))
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod attachment_tests {
+    use super::*;
+
+    fn attachment(kind: AttachmentKind, path: &str) -> Attachment {
+        Attachment {
+            kind,
+            path: path.into(),
+            name: path.rsplit('/').next().unwrap_or(path).into(),
+        }
+    }
+
+    #[test]
+    fn prompt_lists_attached_paths_after_the_message() {
+        let attachments = [
+            attachment(AttachmentKind::Folder, "/abs/src"),
+            attachment(AttachmentKind::File, "/abs/notes.md"),
+        ];
+        let spec = TurnSpec {
+            root: "/abs",
+            session_id: None,
+            model: None,
+            text: "review these",
+            mode: AccessMode::Supervised,
+            attachments: &attachments,
+            images: &[],
+        };
+        assert_eq!(
+            prompt(&spec),
+            "review these\n\nAttached:\n- /abs/src (folder)\n- /abs/notes.md (file)"
+        );
+    }
+
+    #[test]
+    fn prompt_without_a_message_starts_at_the_attachments() {
+        let attachments = [attachment(AttachmentKind::Image, "/abs/shot.png")];
+        let spec = TurnSpec {
+            root: "/abs",
+            session_id: None,
+            model: None,
+            text: "",
+            mode: AccessMode::Supervised,
+            attachments: &attachments,
+            images: &[],
+        };
+        assert_eq!(prompt(&spec), "Attached:\n- /abs/shot.png (image)");
+    }
+
+    #[test]
+    fn image_extensions_map_to_media_types() {
+        assert_eq!(image_media_type("/a/b.PNG"), Some("image/png"));
+        assert_eq!(image_media_type("/a/b.jpeg"), Some("image/jpeg"));
+        assert_eq!(image_media_type("/a/b.txt"), None);
+        assert_eq!(image_media_type("/a/noext"), None);
+    }
 }

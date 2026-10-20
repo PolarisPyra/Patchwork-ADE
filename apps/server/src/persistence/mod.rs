@@ -263,11 +263,12 @@ fn save_message(
     tx.execute(
         "INSERT INTO messages
              (id, thread_id, position, role, text, created_at, status, tools, plan, files, error,
-              approvals)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+              approvals, attachments)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
          ON CONFLICT (id) DO UPDATE SET position = excluded.position, text = excluded.text,
              status = excluded.status, tools = excluded.tools, plan = excluded.plan,
-             files = excluded.files, error = excluded.error, approvals = excluded.approvals",
+             files = excluded.files, error = excluded.error, approvals = excluded.approvals,
+             attachments = excluded.attachments",
         params![
             m.id,
             thread_id,
@@ -280,7 +281,8 @@ fn save_message(
             json(&m.plan),
             json(&m.files),
             m.error,
-            json(&m.approvals)
+            json(&m.approvals),
+            json(&m.attachments)
         ],
     )?;
     Ok(())
@@ -326,7 +328,8 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
         })?
         .collect::<rusqlite::Result<_>>()?;
     let mut stmt = conn.prepare(
-        "SELECT id, role, text, created_at, status, tools, plan, files, error, approvals
+        "SELECT id, role, text, created_at, status, tools, plan, files, error, approvals,
+                attachments
          FROM messages WHERE thread_id = ?1 ORDER BY position",
     )?;
     for t in &mut threads {
@@ -343,6 +346,7 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                     files: from_json(r.get(7)?),
                     error: r.get(8)?,
                     approvals: from_json(r.get(9)?),
+                    attachments: from_json(r.get(10)?),
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -410,6 +414,7 @@ mod tests {
             files: vec!["a.rs".into()],
             error: None,
             approvals: vec![],
+            attachments: vec![],
         }
     }
 

@@ -24,6 +24,7 @@ import {
   type ToolCall,
 } from "~/api";
 import type { CanvasTab } from "~/components/canvas/Canvas";
+import AttachmentChip from "~/components/chat/AttachmentChip";
 import Markdown, { ACTION_CLASS, CopyButton } from "~/components/chat/Markdown";
 import { baseName, formatClock, languageLabel } from "~/lib/util";
 
@@ -35,7 +36,7 @@ interface MessagesProps {
   busy: boolean;
   /** Omitted for chats without a project: file cards are hidden. */
   onOpenCanvas?: OpenCanvas;
-  onRetry: (text: string) => void;
+  onRetry: (message: Message) => void;
   /** Answers a pending approval in the running turn. */
   onRespond: (approvalId: string, allow: boolean) => void;
 }
@@ -60,7 +61,7 @@ export default function Messages({
             message={message}
             agent={thread.agent}
             changes={changes}
-            retryText={messages[i - 1]?.role === "user" ? messages[i - 1].text : null}
+            retryMessage={messages[i - 1]?.role === "user" ? messages[i - 1] : null}
             busy={busy}
             onOpenCanvas={onOpenCanvas}
             onRetry={onRetry}
@@ -78,9 +79,18 @@ function UserMessage({ message }: { message: Message }) {
       <div className="px-2 text-[length:var(--fs-xs)] text-fg-subtle">
         You · {formatClock(message.createdAt)}
       </div>
-      <div className="rounded-[12px] bg-[color-mix(in_srgb,var(--text)_10%,var(--bg-editor))] px-4 py-2.5 leading-[1.55] whitespace-pre-wrap text-fg [word-break:break-word] selectable">
-        {message.text}
-      </div>
+      {message.attachments.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {message.attachments.map((a) => (
+            <AttachmentChip key={a.path} attachment={a} />
+          ))}
+        </div>
+      )}
+      {message.text && (
+        <div className="rounded-[12px] bg-[color-mix(in_srgb,var(--text)_10%,var(--bg-editor))] px-4 py-2.5 leading-[1.55] whitespace-pre-wrap text-fg [word-break:break-word] selectable">
+          {message.text}
+        </div>
+      )}
     </div>
   );
 }
@@ -89,10 +99,10 @@ interface AssistantProps {
   message: Message;
   agent: AgentKind;
   changes: FileChange[];
-  retryText: string | null;
+  retryMessage: Message | null;
   busy: boolean;
   onOpenCanvas?: OpenCanvas;
-  onRetry: (text: string) => void;
+  onRetry: (message: Message) => void;
   onRespond: (approvalId: string, allow: boolean) => void;
 }
 
@@ -100,7 +110,7 @@ function AssistantMessage({
   message,
   agent,
   changes,
-  retryText,
+  retryMessage,
   busy,
   onOpenCanvas,
   onRetry,
@@ -138,8 +148,8 @@ function AssistantMessage({
       {!streaming && (
         <div className="flex gap-1">
           <CopyButton text={message.text} />
-          {retryText !== null && (
-            <button className={ACTION_CLASS} disabled={busy} onClick={() => onRetry(retryText)}>
+          {retryMessage !== null && (
+            <button className={ACTION_CLASS} disabled={busy} onClick={() => onRetry(retryMessage)}>
               <ArrowClockwiseIcon size={13} /> Retry
             </button>
           )}

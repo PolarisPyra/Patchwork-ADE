@@ -46,6 +46,8 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE threads ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'full-access';
     ALTER TABLE messages ADD COLUMN approvals TEXT NOT NULL DEFAULT '[]';
     ",
+    // 3: files, folders, and images attached to a message.
+    "ALTER TABLE messages ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';",
 ];
 
 /// Brings the schema up to date. Returns the version the database was at before.

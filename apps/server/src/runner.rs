@@ -54,6 +54,8 @@ impl Runner {
         server: &Arc<Server>,
         thread_id: String,
         text: String,
+        attachments: Vec<Attachment>,
+        images: Vec<provider::Image>,
     ) -> Result<(), String> {
         let (agent, root, session_id, model, mode) = {
             let thread = server.store.thread(&thread_id).ok_or("Task not found")?;
@@ -85,6 +87,8 @@ impl Runner {
             model: model.as_deref(),
             text: &text,
             mode,
+            attachments: &attachments,
+            images: &images,
         };
 
         // Agents often edit files through the shell, so changes are also found by
@@ -127,6 +131,7 @@ impl Runner {
             files: vec![],
             error: None,
             approvals: vec![],
+            attachments: vec![],
         };
         let cancelled = Arc::new(AtomicBool::new(false));
         let pending = Pending::default();
@@ -144,6 +149,8 @@ impl Runner {
             model,
             text,
             mode,
+            attachments,
+            images,
         };
         self.turns
             .lock()
@@ -253,6 +260,8 @@ struct Turn {
     model: Option<String>,
     text: String,
     mode: AccessMode,
+    attachments: Vec<Attachment>,
+    images: Vec<provider::Image>,
 }
 
 impl Turn {
@@ -267,6 +276,8 @@ impl Turn {
             model: self.model.as_deref(),
             text: &self.text,
             mode: self.mode,
+            attachments: &self.attachments,
+            images: &self.images,
         }
     }
 }
@@ -563,6 +574,8 @@ mod tests {
             model: (agent == AgentKind::Claude).then_some("haiku"),
             text: "Create a file named hello.txt whose only content is the two letters hi (no period). Do nothing else.",
             mode,
+            attachments: &[],
+            images: &[],
         };
         let baseline = workspace::git_changes(root_str).unwrap();
         let input = provider::turn_input(agent, &spec);

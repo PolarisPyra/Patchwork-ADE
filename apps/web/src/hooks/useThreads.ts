@@ -5,6 +5,7 @@ import {
   type AccessMode,
   type AgentEvent,
   type AgentKind,
+  type Attachment,
   type Message,
   type StepStatus,
   type Thread,
@@ -94,7 +95,9 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
         error,
         tools: m.tools.map((t) => (t.status === "running" ? { ...t, status: toolEnd } : t)),
         plan: m.plan.map((s) => (s.status === "running" ? { ...s, status: "pending" } : s)),
-        approvals: m.approvals.map((a) => (a.status === "pending" ? { ...a, status: "denied" } : a)),
+        approvals: m.approvals.map((a) =>
+          a.status === "pending" ? { ...a, status: "denied" } : a,
+        ),
       }));
     }
   }
@@ -190,9 +193,14 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
   }
 
   /** Sends a message, creating a thread in `projectId` first when none is selected. */
-  async function send(text: string, draft: NewThreadOptions, projectId: string | null): Promise<void> {
+  async function send(
+    text: string,
+    attachments: Attachment[],
+    draft: NewThreadOptions,
+    projectId: string | null,
+  ): Promise<void> {
     const thread = selected ?? (await createThread(projectId, draft));
-    const message = await api.sendMessage(thread.id, text);
+    const message = await api.sendMessage(thread.id, text, attachments);
     setThreads((prev) =>
       prev.map((t) =>
         t.id !== thread.id

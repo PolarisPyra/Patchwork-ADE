@@ -8,6 +8,7 @@ export type Theme = "light" | "dark" | "system";
 export type Role = "user" | "assistant";
 export type MessageStatus = "streaming" | "complete" | "error" | "cancelled";
 export type StepStatus = "pending" | "running" | "done" | "error";
+export type AttachmentKind = "image" | "file" | "folder";
 
 export interface Integrations {
   github: boolean;
@@ -84,6 +85,16 @@ export interface Message {
   files: string[]; // project-relative paths edited during this message
   error: string | null;
   approvals: Approval[];
+  attachments: Attachment[];
+}
+
+/** Something dropped into the composer, sent to the agent with the message. */
+export interface Attachment {
+  kind: AttachmentKind;
+  /** Absolute path on disk. */
+  path: string;
+  /** Last path component, for display. */
+  name: string;
 }
 
 export interface Thread {
@@ -187,7 +198,6 @@ export function importSourcesFor(agents: AgentKind[]): ImportSource[] {
   return [...agents, "t3"];
 }
 
-
 const agentStatusCache: Partial<Record<AgentKind, AgentStatus>> = {};
 const pendingDetect: Partial<Record<AgentKind, Promise<AgentStatus>>> = {};
 
@@ -248,25 +258,24 @@ export const api = {
   setThreadAccessMode: (id: string, mode: AccessMode) =>
     invoke<void>("set_thread_access_mode", { id, mode }),
   /** Returns the stored user message; assistant output streams via onAgentEvent. */
-  sendMessage: (threadId: string, text: string) =>
-    invoke<Message>("send_message", { threadId, text }),
+  sendMessage: (threadId: string, text: string, attachments: Attachment[]) =>
+    invoke<Message>("send_message", { threadId, text, attachments }),
+  /** Classifies a dropped path as a file, folder, or image. */
+  attachmentForPath: (path: string) => invoke<Attachment>("attachment_for_path", { path }),
   cancelTurn: (threadId: string) => invoke<void>("cancel_turn", { threadId }),
   respondApproval: (threadId: string, approvalId: string, allow: boolean) =>
     invoke<void>("respond_approval", { threadId, approvalId, allow }),
 
-  readFile: (projectId: string, path: string) =>
-    invoke<string>("read_file", { projectId, path }),
+  readFile: (projectId: string, path: string) => invoke<string>("read_file", { projectId, path }),
   gitBranch: (projectId: string) => invoke<string | null>("git_branch", { projectId }),
   gitChanges: (projectId: string) => invoke<FileChange[]>("git_changes", { projectId }),
   /** Unified diff text for one file (empty string if unchanged). */
   gitFileDiff: (projectId: string, path: string) =>
     invoke<string>("git_file_diff", { projectId, path }),
   /** "Apply changes": stages the file (git add). */
-  acceptFile: (projectId: string, path: string) =>
-    invoke<void>("accept_file", { projectId, path }),
+  acceptFile: (projectId: string, path: string) => invoke<void>("accept_file", { projectId, path }),
   /** "Reject": restores the file to HEAD (deletes it if untracked). */
-  revertFile: (projectId: string, path: string) =>
-    invoke<void>("revert_file", { projectId, path }),
+  revertFile: (projectId: string, path: string) => invoke<void>("revert_file", { projectId, path }),
   openInEditor: (projectId: string, path: string) =>
     invoke<void>("open_in_editor", { projectId, path }),
 };

@@ -107,10 +107,17 @@ fn turn_start(spec: &TurnSpec, thread_id: &str) -> String {
         AccessMode::Auto => ("on-request", "auto_review", "workspaceWrite"),
         AccessMode::FullAccess => ("never", "user", "dangerFullAccess"),
     };
+    let mut input = vec![json!({"type": "text", "text": prompt(spec)})];
+    input.extend(
+        spec.attachments
+            .iter()
+            .filter(|a| a.kind == AttachmentKind::Image)
+            .map(|a| json!({"type": "localImage", "path": a.path})),
+    );
     let mut params = json!({
         "threadId": thread_id,
         "cwd": spec.root,
-        "input": [{"type": "text", "text": spec.text}],
+        "input": input,
         "approvalPolicy": policy,
         "approvalsReviewer": reviewer,
         "sandboxPolicy": {"type": sandbox},
@@ -296,6 +303,8 @@ mod tests {
             model: Some("gpt"),
             text: "go",
             mode,
+            attachments: &[],
+            images: &[],
         }
     }
 

@@ -207,10 +207,16 @@ impl Server {
 
     /// Appends the user message, then starts the agent turn in the background.
     /// Returns the stored user message; assistant output arrives via the event sink.
-    pub fn send_message(self: &Arc<Self>, thread_id: String, text: String) -> Res<Message> {
+    pub fn send_message(
+        self: &Arc<Self>,
+        thread_id: String,
+        text: String,
+        attachments: Vec<Attachment>,
+    ) -> Res<Message> {
         if self.runner.is_running(&thread_id) {
             return Err("A turn is already running in this task".into());
         }
+        let images = provider::load_images(&attachments)?;
         let msg = Message {
             id: new_id(),
             role: Role::User,
@@ -222,6 +228,7 @@ impl Server {
             files: vec![],
             error: None,
             approvals: vec![],
+            attachments: attachments.clone(),
         };
         let m = msg.clone();
         self.store.update_thread(&thread_id, |t| {
@@ -230,7 +237,8 @@ impl Server {
             }
             t.messages.push(m);
         })?;
-        self.runner.start_turn(self, thread_id, text)?;
+        self.runner
+            .start_turn(self, thread_id, text, attachments, images)?;
         Ok(msg)
     }
 

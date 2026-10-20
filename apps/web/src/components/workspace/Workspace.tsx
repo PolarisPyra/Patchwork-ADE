@@ -281,7 +281,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
               agents={connectedAgents}
               onOpenFolder={openFolder}
               onOpenCanvas={openCanvasAt}
-              onSend={(text, draft) => send(text, draft, projectId)}
+              onSend={(text, attachments, draft) => send(text, attachments, draft, projectId)}
               onCancel={(id) => api.cancelTurn(id)}
               onSetModel={setModel}
               onSetAccessMode={setAccessMode}

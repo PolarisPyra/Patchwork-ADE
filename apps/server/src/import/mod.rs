@@ -119,6 +119,7 @@ pub fn to_thread(session: Session, project_id: Option<String>) -> Thread {
                 files: vec![],
                 error: None,
                 approvals: vec![],
+                attachments: vec![],
             })
             .collect(),
     }

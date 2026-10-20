@@ -63,10 +63,7 @@ pub fn models() -> Vec<ModelOption> {
 /// Gemini runs headless, so "default" cannot ask: actions that need approval are refused.
 pub fn turn_args(spec: &TurnSpec) -> Vec<String> {
     let TurnSpec {
-        session_id,
-        model,
-        text,
-        ..
+        session_id, model, ..
     } = *spec;
     let mode = match spec.mode {
         AccessMode::FullAccess => "yolo",
@@ -83,7 +80,7 @@ pub fn turn_args(spec: &TurnSpec) -> Vec<String> {
         args.extend(["--model".to_string(), m.to_string()]);
     }
     // The `=` form keeps a prompt that starts with "-" from being read as a flag.
-    args.push(format!("--prompt={text}"));
+    args.push(format!("--prompt={}", prompt(spec)));
     args
 }
 
@@ -194,6 +191,8 @@ mod tests {
                 model: Some("pro"),
                 text: "-x",
                 mode: AccessMode::AutoAcceptEdits,
+                attachments: &[],
+                images: &[],
             }),
             [
                 "--output-format",
