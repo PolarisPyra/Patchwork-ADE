@@ -477,7 +477,7 @@
 }
 .composer-editor .ProseMirror p.composer-quote {
   position: relative;
-  padding-left: 0.25rem;
+  padding-left: 0.5rem;
   color: var(--text-muted);
 }
 .composer-editor .ProseMirror p.composer-quote::before {
