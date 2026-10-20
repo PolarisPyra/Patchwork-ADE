@@ -16,6 +16,7 @@ export interface NewThreadOptions {
   agent: AgentKind;
   model: string | null;
   accessMode: AccessMode;
+  effort: string | null;
 }
 
 /** True while a message is streaming, or a goal is active: between its turns the agent works
@@ -190,7 +191,13 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
 
   /** Creates a thread in `projectId` (null: a chat without a project) and selects it. */
   async function createThread(projectId: string | null, opts: NewThreadOptions): Promise<Thread> {
-    const thread = await api.createThread(projectId, opts.agent, opts.model, opts.accessMode);
+    const thread = await api.createThread(
+      projectId,
+      opts.agent,
+      opts.model,
+      opts.accessMode,
+      opts.effort,
+    );
     setThreads((prev) => [thread, ...prev]);
     setSelectedId(thread.id);
     return thread;
@@ -200,6 +207,14 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     await api.deleteThread(id);
     setThreads((prev) => prev.filter((t) => t.id !== id));
     setSelectedId((cur) => (cur === id ? null : cur));
+  }
+
+  /** Empties a chat: its messages and agent session are deleted, the chat itself stays. */
+  async function clearThread(id: string): Promise<void> {
+    await api.clearThread(id);
+    setThreads((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, messages: [], sessionId: null, goal: null } : t)),
+    );
   }
 
   async function renameThread(id: string, title: string): Promise<void> {
@@ -240,6 +255,11 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, accessMode } : t)));
   }
 
+  async function setEffort(id: string, effort: string | null): Promise<void> {
+    await api.setThreadEffort(id, effort);
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, effort } : t)));
+  }
+
   /** Sends a message, creating a thread in `projectId` first when none is selected. */
   async function send(
     text: string,
@@ -272,12 +292,14 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     createThread,
     deleteThread,
     renameThread,
+    clearThread,
     createFolder,
     renameFolder,
     removeFolder,
     reorderThreads,
     setModel,
     setAccessMode,
+    setEffort,
     send,
   };
 }

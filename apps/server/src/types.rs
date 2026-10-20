@@ -270,6 +270,9 @@ pub struct Thread {
     pub model: Option<String>,
     #[serde(default)]
     pub access_mode: AccessMode,
+    /// Reasoning effort passed to the agent, e.g. "high"; None leaves the CLI's default.
+    #[serde(default)]
+    pub effort: Option<String>,
     /// Claude session_id / Codex thread_id used to resume the conversation.
     pub session_id: Option<String>,
     pub created_at: u64,

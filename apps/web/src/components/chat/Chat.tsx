@@ -23,14 +23,16 @@ import {
 import ProviderLogos from "~/components/ProviderLogos";
 import type { CanvasTab } from "~/components/canvas/Canvas";
 import { lastAccessMode } from "~/components/chat/AccessPicker";
+import { effortFor, lastEffort } from "~/components/chat/EffortPicker";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import ChoicePanel from "~/components/chat/ChoicePanel";
 import { parseChoices } from "~/components/chat/choices";
-import GoalBanner from "~/components/chat/GoalBanner";
+import GoalBanner, { currentActivity } from "~/components/chat/GoalBanner";
 import LineageCard from "~/components/chat/LineageCard";
 import type { HistoryEntry } from "~/components/chat/Composer";
 import Messages from "~/components/chat/Messages";
 import { isWorking, type NewThreadOptions } from "~/hooks/useThreads";
-import { errorText } from "~/lib/util";
+import { displayTitle, errorText } from "~/lib/util";
 
 const SUGGESTIONS = [
   { label: "Explain this codebase", prefill: "Explain this codebase" },
@@ -58,6 +60,11 @@ interface ChatProps {
   onCancel: (threadId: string) => Promise<void>;
   onSetModel: (threadId: string, agent: AgentKind, model: string | null) => Promise<void>;
   onSetAccessMode: (threadId: string, mode: AccessMode) => Promise<void>;
+  onSetEffort: (threadId: string, effort: string | null) => Promise<void>;
+  /** Starts a fresh chat in this project; the current chat stays in the sidebar. */
+  onNewChat: () => void;
+  /** Deletes the chat's messages and agent session; the chat stays. */
+  onClearThread: (threadId: string) => Promise<void>;
 }
 
 // The editor (Tiptap) is large and the chat can show before it loads, so it loads on its own.
@@ -73,9 +80,12 @@ export default function Chat({
   onOpenCanvas,
   onShowChanges,
   onSend,
+  onNewChat,
+  onClearThread,
   onCancel,
   onSetModel,
   onSetAccessMode,
+  onSetEffort,
 }: ChatProps) {
   // Drafts are kept per thread ("new" when nothing is selected).
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -123,11 +133,13 @@ export default function Chat({
     agent: defaultAgent,
     model: null,
     accessMode: lastAccessMode(),
+    effort: lastEffort(defaultAgent),
   };
   const empty = !thread || thread.messages.length === 0;
   const agent = thread?.agent ?? newOpts.agent;
   const model = thread ? thread.model : newOpts.model;
   const accessMode = thread?.accessMode ?? newOpts.accessMode;
+  const effort = thread ? thread.effort : newOpts.effort;
   const working = sending || isWorking(thread);
   // Before the first message any connected agent's models are offered.
   const offered = agents.includes(agent) ? agents : [agent, ...agents];
@@ -213,8 +225,49 @@ export default function Chat({
     }
   }
 
+  // /clear asks first: the messages are deleted and cannot be recovered.
+  async function clearChat() {
+    if (!thread) {
+      setDraft("");
+      return;
+    }
+    const ok = await confirm(
+      `Clear ${displayTitle(thread.title)}? Its messages are deleted and the agent forgets this conversation.`,
+      { title: "Clear chat", kind: "warning" },
+    );
+    if (!ok) return;
+    setDraft("");
+    setAttachments([]);
+    await onClearThread(thread.id);
+  }
+
+  // /compact is passed to Claude Code, which compacts its own context. Other agents have no
+  // such command, so the request is refused here rather than sent as plain text.
+  function compactChat() {
+    setDraft("");
+    if (!thread || thread.agent !== "claude") {
+      setError("/compact works in Claude chats only.");
+      return;
+    }
+    void dispatch("/compact", [], true);
+  }
+
   function submit() {
     const text = draft.trim();
+    if (text === "/clear" && attachments.length === 0) {
+      void clearChat();
+      return;
+    }
+    if (text === "/compact" && attachments.length === 0) {
+      compactChat();
+      return;
+    }
+    // /new starts a fresh chat; the current one is kept in the sidebar.
+    if (text === "/new" && attachments.length === 0) {
+      setDraft("");
+      onNewChat();
+      return;
+    }
     // While a turn runs, a message steers it (the server decides whether the agent can).
     if (!text && attachments.length === 0) return;
     setDraft("");
@@ -259,11 +312,23 @@ export default function Chat({
 
   function pickModel(nextAgent: AgentKind, nextModel: string | null) {
     if (!thread) {
-      setPick({ ...newOpts, agent: nextAgent, model: nextModel });
+      const nextEffort = nextAgent === agent ? newOpts.effort : lastEffort(nextAgent);
+      setPick({ ...newOpts, agent: nextAgent, model: nextModel, effort: nextEffort });
       return;
     }
     setError(null);
     onSetModel(thread.id, nextAgent, nextModel).catch((e: unknown) => setError(errorText(e)));
+    // A level the new agent does not accept would make its CLI refuse the turn.
+    if (thread.effort !== effortFor(nextAgent, thread.effort)) pickEffort(null);
+  }
+
+  function pickEffort(next: string | null) {
+    if (!thread) {
+      setPick({ ...newOpts, effort: next });
+      return;
+    }
+    setError(null);
+    onSetEffort(thread.id, next).catch((e: unknown) => setError(errorText(e)));
   }
 
   function pickAccess(mode: AccessMode) {
@@ -369,6 +434,7 @@ export default function Chat({
         {thread?.goal && goalKey !== dismissedGoal && (
           <GoalBanner
             goal={thread.goal}
+            activity={currentActivity(thread.messages)}
             onStop={stopGoal}
             onDismiss={() => setDismissedGoal(goalKey)}
           />
@@ -391,6 +457,8 @@ export default function Chat({
             onPickModel={pickModel}
             accessMode={accessMode}
             onPickAccess={pickAccess}
+            effort={effort}
+            onPickEffort={pickEffort}
             attachments={attachments}
             onRemoveAttachment={(i) => setAttachments(attachments.filter((_, j) => j !== i))}
             dropping={dropping}

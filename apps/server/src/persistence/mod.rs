@@ -107,7 +107,17 @@ impl Store {
         )
         .map_err(err)?;
         let settings = load_settings(&conn).map_err(err)?;
-        let threads = load_threads(&conn).map_err(err)?;
+        let mut threads = load_threads(&conn).map_err(err)?;
+        // A goal that was being pursued when the app quit is no longer pursued: its agent
+        // process ended with the app. It is paused, so it can be resumed rather than shown as active.
+        let tx = conn.transaction().map_err(err)?;
+        for t in threads.iter_mut() {
+            if let Some(goal) = t.goal.as_mut().filter(|g| g.status == crate::types::GoalStatus::Active) {
+                goal.status = crate::types::GoalStatus::Paused;
+                save_thread_row(&tx, t).map_err(err)?;
+            }
+        }
+        tx.commit().map_err(err)?;
         let folders = load_folders(&conn).map_err(err)?;
         Ok(Self {
             inner: Mutex::new(Inner {
@@ -292,6 +302,27 @@ impl Store {
         Ok(())
     }
 
+    /// Deletes a thread's messages and its agent session, so its next turn starts a new
+    /// conversation. The thread itself stays.
+    pub fn clear_thread(&self, id: &str) -> Res<()> {
+        let mut inner = self.lock();
+        let tx = inner.conn.transaction().map_err(err)?;
+        tx.execute("DELETE FROM messages WHERE thread_id = ?1", [id])
+            .map_err(err)?;
+        tx.execute(
+            "UPDATE threads SET session_id = NULL, goal = NULL WHERE id = ?1",
+            [id],
+        )
+        .map_err(err)?;
+        tx.commit().map_err(err)?;
+        if let Some(t) = inner.threads.iter_mut().find(|t| t.id == id) {
+            t.messages.clear();
+            t.session_id = None;
+            t.goal = None;
+        }
+        Ok(())
+    }
+
     pub fn delete_thread(&self, id: &str) -> Res<()> {
         let mut inner = self.lock();
         inner
@@ -346,12 +377,12 @@ fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO threads
              (id, project_id, title, agent, model, session_id, created_at, access_mode, goal,
-              position, folder_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+              position, folder_id, effort)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
          ON CONFLICT (id) DO UPDATE SET project_id = excluded.project_id,
              title = excluded.title, agent = excluded.agent, model = excluded.model,
              session_id = excluded.session_id, access_mode = excluded.access_mode,
-             goal = excluded.goal",
+             goal = excluded.goal, effort = excluded.effort",
         params![
             t.id,
             t.project_id,
@@ -363,7 +394,8 @@ fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
             enc(&t.access_mode),
             t.goal.as_ref().map(json),
             t.position,
-            t.folder_id
+            t.folder_id,
+            t.effort
         ],
     )?;
     Ok(())
@@ -440,7 +472,7 @@ fn load_folders(conn: &Connection) -> rusqlite::Result<Vec<Folder>> {
 fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
     let mut stmt = conn.prepare(
         "SELECT id, project_id, title, agent, model, session_id, created_at, access_mode, goal,
-                position, folder_id
+                position, folder_id, effort
          FROM threads ORDER BY position",
     )?;
     let mut threads: Vec<Thread> = stmt
@@ -460,6 +492,7 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                     .and_then(|g| serde_json::from_str(&g).ok()),
                 position: r.get(9)?,
                 folder_id: r.get(10)?,
+                effort: r.get(11)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -570,6 +603,7 @@ mod tests {
             goal: None,
             position: 0,
             folder_id: None,
+            effort: None,
         }
     }
 

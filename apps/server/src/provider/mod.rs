@@ -58,9 +58,13 @@ pub fn agent_command(kind: AgentKind) -> Result<Command, String> {
     let (name, missing) = match kind {
         AgentKind::Claude => ("claude", "Claude Code is not installed"),
         AgentKind::Codex => ("codex", "Codex is not installed"),
-        AgentKind::Gemini => ("gemini", "Gemini CLI is not installed"),
+        AgentKind::Gemini => ("gemini", "Antigravity CLI is not installed"),
     };
-    let bin = find_binary(name).ok_or(missing)?;
+    let bin = match kind {
+        AgentKind::Gemini => gemini::antigravity_bin().or_else(|| find_binary(name)),
+        _ => find_binary(name),
+    }
+    .ok_or(missing)?;
     let mut cmd = Command::new(&bin);
     if let Some(dir) = bin.parent() {
         let mut paths = vec![dir.to_path_buf()];
@@ -173,6 +177,8 @@ pub struct TurnSpec<'a> {
     pub model: Option<&'a str>,
     pub text: &'a str,
     pub mode: AccessMode,
+    /// Reasoning effort, e.g. "high"; None leaves the CLI's default.
+    pub effort: Option<&'a str>,
     pub attachments: &'a [Attachment],
     /// The image attachments, read from disk by `load_images`.
     pub images: &'a [Image],
@@ -302,7 +308,7 @@ pub fn parse_line(agent: AgentKind, v: &Value, spec: &TurnSpec, message_id: &str
     match agent {
         AgentKind::Claude => claude::parse(v, spec.root, message_id),
         AgentKind::Codex => codex::parse(v, spec, message_id),
-        AgentKind::Gemini => gemini::parse(v, spec.root, message_id),
+        AgentKind::Gemini => gemini::parse(v, spec, message_id),
     }
 }
 

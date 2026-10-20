@@ -410,6 +410,40 @@
   }
 }
 
+/* A highlight sweeping across the label of something still running. */
+.tool-shine {
+  color: transparent;
+  background-image:
+    linear-gradient(to right, transparent, var(--text), transparent),
+    linear-gradient(var(--text-muted), var(--text-muted));
+  background-size:
+    4.5rem 100%,
+    100% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: tool-shine 2.2s steps(30) infinite;
+}
+@keyframes tool-shine {
+  from {
+    background-position:
+      -4.5rem 0,
+      0 0;
+  }
+  to {
+    background-position:
+      calc(100% + 4.5rem) 0,
+      0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-shine {
+    animation: none;
+    background: none;
+    color: var(--text-muted);
+  }
+}
+
 .selectable {
   -webkit-user-select: text;
   user-select: text;

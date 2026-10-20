@@ -148,8 +148,8 @@ enum GoalCommand<'a> {
     Set(&'a str),
 }
 
-/// `/goal` alone shows the goal; `clear`, `pause`, and `resume` act on it; anything else
-/// is a new objective.
+/// `/goal` alone shows the goal; `clear` (or one of Claude's aliases for it), `pause`, and
+/// `resume` act on it; anything else is a new objective.
 fn goal_command<'a>(spec: &TurnSpec<'a>) -> Option<GoalCommand<'a>> {
     if !spec.attachments.is_empty() || !is_goal_command(spec.text) {
         return None;
@@ -157,7 +157,7 @@ fn goal_command<'a>(spec: &TurnSpec<'a>) -> Option<GoalCommand<'a>> {
     let arg = spec.text.trim()["/goal".len()..].trim();
     Some(match arg.to_lowercase().as_str() {
         "" => GoalCommand::Show,
-        "clear" => GoalCommand::Clear,
+        "clear" | "stop" | "off" | "reset" | "none" | "cancel" => GoalCommand::Clear,
         "pause" => GoalCommand::Pause,
         "resume" => GoalCommand::Resume,
         _ => GoalCommand::Set(arg),
@@ -221,6 +221,9 @@ fn turn_start(spec: &TurnSpec, thread_id: &str, text: &str) -> String {
     });
     if let Some(m) = spec.model {
         params["model"] = json!(m);
+    }
+    if let Some(e) = spec.effort {
+        params["effort"] = json!(e);
     }
     json!({"id": TURN_REQUEST, "method": "turn/start", "params": params}).to_string()
 }
@@ -488,6 +491,7 @@ mod tests {
             model: Some("gpt"),
             text: "go",
             mode,
+            effort: None,
             attachments: &[],
             images: &[],
         }

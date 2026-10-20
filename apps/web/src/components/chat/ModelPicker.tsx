@@ -14,7 +14,7 @@ interface Props {
 const PROVIDER_NAMES: Record<AgentKind, string> = {
   claude: "Claude",
   codex: "Codex",
-  gemini: "Gemini",
+  gemini: "Antigravity",
 };
 export const CHIP_CLASS =
   "inline-flex h-6 cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 py-0 text-[length:var(--fs-sm)] text-fg-muted hover:bg-hover hover:text-fg [&_span]:max-w-[180px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap";

@@ -57,7 +57,7 @@ fn fetch(kind: AgentKind) -> Result<ProviderUsage, Failure> {
     match kind {
         AgentKind::Claude => claude::usage(empty(kind)),
         AgentKind::Codex => codex::usage(empty(kind)).map_err(Failure::from),
-        AgentKind::Gemini => Err("Gemini CLI doesn't report usage limits".into()),
+        AgentKind::Gemini => Err("Antigravity CLI doesn't report usage limits".into()),
     }
 }
 

@@ -80,6 +80,9 @@ pub fn turn_args(spec: &TurnSpec) -> Vec<String> {
     if let Some(m) = spec.model {
         args.extend(["--model".to_string(), m.to_string()]);
     }
+    if let Some(e) = spec.effort {
+        args.extend(["--effort".to_string(), e.to_string()]);
+    }
     args
 }
 
@@ -376,6 +379,37 @@ fn goal_from_command(text: &str) -> Option<GoalUpdate> {
     })
 }
 
+/// Where Claude's goal stands once its run has ended. The stream does not say whether the
+/// evaluator found the goal met, judged it impossible, or gave up on a loop that made no
+/// progress, so this reads the evaluator's last verdict from the session transcript.
+pub fn goal_outcome(session_id: &str, objective: &str) -> GoalStatus {
+    let file = format!("{session_id}.jsonl");
+    let transcript = home()
+        .and_then(|h| std::fs::read_dir(h.join("projects")).ok())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|d| d.path().join(&file))
+        .find(|p| p.is_file())
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .unwrap_or_default();
+    // Setting the goal writes a `sentinel` entry; each verdict after it writes another.
+    let verdict = transcript
+        .lines()
+        .rev()
+        .filter(|l| l.contains("\"goal_status\""))
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .map(|v| v["attachment"].clone())
+        .find(|a| a["type"] == "goal_status" && a["condition"] == objective);
+    match verdict {
+        Some(a) if a["met"] == true => GoalStatus::Complete,
+        Some(a) if a["failed"] == true => GoalStatus::Blocked,
+        // Unmet or not yet judged: the goal is still set in the session and goes on
+        // with the next message.
+        _ => GoalStatus::Paused,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -505,6 +539,7 @@ mod tests {
             model: Some("opus"),
             text: "do it",
             mode: AccessMode::FullAccess,
+            effort: None,
             attachments: &[],
             images: &[],
         };

@@ -138,6 +138,8 @@ export interface Thread {
   agent: AgentKind;
   model: string | null;
   accessMode: AccessMode;
+  /** Reasoning effort passed to the agent, e.g. "high"; null leaves the CLI's default. */
+  effort: string | null;
   sessionId: string | null;
   createdAt: number;
   messages: Message[];
@@ -232,7 +234,7 @@ export function defaultAgentOf(settings: Settings): AgentKind {
 export const AGENT_LABELS: Record<AgentKind, string> = {
   claude: "Claude Code",
   codex: "Codex",
-  gemini: "Gemini CLI",
+  gemini: "Antigravity CLI",
 };
 
 export const SOURCE_LABELS: Record<ImportSource, string> = { ...AGENT_LABELS, t3: "T3 Code" };
@@ -293,6 +295,12 @@ export const api = {
   listFolders: () => invoke<Folder[]>("list_folders"),
   /** Files a mention can refer to, relative to the project root. */
   listFiles: (projectId: string) => invoke<string[]>("list_files", { projectId }),
+  /** Whether the Antigravity CLI is installed in Patchwork's CLI folder. */
+  antigravityInstalled: () => invoke<boolean>("antigravity_installed"),
+  /** Downloads and installs the Antigravity CLI into Patchwork's CLI folder. */
+  installAntigravity: () => invoke<void>("install_antigravity"),
+  /** Deletes a chat's messages and agent session; the chat stays, empty. */
+  clearThread: (id: string) => invoke<void>("clear_thread", { id }),
   /** The thread that was open when the app last closed. */
   getLastThread: () => invoke<string | null>("get_last_thread"),
   setLastThread: (id: string) => invoke<void>("set_last_thread", { id }),
@@ -309,7 +317,8 @@ export const api = {
     agent: AgentKind,
     model: string | null,
     accessMode: AccessMode,
-  ) => invoke<Thread>("create_thread", { projectId, agent, model, accessMode }),
+    effort: string | null,
+  ) => invoke<Thread>("create_thread", { projectId, agent, model, accessMode, effort }),
   deleteThread: (id: string) => invoke<void>("delete_thread", { id }),
   renameThread: (id: string, title: string) => invoke<void>("rename_thread", { id, title }),
   /** Sets agent + model; the agent can only change before the first message. */
@@ -318,6 +327,8 @@ export const api = {
   /** Takes effect from the thread's next turn. */
   setThreadAccessMode: (id: string, mode: AccessMode) =>
     invoke<void>("set_thread_access_mode", { id, mode }),
+  setThreadEffort: (id: string, effort: string | null) =>
+    invoke<void>("set_thread_effort", { id, effort }),
   /** Returns the stored user message; assistant output streams via onAgentEvent. */
   sendMessage: (threadId: string, text: string, attachments: Attachment[]) =>
     invoke<Message>("send_message", { threadId, text, attachments }),

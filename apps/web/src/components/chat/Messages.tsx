@@ -1,8 +1,18 @@
-import { lazy, memo, Suspense, useCallback, useLayoutEffect, useRef, useState } from "react";
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowClockwiseIcon,
   ArrowDownIcon,
+  CaretDownIcon,
   CaretRightIcon,
   CheckCircleIcon,
   CheckIcon,
@@ -27,6 +37,8 @@ import {
 import type { CanvasTab } from "~/components/canvas/Canvas";
 import AttachmentChip, { AttachmentTile } from "~/components/chat/AttachmentChip";
 import { ACTION_CLASS, CopyButton } from "~/components/chat/CopyButton";
+import { compactElapsed, isActive, titleOf } from "~/components/chat/LineageCard";
+import ProviderLogos from "~/components/ProviderLogos";
 import { formatClock } from "~/lib/util";
 
 // Markdown pulls in the renderer, so it loads on first use; plain text shows until then.
@@ -99,7 +111,13 @@ export default function Messages({
   useLayoutEffect(() => {
     const el = parentRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(() => virtualizer.measure());
+    // A growing composer shrinks this viewport. Someone at the end should stay there, so the
+    // scroll-to-bottom button does not appear for a viewport change they did not make.
+    const observer = new ResizeObserver(() => {
+      const wasAtEnd = virtualizer.isAtEnd();
+      virtualizer.measure();
+      if (wasAtEnd) virtualizer.scrollToEnd();
+    });
     observer.observe(el);
     return () => observer.disconnect();
   }, [virtualizer]);
@@ -232,6 +250,9 @@ const AssistantMessage = memo(function AssistantMessage({
   onRespond,
 }: AssistantProps) {
   const streaming = message.status === "streaming";
+  const subagents = message.tools.filter((t) => t.subagent && !t.parent);
+  const actions = message.tools.filter((t) => !t.parent && !t.subagent);
+  const live = streaming ? actions.filter((t) => t.status === "running").at(-1) : undefined;
   return (
     <section className="flex min-w-0 flex-col gap-2.5">
       {/* While streaming, WorkingRow shows the agent instead, after the latest message. */}
@@ -242,9 +263,11 @@ const AssistantMessage = memo(function AssistantMessage({
         </Suspense>
       )}
       {message.plan.length > 0 && <PlanList steps={message.plan} />}
-      {message.tools.some((t) => !t.parent) && (
-        <ToolActivity tools={message.tools.filter((t) => !t.parent)} />
+      {subagents.length > 0 && (
+        <SubagentGroup subagents={subagents} tools={message.tools} agent={agent} />
       )}
+      {actions.length > 0 && <ToolActivity tools={actions} />}
+      {live && <LiveTool tool={live} />}
       {message.approvals.map((approval) => (
         <ApprovalCard key={approval.id} approval={approval} onRespond={onRespond} />
       ))}
@@ -414,6 +437,121 @@ function ToolActivity({ tools }: { tools: ToolCall[] }) {
               </span>
             </li>
           ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** The call running now, its label shimmering until it ends. */
+function LiveTool({ tool }: { tool: ToolCall }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 px-1 text-[length:var(--fs-sm)]">
+      <span className="tool-shine flex-none">Running {tool.name}</span>
+      {tool.summary && (
+        <span className="min-w-0 truncate font-[family-name:var(--font-mono)] text-[12px] text-fg-subtle">
+          {tool.summary}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The current time, ticking each second while `live`. */
+function useNow(live: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [live]);
+  return live ? now : Date.now();
+}
+
+/** Time from the first subagent's start to the last one's end (or now), if known. */
+function groupElapsed(subagents: ToolCall[], now: number): number | null {
+  const starts = subagents.flatMap((t) => (t.startedAt === null ? [] : [t.startedAt]));
+  if (starts.length === 0) return null;
+  const ends = subagents.map((t) => (isActive(t) ? now : (t.endedAt ?? now)));
+  return Math.max(0, Math.max(...ends) - Math.min(...starts));
+}
+
+/** The subagents a message started, as one row: avatars, how many still work, elapsed time. */
+function SubagentGroup({
+  subagents,
+  tools,
+  agent,
+}: {
+  subagents: ToolCall[];
+  /** Every call of the message, including the ones the subagents made. */
+  tools: ToolCall[];
+  agent: AgentKind;
+}) {
+  const [open, setOpen] = useState(false);
+  const working = subagents.filter(isActive).length;
+  const failed = subagents.filter((t) => t.status === "error").length;
+  const now = useNow(working > 0);
+  const elapsed = groupElapsed(subagents, now);
+  const count = subagents.length;
+  return (
+    <div>
+      <button
+        className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1 py-1 text-left text-[length:var(--fs-sm)] hover:bg-hover"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="flex flex-none items-center -space-x-1.5">
+          {subagents.slice(0, 3).map((t) => (
+            <span
+              key={t.id}
+              className="grid h-5 w-5 place-items-center rounded-full bg-panel ring-2 ring-[var(--color-editor)]"
+            >
+              <ProviderLogos kind={agent} size={13} />
+            </span>
+          ))}
+          {count > 3 && (
+            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-panel px-1 text-[10px] text-fg-muted ring-2 ring-[var(--color-editor)]">
+              +{count - 3}
+            </span>
+          )}
+        </span>
+        <span className="flex-none font-medium text-fg">
+          {count} {count === 1 ? "subagent" : "subagents"}
+        </span>
+        {working > 0 && <span className="flex-none text-accent-text">{working} working</span>}
+        {failed > 0 && <span className="flex-none text-danger">{failed} failed</span>}
+        <span className="flex-1" />
+        {elapsed !== null && (
+          <span className="flex-none text-[length:var(--fs-xs)] text-fg-subtle tabular-nums">
+            {compactElapsed(elapsed)}
+          </span>
+        )}
+        <CaretDownIcon
+          size={14}
+          className={`flex-none text-fg-muted transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <ul className="m-0 mt-1 flex list-none flex-col gap-1 rounded-[var(--radius)] border border-border bg-panel p-1.5">
+          {subagents.map((t) => {
+            const calls = tools.filter((c) => c.parent === t.id);
+            const current = calls.filter((c) => c.status === "running").at(-1);
+            return (
+              <li key={t.id} className="flex min-w-0 items-center gap-2 px-1 py-0.5">
+                <StepIcon status={t.status} />
+                <span className="min-w-0 flex-none truncate font-medium">{titleOf(t)}</span>
+                {current ? (
+                  <span className="tool-shine min-w-0 truncate text-[length:var(--fs-sm)]">
+                    Running {current.name}
+                  </span>
+                ) : (
+                  <span className="min-w-0 truncate text-[length:var(--fs-sm)] text-fg-muted">
+                    {calls.length} {calls.length === 1 ? "action" : "actions"}
+                  </span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

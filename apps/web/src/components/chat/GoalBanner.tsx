@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { SquareIcon, TargetIcon, XIcon } from "@phosphor-icons/react";
-import type { Goal, GoalStatus } from "~/api";
+import type { Goal, GoalStatus, Message } from "~/api";
 
 const LABELS: Record<GoalStatus, string> = {
   active: "Pursuing goal",
@@ -28,13 +28,34 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-/** The banner for a goal. The square stops an active goal; the X only hides a finished one. */
+/**
+ * What the agent is doing right now: the running plan step, else the running tool call, from
+ * the reply that is streaming. Null between steps.
+ */
+export function currentActivity(messages: Message[]): string | null {
+  const streaming = messages
+    .filter((m) => m.role === "assistant" && m.status === "streaming")
+    .at(-1);
+  if (!streaming) return null;
+  const step = streaming.plan.find((s) => s.status === "running");
+  if (step) return step.text;
+  const tool = streaming.tools.filter((t) => t.status === "running").at(-1);
+  if (tool) return tool.summary ? `${tool.name} ${tool.summary}` : tool.name;
+  return null;
+}
+
+/**
+ * The banner for a goal. The subtext is what the agent is doing now (the goal stays in the
+ * tooltip). The square stops an active goal; the X only hides a finished one.
+ */
 export default function GoalBanner({
   goal,
+  activity,
   onStop,
   onDismiss,
 }: {
   goal: Goal;
+  activity: string | null;
   onStop: () => void;
   onDismiss: () => void;
 }) {
@@ -58,7 +79,6 @@ export default function GoalBanner({
     );
   }
   if (goal.checks) usage.push(goal.checks === 1 ? "1 check" : `${goal.checks} checks`);
-  const title = [LABELS[goal.status], ...usage].join(" · ");
 
   const complete = goal.status === "complete";
   const label = complete ? "Dismiss goal" : "Stop goal";
@@ -72,8 +92,14 @@ export default function GoalBanner({
         size={14}
         className={`flex-none ${active ? "text-accent-text" : "text-fg-subtle"}`}
       />
-      <span className="flex-none font-semibold text-fg">{title}</span>
-      <span className="min-w-0 flex-1 truncate text-fg-muted">{goal.objective}</span>
+      <span className="flex-none font-semibold text-fg">{LABELS[goal.status]}</span>
+      <span className="min-w-0 flex-1 truncate text-fg-muted">
+        {active ? (activity ?? "Working…") : goal.objective}
+      </span>
+      {/* Tabular digits keep the timer from changing width as it counts, so nothing shifts. */}
+      <span className="flex-none whitespace-nowrap text-fg-subtle tabular-nums">
+        {usage.join(" · ")}
+      </span>
       <button
         className="grid h-6 w-6 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-transparent text-fg-subtle hover:bg-hover hover:text-fg"
         onClick={complete ? onDismiss : onStop}

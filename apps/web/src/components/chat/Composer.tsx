@@ -3,6 +3,7 @@ import { ArrowUpIcon, SquareIcon } from "@phosphor-icons/react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { api, type AccessMode, type AgentKind, type Attachment, type ModelOption } from "~/api";
 import AccessPicker from "~/components/chat/AccessPicker";
+import EffortPicker from "~/components/chat/EffortPicker";
 import AttachmentChip from "~/components/chat/AttachmentChip";
 import {
   composerExtensions,
@@ -27,6 +28,8 @@ interface ComposerProps {
   onPickModel: (agent: AgentKind, model: string | null) => void;
   accessMode: AccessMode;
   onPickAccess: (mode: AccessMode) => void;
+  effort: string | null;
+  onPickEffort: (effort: string | null) => void;
   attachments: Attachment[];
   onRemoveAttachment: (index: number) => void;
   /** A drag is hovering over the chat; the composer shows where it will land. */
@@ -49,7 +52,12 @@ interface Recalled {
 }
 
 /** Slash commands offered while the draft is a single "/word". */
-const COMMANDS = [{ name: "/goal", description: "Keep working until a condition is met" }];
+const COMMANDS = [
+  { name: "/goal", description: "Keep working until a condition is met" },
+  { name: "/new", description: "Start a fresh chat in this project" },
+  { name: "/clear", description: "Delete this chat's messages and start the agent fresh" },
+  { name: "/compact", description: "Ask Claude to summarise the conversation to free context" },
+];
 
 /** An entry in the @ menu. */
 interface MentionItem {
@@ -102,6 +110,8 @@ export default function Composer({
   onPickModel,
   accessMode,
   onPickAccess,
+  effort,
+  onPickEffort,
   attachments,
   onRemoveAttachment,
   dropping,
@@ -350,6 +360,7 @@ export default function Composer({
           models={models}
           onPick={onPickModel}
         />
+        <EffortPicker agent={agent} effort={effort} onPick={onPickEffort} />
         <AccessPicker mode={accessMode} onPick={onPickAccess} />
         <span className="flex-1" />
         {working && (

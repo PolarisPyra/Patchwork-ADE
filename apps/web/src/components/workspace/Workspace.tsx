@@ -12,6 +12,7 @@ import { api, defaultAgentOf, type FileChange, type Message, type Settings } fro
 import type { UpdateSettings } from "~/app/App";
 import type { CanvasTab } from "~/components/canvas/Canvas";
 import { lastAccessMode } from "~/components/chat/AccessPicker";
+import { lastEffort } from "~/components/chat/EffortPicker";
 import Chat from "~/components/chat/Chat";
 import CommandPalette, { type PaletteItem } from "~/components/workspace/CommandPalette";
 import { openFolderAsProject, syncProjects } from "~/lib/projects";
@@ -62,6 +63,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     createThread,
     deleteThread,
     renameThread,
+    clearThread,
     folders,
     createFolder,
     renameFolder,
@@ -69,6 +71,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     reorderThreads,
     setModel,
     setAccessMode,
+    setEffort,
     send,
   } = useThreads(settings.activeProjectId, () => void refreshGit());
   // The selected thread decides the project (null: a chat without a project);
@@ -167,7 +170,12 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
   /** New thread in a project, or a chat without a project when `id` is null. */
   const newThreadIn = (id: string | null) =>
     attempt(async () => {
-      await createThread(id, { agent: defaultAgent, model: null, accessMode: lastAccessMode() });
+      await createThread(id, {
+        agent: defaultAgent,
+        model: null,
+        accessMode: lastAccessMode(),
+        effort: lastEffort(defaultAgent),
+      });
       await rememberProject(id);
     });
   const newChat = () => newThreadIn(null);
@@ -179,6 +187,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         agent: defaultAgent,
         model: null,
         accessMode: lastAccessMode(),
+        effort: lastEffort(defaultAgent),
       });
       await reorderThreads([thread.id, ...threadIds], folderId);
       await rememberProject(projectId);
@@ -339,9 +348,12 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
                 setView("changes");
               }}
               onSend={(text, attachments, draft) => send(text, attachments, draft, projectId)}
+              onNewChat={() => newThreadIn(projectId)}
+              onClearThread={(id) => clearThread(id).catch((e: unknown) => setError(errorText(e)))}
               onCancel={(id) => api.cancelTurn(id)}
               onSetModel={setModel}
               onSetAccessMode={setAccessMode}
+              onSetEffort={setEffort}
             />
           </main>
 

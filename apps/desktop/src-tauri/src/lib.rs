@@ -116,6 +116,24 @@ fn list_files(server: Srv, project_id: String) -> Res<Vec<String>> {
 }
 
 #[tauri::command]
+fn antigravity_installed(server: Srv) -> bool {
+    server.antigravity_installed()
+}
+
+#[tauri::command]
+async fn install_antigravity(server: Srv<'_>) -> Res<()> {
+    let server = server.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || server.install_antigravity())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn clear_thread(server: Srv, id: String) -> Res<()> {
+    server.clear_thread(&id)
+}
+
+#[tauri::command]
 fn get_last_thread(server: Srv) -> Option<String> {
     server.last_thread_id()
 }
@@ -142,8 +160,9 @@ fn create_thread(
     agent: AgentKind,
     model: Option<String>,
     access_mode: AccessMode,
+    effort: Option<String>,
 ) -> Res<Thread> {
-    server.create_thread(project_id, agent, model, access_mode)
+    server.create_thread(project_id, agent, model, access_mode, effort)
 }
 
 #[tauri::command]
@@ -159,6 +178,11 @@ fn set_thread_model(server: Srv, id: String, agent: AgentKind, model: Option<Str
 #[tauri::command]
 fn set_thread_access_mode(server: Srv, id: String, mode: AccessMode) -> Res<()> {
     server.set_thread_access_mode(&id, mode)
+}
+
+#[tauri::command]
+fn set_thread_effort(server: Srv, id: String, effort: Option<String>) -> Res<()> {
+    server.set_thread_effort(&id, effort)
 }
 
 #[tauri::command]
@@ -196,8 +220,12 @@ fn stop_subagent(server: Srv, thread_id: String, tool_id: String) -> Res<()> {
 }
 
 #[tauri::command]
-fn stop_goal(server: Srv, thread_id: String) -> Res<()> {
-    server.stop_goal(&thread_id)
+async fn stop_goal(server: Srv<'_>, thread_id: String) -> Res<()> {
+    // Waits for the stopped turn to end, so it runs off the main thread.
+    let server = server.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || server.stop_goal(&thread_id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -300,6 +328,9 @@ pub fn run() {
             rename_folder,
             remove_folder,
             list_files,
+            antigravity_installed,
+            install_antigravity,
+            clear_thread,
             get_last_thread,
             set_last_thread,
             get_collapsed,
@@ -308,6 +339,7 @@ pub fn run() {
             delete_thread,
             set_thread_model,
             set_thread_access_mode,
+            set_thread_effort,
             send_message,
             attachment_for_path,
             allow_preview,

@@ -28,6 +28,8 @@ pub struct Server {
     runner: Runner,
     /// Parent of the scratch folders that project-less chats run in.
     chats_dir: PathBuf,
+    /// Where Patchwork installs agent CLIs (`clis` under the config folder).
+    clis_dir: PathBuf,
     sink: EventSink,
 }
 
@@ -55,17 +57,59 @@ impl Server {
     /// `config_dir` holds the database and config files; `data_dir` holds chat scratch folders.
     pub fn open(config_dir: PathBuf, data_dir: &Path, sink: EventSink) -> Res<Arc<Self>> {
         provider::model_manifest::start(&config_dir);
+        let clis_dir = config_dir.join("clis");
         Ok(Arc::new(Self {
             store: Store::open(config_dir)?,
             usage: usage::UsageCache::default(),
             runner: Runner::default(),
             chats_dir: data_dir.join("chats"),
+            clis_dir,
             sink,
         }))
     }
 
     fn emit(&self, event: AgentEventEnvelope) {
         (self.sink)(event);
+    }
+
+    /// Whether the Antigravity CLI (`agy`) is installed in Patchwork's CLI folder.
+    pub fn antigravity_installed(&self) -> bool {
+        self.clis_dir.join("agy").is_file()
+    }
+
+    /// Downloads Antigravity's install script to a file, then runs it into Patchwork's CLI
+    /// folder. The script is saved first, so the file that runs is the one that was fetched.
+    pub fn install_antigravity(&self) -> Res<()> {
+        if cfg!(windows) {
+            return Err("Setting up the Antigravity CLI from Patchwork is for macOS and Linux for now.".into());
+        }
+        std::fs::create_dir_all(&self.clis_dir).map_err(|e| e.to_string())?;
+        let script = self.clis_dir.join("install-antigravity.sh");
+        let fetch = std::process::Command::new("curl")
+            .args(["-fsSL", "https://antigravity.google/cli/install.sh", "-o"])
+            .arg(&script)
+            .output()
+            .map_err(|e| format!("Could not run curl: {e}"))?;
+        if !fetch.status.success() {
+            return Err(format!(
+                "Download failed: {}",
+                String::from_utf8_lossy(&fetch.stderr).trim()
+            ));
+        }
+        let run = std::process::Command::new("bash")
+            .arg(&script)
+            .arg("--dir")
+            .arg(&self.clis_dir)
+            .output()
+            .map_err(|e| format!("Could not run the installer: {e}"))?;
+        let _ = std::fs::remove_file(&script);
+        if !run.status.success() || !self.antigravity_installed() {
+            return Err(format!(
+                "The install did not finish: {}",
+                String::from_utf8_lossy(&run.stderr).trim()
+            ));
+        }
+        Ok(())
     }
 
     /// Scratch working directory for a chat that has no project.
@@ -220,6 +264,7 @@ impl Server {
         agent: AgentKind,
         model: Option<String>,
         access_mode: AccessMode,
+        effort: Option<String>,
     ) -> Res<Thread> {
         if let Some(id) = &project_id {
             self.project_root(id)?;
@@ -237,6 +282,7 @@ impl Server {
             agent,
             model,
             access_mode,
+            effort,
             session_id: None,
             created_at,
             messages: vec![],
@@ -286,6 +332,11 @@ impl Server {
         self.store.update_thread(id, |t| t.access_mode = mode)
     }
 
+    /// Takes effect from the thread's next turn.
+    pub fn set_thread_effort(&self, id: &str, effort: Option<String>) -> Res<()> {
+        self.store.update_thread(id, |t| t.effort = effort)
+    }
+
     /// Appends the user message, then starts the agent turn in the background.
     /// Returns the stored user message; assistant output arrives via the event sink.
     pub fn send_message(
@@ -301,12 +352,25 @@ impl Server {
                     "A /goal command runs as a turn of its own; send it once this turn ends".into(),
                 );
             }
-            if self
-                .store
-                .thread(&thread_id)
-                .is_some_and(|t| t.agent == AgentKind::Gemini)
-            {
-                return Err("Gemini has no /goal command".into());
+            let agent = self.store.thread(&thread_id).map(|t| t.agent);
+            let arg = text.trim()["/goal".len()..].trim().to_lowercase();
+            if agent == Some(AgentKind::Gemini) {
+                if provider::gemini::antigravity_bin().is_none() {
+                    return Err("/goal needs the Antigravity CLI; the Gemini CLI has no /goal. Install it in Settings.".into());
+                }
+                // Antigravity's /goal only sets a goal, so any other word would become one.
+                let subcommands = [
+                    "", "pause", "resume", "clear", "stop", "off", "reset", "none", "cancel",
+                ];
+                if subcommands.contains(&arg.as_str()) {
+                    return Err("Antigravity's /goal only sets a goal: /goal <objective>. Stop a goal with the stop button.".into());
+                }
+            }
+            // Claude would take either word as a new goal it can never meet, and loop on it.
+            if agent == Some(AgentKind::Claude) && matches!(arg.as_str(), "pause" | "resume") {
+                return Err(format!(
+                    "Claude has no /goal {arg}. Send a message to carry on with the goal, or /goal clear to drop it."
+                ));
             }
         }
         let mut msg = Message {
@@ -373,23 +437,50 @@ impl Server {
         self.runner.stop_subagent(thread_id, tool_id)
     }
 
-    /// Stops the turn working on the goal, if any, and forgets the goal.
-    pub fn stop_goal(&self, thread_id: &str) -> Res<()> {
+    /// Clears a chat: any running turn is cancelled, then its messages and agent session are
+    /// deleted. The chat stays in the sidebar, empty.
+    pub fn clear_thread(&self, thread_id: &str) -> Res<()> {
+        self.cancel_turn(thread_id);
+        self.store.clear_thread(thread_id)
+    }
+
+    /// Stops the turn working on the goal, if any, and clears the goal, in the agent's session
+    /// too: Claude restores an unmet goal whenever its session resumes, Codex keeps a stopped
+    /// goal paused, and Antigravity keeps a goal per conversation, so each would otherwise
+    /// pick it up again.
+    pub fn stop_goal(self: &Arc<Self>, thread_id: &str) -> Res<()> {
+        let Some(thread) = self.store.thread(thread_id) else {
+            return Ok(());
+        };
+        let status = thread.goal.map(|g| g.status);
         // Only a goal still being pursued stops the turn it runs in. Clearing a finished goal
         // must not cut off an unrelated reply that is streaming.
-        let pursuing = self
-            .store
-            .thread(thread_id)
-            .and_then(|t| t.goal)
-            .is_some_and(|g| g.status == crate::types::GoalStatus::Active);
-        if pursuing {
+        if status == Some(GoalStatus::Active) {
             self.cancel_turn(thread_id);
+            // A `/goal` command runs as a turn of its own, so the stopped turn must end first.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while self.runner.is_running(thread_id) && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
         }
         self.store.update_thread(thread_id, |t| t.goal = None)?;
         self.emit(AgentEventEnvelope {
             thread_id: thread_id.into(),
             event: AgentEvent::GoalUpdated { goal: None },
         });
+        // Claude has already dropped a goal its evaluator judged impossible (blocked).
+        let unfinished = status.is_some_and(|s| {
+            s != GoalStatus::Complete
+                && !(thread.agent == AgentKind::Claude && s == GoalStatus::Blocked)
+        });
+        if unfinished && thread.session_id.is_some() {
+            // Antigravity has no command to clear a goal; its docs say to ask the agent.
+            let stop = match thread.agent {
+                AgentKind::Gemini => "Stop the current goal.",
+                _ => "/goal clear",
+            };
+            self.send_message(thread_id.into(), stop.into(), vec![])?;
+        }
         Ok(())
     }
 

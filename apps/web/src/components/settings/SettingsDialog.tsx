@@ -136,8 +136,43 @@ function AppearancePane({ settings, updateSettings }: PaneProps) {
   );
 }
 
+/** Downloads and installs the Antigravity CLI into Patchwork's CLI folder, then re-checks it. */
+function AntigravityInstall({ onInstalled }: { onInstalled: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const install = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.installAntigravity();
+      onInstalled();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button className="btn" onClick={install} disabled={busy}>
+        {busy ? "Installing…" : "Download"}
+      </button>
+      {error && <span className="text-[length:var(--fs-sm)] text-danger">{error}</span>}
+    </>
+  );
+}
+
 function AgentPane({ settings, updateSettings }: PaneProps) {
   const [status, setStatus] = useState<Partial<Record<AgentKind, AgentStatus | null>>>({});
+  // Re-reads each agent, skipping the cache, so a fresh install shows at once.
+  const refresh = () => {
+    for (const kind of AGENT_KINDS) {
+      api.detectAgent(kind, true).then(
+        (s) => setStatus((prev) => ({ ...prev, [kind]: s })),
+        () => setStatus((prev) => ({ ...prev, [kind]: null })),
+      );
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -184,6 +219,9 @@ function AgentPane({ settings, updateSettings }: PaneProps) {
               <div className="text-[length:var(--fs-sm)] text-fg-muted">{describeAgent(s)}</div>
             </div>
             <span className={`badge${s?.installed ? " badge-success" : ""}`}>{badge}</span>
+            {kind === "gemini" && !s?.installed && s !== undefined && (
+              <AntigravityInstall onInstalled={refresh} />
+            )}
             <button
               className="toggle"
               role="switch"

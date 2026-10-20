@@ -14,7 +14,7 @@ import { api, type StepStatus, type Thread, type ToolCall } from "~/api";
 import ProviderLogos from "~/components/ProviderLogos";
 import { errorText } from "~/lib/util";
 
-const DOT_COLOR: Record<StepStatus, string> = {
+export const DOT_COLOR: Record<StepStatus, string> = {
   pending: "bg-fg-subtle",
   running: "bg-accent",
   done: "bg-success",
@@ -37,22 +37,22 @@ function turnTools(thread: Thread): ToolCall[] {
 }
 
 /** Running or about to run. Finished subagents are "done" or "error". */
-function isActive(tool: ToolCall): boolean {
+export function isActive(tool: ToolCall): boolean {
   return tool.status === "running" || tool.status === "pending";
 }
 
-function titleOf(tool: ToolCall): string {
+export function titleOf(tool: ToolCall): string {
   return tool.subagent?.description || tool.subagent?.kind || tool.name;
 }
 
 /** Time a call has run, or null when its start is unknown. */
-function elapsedMs(tool: ToolCall, now: number): number | null {
+export function elapsedMs(tool: ToolCall, now: number): number | null {
   if (tool.startedAt === null) return null;
   return Math.max(0, (tool.endedAt ?? now) - tool.startedAt);
 }
 
 /** Compact duration for a row: "42s", "3m", "1.5h", "12h". */
-function compactElapsed(ms: number): string {
+export function compactElapsed(ms: number): string {
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);

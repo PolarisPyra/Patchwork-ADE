@@ -90,7 +90,7 @@ impl Runner {
         attachments: Vec<Attachment>,
         images: Vec<provider::Image>,
     ) -> Result<(), String> {
-        let (agent, root, session_id, model, mode) = {
+        let (agent, root, session_id, model, mode, effort) = {
             let thread = server.store.thread(&thread_id).ok_or("Task not found")?;
             let settings = server.store.settings();
             let root = match &thread.project_id {
@@ -112,6 +112,7 @@ impl Runner {
                 thread.session_id,
                 thread.model,
                 thread.access_mode,
+                thread.effort,
             )
         };
         let spec = TurnSpec {
@@ -120,6 +121,7 @@ impl Runner {
             model: model.as_deref(),
             text: &text,
             mode,
+            effort: effort.as_deref(),
             attachments: &attachments,
             images: &images,
         };
@@ -178,6 +180,7 @@ impl Runner {
             model,
             text,
             mode,
+            effort,
             attachments,
             images,
         };
@@ -391,6 +394,7 @@ struct Turn {
     model: Option<String>,
     text: String,
     mode: AccessMode,
+    effort: Option<String>,
     attachments: Vec<Attachment>,
     images: Vec<provider::Image>,
 }
@@ -460,6 +464,7 @@ impl Turn {
             model: self.model.as_deref(),
             text: &self.text,
             mode: self.mode,
+            effort: self.effort.as_deref(),
             attachments: &self.attachments,
             images: &self.images,
         }
@@ -527,8 +532,6 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
         .store
         .thread(&turn.thread_id)
         .and_then(|t| t.goal);
-    // Whether the agent did any work toward the goal since it was set (Claude).
-    let mut worked = false;
     // The agent reported its turn finished; Codex may start another for an active goal.
     let mut ended = false;
     // Codex reported this run's goal active, so it starts further turns toward it.
@@ -656,9 +659,6 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                     if turn.cancelled.load(Ordering::SeqCst) {
                         continue;
                     }
-                    if matches!(update, GoalUpdate::Set { .. }) {
-                        worked = false;
-                    }
                     let next = next_goal(goal.as_ref(), update);
                     if next != goal {
                         goal = next;
@@ -754,7 +754,6 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                         }
                         _ => {}
                     }
-                    worked = true;
                     last_was_text = matches!(event, AgentEvent::TextDelta { .. });
                     if last_was_text {
                         turn.stream_text(event, &mut unsaved);
@@ -794,22 +793,32 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
         });
     }
 
-    // A stopped goal is paused; Claude's goal is met once a run working on it ends well.
+    // A stopped goal is paused; Claude's goal stands as its evaluator last judged it, which
+    // also covers a paused goal that Claude took up again with this run's message.
     // The stored goal is read again, since the user may have cleared it meanwhile.
     let goal = turn
         .server
         .store
         .thread(&turn.thread_id)
         .and_then(|t| t.goal);
-    if let Some(g) = goal.as_ref().filter(|g| g.status == GoalStatus::Active) {
+    let pursued = |g: &&Goal| {
+        g.status == GoalStatus::Active
+            || (turn.agent == AgentKind::Claude && g.status == GoalStatus::Paused)
+    };
+    if let Some(g) = goal.as_ref().filter(pursued) {
         let status = if cancelled {
             Some(GoalStatus::Paused)
-        } else if turn.agent == AgentKind::Claude && status == MessageStatus::Complete && worked {
+        } else if turn.agent == AgentKind::Claude && status == MessageStatus::Complete {
+            turn.session_id
+                .as_deref()
+                .map(|id| provider::claude::goal_outcome(id, &g.objective))
+        } else if turn.agent == AgentKind::Gemini && status == MessageStatus::Complete {
+            // Antigravity blocks stopping until its goal is verified, so a clean end meets it.
             Some(GoalStatus::Complete)
         } else {
             None
         };
-        if let Some(status) = status {
+        if let Some(status) = status.filter(|s| *s != g.status) {
             let goal = Some(Goal {
                 status,
                 ..g.clone()
@@ -1071,6 +1080,7 @@ mod tests {
             model: (agent == AgentKind::Claude).then_some("haiku"),
             text: "Create a file named hello.txt whose only content is the two letters hi (no period). Do nothing else.",
             mode,
+            effort: None,
             attachments: &[],
             images: &[],
         };
