@@ -307,6 +307,7 @@ pub fn run() {
                     let _ = handle.emit("agent-event", event);
                 }),
             )?;
+            server.start_idle_compaction();
             app.manage(server);
             Ok(())
         })

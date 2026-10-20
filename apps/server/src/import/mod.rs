@@ -126,6 +126,7 @@ pub fn to_thread(session: Session, project_id: Option<String>) -> Thread {
                 steer: false,
                 thinking: String::new(),
                 finished_at: None,
+                usage: None,
             })
             .collect(),
         goal: None,

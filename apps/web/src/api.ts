@@ -31,6 +31,23 @@ export interface Settings {
   integrations: Integrations;
   projects: Project[];
   activeProjectId: string | null;
+  tokens: TokenSettings;
+}
+
+/** Settings that trade a little convenience for fewer tokens spent. */
+export interface TokenSettings {
+  /** Shows the token counts under each finished reply. */
+  showUsage: boolean;
+  /** A context above this is flagged, and a cold task this large is asked about first. */
+  warnAbove: number;
+  /** Asks before a large task whose prompt cache has expired is resumed. */
+  askBeforeResume: boolean;
+  /** Compacts an idle Claude task just before its prompt cache expires. */
+  autoCompact: boolean;
+  /** The context size above which an idle task is compacted. */
+  autoCompactAbove: number;
+  /** Model for new tasks, per agent. A missing agent uses the CLI's own default. */
+  defaultModels: Partial<Record<AgentKind, string>>;
 }
 
 export interface AgentStatus {
@@ -106,6 +123,19 @@ export interface Message {
   thinking: string;
   /** When the reply finished (ms since epoch); null while it runs. */
   finishedAt: number | null;
+  /** Tokens the reply used; null for agents that do not report usage. */
+  usage: TokenUsage | null;
+}
+
+/** Tokens a reply used, summed over the model requests it made. */
+export interface TokenUsage {
+  /** Input that was neither read from nor written to the prompt cache. */
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+  /** Size of the prompt of the agent's last request: the context it is working in. */
+  context: number;
 }
 
 /** Something dropped into the composer, sent to the agent with the message. */
@@ -201,6 +231,7 @@ export interface ImportScan {
 
 export type AgentEvent =
   | { type: "goalUpdated"; goal: Goal | null }
+  | { type: "usage"; messageId: string; usage: TokenUsage }
   | { type: "messageStarted"; message: Message }
   | { type: "textDelta"; messageId: string; text: string }
   | { type: "thinking"; messageId: string; text: string }
@@ -229,6 +260,14 @@ export const DEFAULT_SETTINGS: Settings = {
   integrations: { github: false, terminal: false, figma: false, browser: false },
   projects: [],
   activeProjectId: null,
+  tokens: {
+    showUsage: true,
+    warnAbove: 150_000,
+    askBeforeResume: true,
+    autoCompact: true,
+    autoCompactAbove: 200_000,
+    defaultModels: {},
+  },
 };
 
 /** Agent used for new tasks: the first connected one, else Claude Code. */

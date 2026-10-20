@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   DownloadSimpleIcon,
   FolderSimpleIcon,
+  GaugeIcon,
   GitPullRequestIcon,
   GlobeIcon,
   PaintBrushIcon,
@@ -23,19 +24,23 @@ import {
   type ImportScan,
   type ImportSource,
   type Integrations,
+  type ModelOption,
   type Settings,
   type Theme,
+  type TokenSettings,
 } from "~/api";
 import ProviderLogos from "~/components/ProviderLogos";
 import type { UpdateSettings } from "~/app/App";
 import { syncProjects } from "~/lib/projects";
+import { formatTokens } from "~/lib/tokens";
 import { AGENT_KINDS, describeAgent, errorText } from "~/lib/util";
 
-type Section = "appearance" | "agent" | "imports" | "integrations" | "projects";
+type Section = "appearance" | "agent" | "tokens" | "imports" | "integrations" | "projects";
 
 const SECTIONS: { id: Section; label: string; Icon: Icon }[] = [
   { id: "appearance", label: "Appearance", Icon: PaletteIcon },
   { id: "agent", label: "Providers", Icon: RobotIcon },
+  { id: "tokens", label: "AI Tokenomics", Icon: GaugeIcon },
   { id: "imports", label: "Imports", Icon: DownloadSimpleIcon },
   { id: "integrations", label: "Integrations", Icon: PlugIcon },
   { id: "projects", label: "Projects", Icon: FolderSimpleIcon },
@@ -96,6 +101,7 @@ export default function SettingsDialog({
           <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
             {section === "appearance" && <AppearancePane {...paneProps} />}
             {section === "agent" && <AgentPane {...paneProps} />}
+            {section === "tokens" && <TokensPane {...paneProps} />}
             {section === "imports" && <ImportsPane {...paneProps} onImported={onImported} />}
             {section === "integrations" && <IntegrationsPane {...paneProps} />}
             {section === "projects" && <ProjectsPane {...paneProps} />}
@@ -133,6 +139,202 @@ function AppearancePane({ settings, updateSettings }: PaneProps) {
         ))}
       </div>
     </div>
+  );
+}
+
+/** Context sizes offered by the token settings. */
+const TOKEN_LEVELS = [100_000, 150_000, 200_000, 300_000];
+
+/** One setting: its name and what it does, with the control on the right. */
+function TokenRow({
+  title,
+  desc,
+  children,
+}: {
+  title: string;
+  desc: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold">{title}</div>
+        <div className="text-[length:var(--fs-sm)] text-fg-muted">{desc}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TokenSwitch({
+  label,
+  on,
+  onChange,
+}: {
+  label: string;
+  on: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <button
+      className="toggle"
+      role="switch"
+      aria-label={label}
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+    />
+  );
+}
+
+function ContextLevels({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="inline-flex overflow-hidden rounded-[var(--radius-sm)] border border-border-strong"
+    >
+      {TOKEN_LEVELS.map((level) => (
+        <button
+          key={level}
+          role="radio"
+          aria-checked={value === level}
+          className={`grid h-6 w-auto cursor-pointer place-items-center border-none px-2.5 py-0 text-[length:var(--fs-sm)] tabular-nums [&+&]:border-l [&+&]:border-border-strong ${value === level ? "bg-selected text-fg" : "bg-transparent text-fg-muted hover:bg-hover hover:text-fg"}`}
+          onClick={() => onChange(level)}
+        >
+          {formatTokens(level)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The model new tasks of one agent start with. The CLI's own default is the empty choice. */
+function DefaultModel({
+  kind,
+  value,
+  onChange,
+}: {
+  kind: AgentKind;
+  value: string | undefined;
+  onChange: (id: string | undefined) => void;
+}) {
+  const [models, setModels] = useState<ModelOption[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api.listModels(kind).then(
+      (list) => {
+        if (!cancelled) setModels(list);
+      },
+      () => {
+        if (!cancelled) setModels([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [kind]);
+  return (
+    <select
+      aria-label={`${AGENT_LABELS[kind]} model for new tasks`}
+      className="h-7 max-w-[200px] rounded-[var(--radius-sm)] border border-border-strong bg-editor px-2 text-[length:var(--fs-sm)] text-fg"
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value || undefined)}
+    >
+      <option value="">CLI default</option>
+      {models.flatMap((m) =>
+        m.id ? [<option key={m.id} value={m.id}>{m.label}</option>] : [],
+      )}
+    </select>
+  );
+}
+
+/** Ways to spend fewer tokens: what is shown, when to flag or compact a long context, and which
+ * model new tasks start with. */
+function TokensPane({ settings, updateSettings }: PaneProps) {
+  const tokens = settings.tokens;
+  const update = (patch: Partial<TokenSettings>) =>
+    void updateSettings((s) => ({ ...s, tokens: { ...s.tokens, ...patch } }));
+  const setDefaultModel = (kind: AgentKind, id: string | undefined) => {
+    const next = { ...tokens.defaultModels };
+    if (id) next[kind] = id;
+    else delete next[kind];
+    update({ defaultModels: next });
+  };
+  const connected = AGENT_KINDS.filter((k) => settings.agents.includes(k));
+  return (
+    <>
+      <TokenRow
+        title="Show token counts"
+        desc="Context, cache reads and writes, input and output under each finished reply"
+      >
+        <TokenSwitch
+          label="Show token counts"
+          on={tokens.showUsage}
+          onChange={(showUsage) => update({ showUsage })}
+        />
+      </TokenRow>
+      <TokenRow
+        title="Warn above"
+        desc="Flags a reply whose context is larger, and asks before resuming a cold task that large"
+      >
+        <ContextLevels
+          label="Warn above"
+          value={tokens.warnAbove}
+          onChange={(warnAbove) => update({ warnAbove })}
+        />
+      </TokenRow>
+      <TokenRow
+        title="Ask before resuming a large task"
+        desc="When its prompt cache has expired, so resuming would re-read the whole context"
+      >
+        <TokenSwitch
+          label="Ask before resuming a large task"
+          on={tokens.askBeforeResume}
+          onChange={(askBeforeResume) => update({ askBeforeResume })}
+        />
+      </TokenRow>
+      <TokenRow
+        title="Compact idle tasks"
+        desc="Claude tasks are compacted about 55 minutes after their last reply, before the cache expires"
+      >
+        <TokenSwitch
+          label="Compact idle tasks"
+          on={tokens.autoCompact}
+          onChange={(autoCompact) => update({ autoCompact })}
+        />
+      </TokenRow>
+      <TokenRow
+        title="Compact above"
+        desc="Only idle tasks whose context is larger than this are compacted"
+      >
+        <ContextLevels
+          label="Compact above"
+          value={tokens.autoCompactAbove}
+          onChange={(autoCompactAbove) => update({ autoCompactAbove })}
+        />
+      </TokenRow>
+      {connected.map((kind) => (
+        <TokenRow
+          key={kind}
+          title={`${AGENT_LABELS[kind]} model`}
+          desc="Used by new tasks. A smaller model spends fewer tokens on each turn"
+        >
+          <DefaultModel
+            kind={kind}
+            value={tokens.defaultModels[kind]}
+            onChange={(id) => setDefaultModel(kind, id)}
+          />
+        </TokenRow>
+      ))}
+    </>
   );
 }
 

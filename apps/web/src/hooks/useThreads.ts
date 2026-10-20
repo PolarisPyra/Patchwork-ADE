@@ -48,6 +48,10 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
   switch (event.type) {
     case "goalUpdated":
       return { ...thread, goal: event.goal };
+    case "usage": {
+      const { messageId, usage } = event;
+      return updateMessage(thread, messageId, (m) => ({ ...m, usage }));
+    }
     case "messageStarted":
       return { ...thread, messages: upsertMessage(thread.messages, event.message) };
     case "textDelta": {

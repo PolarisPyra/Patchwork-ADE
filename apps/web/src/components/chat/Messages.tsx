@@ -19,6 +19,7 @@ import {
   CircleNotchIcon,
   GitDiffIcon,
   ShieldWarningIcon,
+  WarningIcon,
   XCircleIcon,
 } from "@phosphor-icons/react";
 import {
@@ -31,6 +32,8 @@ import {
   type PlanStep,
   type StepStatus,
   type Thread,
+  type TokenSettings,
+  type TokenUsage,
   type ToolCall,
 } from "~/api";
 import type { CanvasTab } from "~/components/canvas/Canvas";
@@ -38,6 +41,7 @@ import AttachmentChip, { AttachmentTile } from "~/components/chat/AttachmentChip
 import { ACTION_CLASS, CopyButton } from "~/components/chat/CopyButton";
 import { compactElapsed, fullElapsed, isActive, titleOf } from "~/components/chat/LineageCard";
 import ProviderLogos from "~/components/ProviderLogos";
+import { formatTokens } from "~/lib/tokens";
 import { formatClock } from "~/lib/util";
 
 // Markdown pulls in the renderer, so it loads on first use; plain text shows until then.
@@ -54,6 +58,7 @@ interface MessagesProps {
   /** Opens the sidebar's Changes view. */
   onShowChanges: (paths: string[]) => void;
   onRetry: (message: Message) => void;
+  tokens: TokenSettings;
 }
 
 export default function Messages({
@@ -63,6 +68,7 @@ export default function Messages({
   onOpenCanvas,
   onShowChanges,
   onRetry,
+  tokens,
 }: MessagesProps) {
   const { messages } = thread;
   const listRef = useRef<LegendListRef>(null);
@@ -78,7 +84,10 @@ export default function Messages({
   // Start at the latest message and jump to it again after each send. Agent output
   // is not followed while streaming; the reader scrolls on their own.
   const lastUserMessageId = [...messages].reverse().find((m) => m.role === "user")?.id;
+  const lastSent = useRef(lastUserMessageId);
   useLayoutEffect(() => {
+    if (lastSent.current === lastUserMessageId) return; // mount: initialScrollAtEnd handles it
+    lastSent.current = lastUserMessageId;
     void listRef.current?.scrollToEnd();
   }, [lastUserMessageId]);
 
@@ -88,6 +97,7 @@ export default function Messages({
         ref={listRef}
         data={rows}
         keyExtractor={(row) => row?.id ?? "working"}
+        extraData={tokens}
         getItemType={(row) => row?.role ?? "working"}
         estimatedItemSize={90}
         initialScrollAtEnd
@@ -105,6 +115,7 @@ export default function Messages({
             );
           }
           const previous = messages[index - 1];
+          const usage = item.role === "assistant" && item.status !== "streaming" && tokens.showUsage;
           return (
             <div className="px-6">
               <div
@@ -125,6 +136,12 @@ export default function Messages({
                   />
                 )}
               </div>
+              {usage && item.usage && (
+                // Pulled up into the message's bottom padding, and out to the column's right edge.
+                <div className="-mt-2 mb-1 flex justify-end">
+                  <UsageLine usage={item.usage} warnAbove={tokens.warnAbove} />
+                </div>
+              )}
             </div>
           );
         }}
@@ -265,6 +282,25 @@ const AssistantMessage = memo(function AssistantMessage({
     </section>
   );
 });
+
+/** The tokens a reply used. A context over `warnAbove` is flagged, since every turn re-reads it. */
+function UsageLine({ usage, warnAbove }: { usage: TokenUsage; warnAbove: number }) {
+  const large = usage.context > warnAbove;
+  return (
+    <p
+      className={`m-0 flex flex-wrap items-center justify-end gap-x-3 px-1 text-[length:var(--fs-xs)] tabular-nums ${large ? "text-warning" : "text-fg-muted"}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {large && <WarningIcon size={13} />}
+        {large ? `Context over ${formatTokens(warnAbove)}` : `Context ${formatTokens(usage.context)}`}
+      </span>
+      <span>Cache read {formatTokens(usage.cacheRead)} tokens</span>
+      <span>Cache write {formatTokens(usage.cacheWrite)} tokens</span>
+      <span>Input {formatTokens(usage.input)} tokens</span>
+      <span>Output {formatTokens(usage.output)} tokens</span>
+    </p>
+  );
+}
 
 /** A resolved approval, kept in the transcript with its outcome. */
 function ApprovalCard({ approval }: { approval: Approval }) {

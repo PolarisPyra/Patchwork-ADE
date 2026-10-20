@@ -364,7 +364,7 @@ fn write_to(stdin: &mut Option<ChildStdin>, line: &str) -> bool {
 }
 
 /// Saves `event` onto the stored message, then streams it to the frontend.
-fn publish(server: &Server, thread_id: &str, event: AgentEvent) {
+pub(crate) fn publish(server: &Server, thread_id: &str, event: AgentEvent) {
     if let Err(e) = server.store.update_thread(thread_id, |t| apply(t, &event)) {
         log::warn!("failed to save agent event: {e}");
     }
@@ -372,6 +372,32 @@ fn publish(server: &Server, thread_id: &str, event: AgentEvent) {
         thread_id: thread_id.into(),
         event,
     });
+}
+
+/// A model request the agent made during a turn, and the tokens it used.
+struct Request {
+    id: String,
+    /// The message that was current when the request was reported.
+    message_id: String,
+    /// False for a subagent's request, which does not count toward the context.
+    top_level: bool,
+    usage: TokenUsage,
+}
+
+/// The tokens a message used, summed over its requests. Its context is the prompt of the
+/// last request the main agent made for it.
+fn message_usage(requests: &[Request], message_id: &str) -> TokenUsage {
+    let mut total = TokenUsage::default();
+    for r in requests.iter().filter(|r| r.message_id == message_id) {
+        total.input += r.usage.input;
+        total.cache_read += r.usage.cache_read;
+        total.cache_write += r.usage.cache_write;
+        total.output += r.usage.output;
+        if r.top_level {
+            total.context = r.usage.context;
+        }
+    }
+    total
 }
 
 /// Everything the stdout reader needs to persist and publish one turn's events.
@@ -488,6 +514,7 @@ fn assistant_message() -> Message {
         steer: false,
         thinking: String::new(),
         finished_at: None,
+        usage: None,
     }
 }
 
@@ -541,6 +568,8 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
     // Text streamed to the frontend but not yet stored; saving every delta
     // stalls the reader, so it is stored before the next event and at the end.
     let mut unsaved = String::new();
+    // Every model request the turn has made; each reply's usage is summed from these.
+    let mut requests: Vec<Request> = Vec::new();
 
     for line in BufReader::new(stdout).lines() {
         let Ok(line) = line else { continue };
@@ -693,6 +722,34 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                         .insert(tool_id, task_id);
                 }
                 Parsed::Usage(windows) => turn.server.usage.record(turn.agent, windows),
+                Parsed::RequestUsage {
+                    request_id,
+                    usage,
+                    top_level,
+                } => {
+                    // Claude reports a request once per content block, so a repeat updates it.
+                    let index = requests.iter().position(|r| r.id == request_id);
+                    let message_id = match index {
+                        Some(i) => {
+                            requests[i].usage = usage;
+                            requests[i].message_id.clone()
+                        }
+                        None => {
+                            requests.push(Request {
+                                id: request_id,
+                                message_id: turn.message_id.clone(),
+                                top_level,
+                                usage,
+                            });
+                            turn.message_id.clone()
+                        }
+                    };
+                    turn.save_text(&mut unsaved);
+                    turn.publish(AgentEvent::Usage {
+                        usage: message_usage(&requests, &message_id),
+                        message_id,
+                    });
+                }
                 Parsed::TaskEnded { tool_id, failed } => {
                     if let Some(Some(call_failed)) = running_tasks.remove(&tool_id)
                         && let Some(owner) = tool_owner.get(&tool_id)
@@ -969,6 +1026,7 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
         | AgentEvent::FileTouched { message_id, .. }
         | AgentEvent::ApprovalRequested { message_id, .. }
         | AgentEvent::ApprovalResolved { message_id, .. }
+        | AgentEvent::Usage { message_id, .. }
         | AgentEvent::TurnCompleted { message_id, .. } => message_id,
     };
     let Some(msg) = thread.messages.iter_mut().find(|m| m.id == *message_id) else {
@@ -991,6 +1049,7 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
             }
         }
         AgentEvent::PlanUpdated { steps, .. } => msg.plan = steps.clone(),
+        AgentEvent::Usage { usage, .. } => msg.usage = Some(*usage),
         AgentEvent::FileTouched { path, .. } => {
             if !msg.files.contains(path) {
                 msg.files.push(path.clone());

@@ -38,6 +38,13 @@ pub struct Server {
 const LAST_THREAD_KEY: &str = "last_thread_id";
 /// `app_state` key for the projects and folders the sidebar has collapsed (JSON array).
 const COLLAPSED_KEY: &str = "collapsed_sections";
+/// Claude Code writes prompt-cache entries that last an hour.
+const CACHE_TTL_MS: u64 = 60 * 60 * 1000;
+/// Idle threads are compacted this long before their cache expires, so the compaction's own
+/// request still reads the cache.
+const COMPACT_LEAD_MS: u64 = 5 * 60 * 1000;
+/// How often idle threads are checked for compaction.
+const IDLE_CHECK: std::time::Duration = std::time::Duration::from_secs(60);
 
 fn clean_name(name: &str) -> Res<String> {
     let name = name.trim();
@@ -51,6 +58,58 @@ fn clean_name(name: &str) -> Res<String> {
 pub fn title_from(text: &str) -> String {
     let line = text.lines().next().unwrap_or("").trim();
     line.chars().take(60).collect()
+}
+
+/// Whether a thread has gone idle just before its prompt cache expires, with a context large
+/// enough to be worth compacting and nothing else pending.
+fn idle_compaction_due(thread: &Thread, now: u64, tokens: &TokenSettings) -> bool {
+    if thread.agent != AgentKind::Claude
+        || thread
+            .goal
+            .as_ref()
+            .is_some_and(|g| g.status == GoalStatus::Active)
+    {
+        return false;
+    }
+    // Compacting leaves the context reported by the compaction's own request large, so a
+    // thread is not compacted again until its user writes something after the last one.
+    let last_user = thread.messages.iter().rev().find(|m| m.role == Role::User);
+    if last_user.is_some_and(|m| m.text.trim() == "/compact") {
+        return false;
+    }
+    // Only a finished reply has an idle time.
+    let Some(finished) = thread.messages.last().and_then(|m| m.finished_at) else {
+        return false;
+    };
+    let idle = now.saturating_sub(finished);
+    let window = (CACHE_TTL_MS - COMPACT_LEAD_MS)..CACHE_TTL_MS;
+    window.contains(&idle)
+        && thread
+            .messages
+            .last()
+            .and_then(|m| m.usage)
+            .is_some_and(|u| u.context > tokens.auto_compact_above)
+}
+
+/// A message the user sent, complete from the start.
+fn user_message(text: &str, attachments: Vec<Attachment>) -> Message {
+    Message {
+        id: new_id(),
+        role: Role::User,
+        text: text.into(),
+        created_at: now_ms(),
+        status: MessageStatus::Complete,
+        tools: vec![],
+        plan: vec![],
+        files: vec![],
+        error: None,
+        approvals: vec![],
+        attachments,
+        steer: false,
+        thinking: String::new(),
+        finished_at: None,
+        usage: None,
+    }
 }
 
 impl Server {
@@ -337,6 +396,53 @@ impl Server {
         self.store.update_thread(id, |t| t.effort = effort)
     }
 
+    /// Starts the background check that compacts idle Claude threads just before their prompt
+    /// cache expires. The check ends with the server.
+    pub fn start_idle_compaction(self: &Arc<Self>) {
+        let server = Arc::downgrade(self);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(IDLE_CHECK);
+                let Some(server) = server.upgrade() else {
+                    return;
+                };
+                server.compact_idle_threads();
+            }
+        });
+    }
+
+    fn compact_idle_threads(self: &Arc<Self>) {
+        let tokens = self.store.settings().tokens;
+        if !tokens.auto_compact {
+            return;
+        }
+        let now = now_ms();
+        let due: Vec<String> = self.store.with_threads(|threads| {
+            threads
+                .iter()
+                .filter(|t| idle_compaction_due(t, now, &tokens))
+                .map(|t| t.id.clone())
+                .collect()
+        });
+        for id in due {
+            // A message sent since the check has started a turn, which keeps the thread.
+            if self.runner.is_running(&id) {
+                continue;
+            }
+            if let Err(e) = self.compact_thread(&id) {
+                log::warn!("failed to compact an idle task: {e}");
+            }
+        }
+    }
+
+    /// Sends `/compact` as a turn of its own, shown in the thread like a typed one.
+    fn compact_thread(self: &Arc<Self>, thread_id: &str) -> Res<()> {
+        let message = user_message("/compact", vec![]);
+        runner::publish(self, thread_id, AgentEvent::MessageStarted { message });
+        self.runner
+            .start_turn(self, thread_id.into(), "/compact".into(), vec![], vec![])
+    }
+
     /// Appends the user message, then starts the agent turn in the background.
     /// Returns the stored user message; assistant output arrives via the event sink.
     pub fn send_message(
@@ -373,22 +479,7 @@ impl Server {
                 ));
             }
         }
-        let mut msg = Message {
-            id: new_id(),
-            role: Role::User,
-            text: text.clone(),
-            created_at: now_ms(),
-            status: MessageStatus::Complete,
-            tools: vec![],
-            plan: vec![],
-            files: vec![],
-            error: None,
-            approvals: vec![],
-            attachments: attachments.clone(),
-            steer: false,
-            thinking: String::new(),
-            finished_at: None,
-        };
+        let mut msg = user_message(&text, attachments.clone());
         // Stored before the agent sees it, so its answer is stored after it.
         let m = msg.clone();
         let mut session_id = None;

@@ -19,6 +19,7 @@ import {
   type Message,
   type Project,
   type Thread,
+  type TokenSettings,
 } from "~/api";
 import ProviderLogos from "~/components/ProviderLogos";
 import type { CanvasTab } from "~/components/canvas/Canvas";
@@ -32,7 +33,9 @@ import LineageCard from "~/components/chat/LineageCard";
 import type { HistoryEntry } from "~/components/chat/Composer";
 import Messages from "~/components/chat/Messages";
 import PendingApprovalBanner from "~/components/chat/PendingApprovalBanner";
+import ResumePrompt from "~/components/chat/ResumePrompt";
 import { isWorking, type NewThreadOptions } from "~/hooks/useThreads";
+import { coldLargeSession } from "~/lib/tokens";
 import { displayTitle, errorText } from "~/lib/util";
 
 const SUGGESTIONS = [
@@ -54,6 +57,8 @@ interface ChatProps {
   defaultAgent: AgentKind;
   /** Connected agents offered in the composer's agent picker. */
   agents: AgentKind[];
+  tokens: TokenSettings;
+  onUpdateTokens: (patch: Partial<TokenSettings>) => void;
   onOpenFolder: () => void;
   onOpenCanvas: (path: string, message: Message | null, tab: CanvasTab) => void;
   onShowChanges: (paths: string[]) => void;
@@ -77,6 +82,8 @@ export default function Chat({
   changes,
   defaultAgent,
   agents,
+  tokens,
+  onUpdateTokens,
   onOpenFolder,
   onOpenCanvas,
   onShowChanges,
@@ -121,6 +128,8 @@ export default function Chat({
   const [pick, setPick] = useState<NewThreadOptions | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The thread whose large, cold session is asking before a message is sent to it.
+  const [resumeAsk, setResumeAsk] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const key = thread?.id ?? "new";
@@ -132,7 +141,7 @@ export default function Chat({
 
   const newOpts: NewThreadOptions = pick ?? {
     agent: defaultAgent,
-    model: null,
+    model: tokens.defaultModels[defaultAgent] ?? null,
     accessMode: lastAccessMode(),
     effort: lastEffort(defaultAgent),
   };
@@ -271,9 +280,33 @@ export default function Chat({
     }
     // While a turn runs, a message steers it (the server decides whether the agent can).
     if (!text && attachments.length === 0) return;
+    // Resuming a large session whose cache has expired re-reads all of it at full price.
+    if (
+      thread &&
+      !working &&
+      tokens.askBeforeResume &&
+      coldLargeSession(thread, Date.now(), tokens.warnAbove)
+    ) {
+      setResumeAsk(thread.id);
+      return;
+    }
     setDraft("");
     setAttachments([]);
     void dispatch(text, attachments, true);
+  }
+
+  // Answers the resume prompt. Compacting leaves the draft in the composer, so the message
+  // is sent once the compaction is done rather than steering it.
+  function answerResume(compact: boolean, dontAsk: boolean) {
+    setResumeAsk(null);
+    if (dontAsk) onUpdateTokens({ askBeforeResume: false });
+    if (compact) {
+      void dispatch("/compact", [], false);
+      return;
+    }
+    setDraft("");
+    setAttachments([]);
+    void dispatch(draft.trim(), attachments, true);
   }
 
   // The latest render's values, so the callbacks handed to Messages keep one identity
@@ -392,6 +425,7 @@ export default function Chat({
             onOpenCanvas={project ? openCanvas : undefined}
             onShowChanges={showChanges}
             onRetry={retry}
+            tokens={tokens}
           />
         ) : (
           <div className="flex h-auto flex-col items-center justify-center gap-4 p-6 text-center">
@@ -427,6 +461,13 @@ export default function Chat({
       <div className="w-full flex-none box-border px-6 pb-4">
         {pendingApprovals.length > 0 && (
           <PendingApprovalBanner approvals={pendingApprovals} onRespond={respond} />
+        )}
+        {thread && resumeAsk === thread.id && (
+          <ResumePrompt
+            idleMs={Date.now() - (thread.messages.at(-1)?.finishedAt ?? Date.now())}
+            context={thread.messages.at(-1)?.usage?.context ?? 0}
+            onAnswer={answerResume}
+          />
         )}
         {showChoices && choices && (
           <ChoicePanel

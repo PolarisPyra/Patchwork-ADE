@@ -343,6 +343,12 @@ pub enum Parsed {
     },
     /// Subscription usage the agent reported along the way.
     Usage(Vec<UsageWindow>),
+    /// Tokens one model request used. `top_level` is false for a subagent's request.
+    RequestUsage {
+        request_id: String,
+        usage: TokenUsage,
+        top_level: bool,
+    },
     /// The agent's id for the turn now running, which a steering message must name.
     TurnStarted(String),
     /// The turn failed with this message.

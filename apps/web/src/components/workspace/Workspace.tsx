@@ -172,7 +172,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     attempt(async () => {
       await createThread(id, {
         agent: defaultAgent,
-        model: null,
+        model: settings.tokens.defaultModels[defaultAgent] ?? null,
         accessMode: lastAccessMode(),
         effort: lastEffort(defaultAgent),
       });
@@ -185,7 +185,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     attempt(async () => {
       const thread = await createThread(projectId, {
         agent: defaultAgent,
-        model: null,
+        model: settings.tokens.defaultModels[defaultAgent] ?? null,
         accessMode: lastAccessMode(),
         effort: lastEffort(defaultAgent),
       });
@@ -353,6 +353,10 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
               changes={changes}
               defaultAgent={defaultAgent}
               agents={connectedAgents}
+              tokens={settings.tokens}
+              onUpdateTokens={(patch) =>
+                void updateSettings((s) => ({ ...s, tokens: { ...s.tokens, ...patch } }))
+              }
               onOpenFolder={openFolder}
               onOpenCanvas={openCanvasAt}
               onShowChanges={(paths) => {

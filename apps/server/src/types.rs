@@ -1,6 +1,8 @@
 //! Shared data contract between the Rust backend and the TypeScript frontend.
 //! Mirrors `apps/web/src/api.ts` — keep both in sync. All fields serialize as camelCase.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -54,6 +56,38 @@ pub struct Settings {
     pub integrations: Integrations,
     pub projects: Vec<Project>,
     pub active_project_id: Option<String>,
+    pub tokens: TokenSettings,
+}
+
+/// Settings that trade a little convenience for fewer tokens spent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TokenSettings {
+    /// Shows the token counts under each finished reply.
+    pub show_usage: bool,
+    /// A context above this is flagged, and a cold task this large is asked about first.
+    pub warn_above: u64,
+    /// Asks before a large task whose prompt cache has expired is resumed.
+    pub ask_before_resume: bool,
+    /// Compacts an idle Claude task just before its prompt cache expires.
+    pub auto_compact: bool,
+    /// The context size above which an idle task is compacted.
+    pub auto_compact_above: u64,
+    /// Model for new tasks, per agent. A missing agent uses the CLI's own default.
+    pub default_models: HashMap<AgentKind, String>,
+}
+
+impl Default for TokenSettings {
+    fn default() -> Self {
+        Self {
+            show_usage: true,
+            warn_above: 150_000,
+            ask_before_resume: true,
+            auto_compact: true,
+            auto_compact_above: 200_000,
+            default_models: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -231,6 +265,19 @@ impl Attachment {
     }
 }
 
+/// Tokens a reply used, summed over the model requests it made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenUsage {
+    /// Input that was neither read from nor written to the prompt cache.
+    pub input: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub output: u64,
+    /// Size of the prompt of the agent's last request: the context it is working in.
+    pub context: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -263,6 +310,9 @@ pub struct Message {
     /// When the reply finished (ms since epoch); None while it runs.
     #[serde(default)]
     pub finished_at: Option<u64>,
+    /// Tokens the reply has used; None for agents that do not report usage.
+    #[serde(default)]
+    pub usage: Option<TokenUsage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -450,6 +500,11 @@ pub enum AgentEvent {
     /// The thread's goal changed; None once it is cleared.
     GoalUpdated {
         goal: Option<Goal>,
+    },
+    /// The tokens a reply has used so far; replaces the count it had.
+    Usage {
+        message_id: String,
+        usage: TokenUsage,
     },
     /// Terminal event for a turn. `status` is complete | error | cancelled.
     TurnCompleted {

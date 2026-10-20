@@ -74,6 +74,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE threads ADD COLUMN effort TEXT;",
     // 10: when a reply finished, so the timeline can say how long it worked.
     "ALTER TABLE messages ADD COLUMN finished_at INTEGER;",
+    // 11: the tokens a reply used, as JSON; NULL for agents that do not report usage.
+    "ALTER TABLE messages ADD COLUMN usage TEXT;",
 ];
 
 /// Brings the schema up to date. Returns the version the database was at before.

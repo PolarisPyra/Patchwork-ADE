@@ -152,6 +152,11 @@ impl Store {
         self.lock().threads.clone()
     }
 
+    /// Runs `f` over the threads without copying them.
+    pub fn with_threads<R>(&self, f: impl FnOnce(&[Thread]) -> R) -> R {
+        f(&self.lock().threads)
+    }
+
     pub fn thread(&self, id: &str) -> Option<Thread> {
         self.lock().threads.iter().find(|t| t.id == id).cloned()
     }
@@ -410,12 +415,13 @@ fn save_message(
     tx.execute(
         "INSERT INTO messages
              (id, thread_id, position, role, text, created_at, status, tools, plan, files, error,
-              approvals, attachments, steer, finished_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+              approvals, attachments, steer, finished_at, usage)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
          ON CONFLICT (id) DO UPDATE SET position = excluded.position, text = excluded.text,
              status = excluded.status, tools = excluded.tools, plan = excluded.plan,
              files = excluded.files, error = excluded.error, approvals = excluded.approvals,
-             attachments = excluded.attachments, finished_at = excluded.finished_at",
+             attachments = excluded.attachments, finished_at = excluded.finished_at,
+             usage = excluded.usage",
         params![
             m.id,
             thread_id,
@@ -431,7 +437,8 @@ fn save_message(
             json(&m.approvals),
             json(&m.attachments),
             m.steer,
-            m.finished_at
+            m.finished_at,
+            m.usage.as_ref().map(json)
         ],
     )?;
     Ok(())
@@ -499,7 +506,7 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
         .collect::<rusqlite::Result<_>>()?;
     let mut stmt = conn.prepare(
         "SELECT id, role, text, created_at, status, tools, plan, files, error, approvals,
-                attachments, steer, finished_at
+                attachments, steer, finished_at, usage
          FROM messages WHERE thread_id = ?1 ORDER BY position",
     )?;
     for t in &mut threads {
@@ -519,6 +526,9 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                     attachments: from_json(r.get(10)?),
                     steer: r.get(11)?,
                     finished_at: r.get(12)?,
+                    usage: r
+                        .get::<_, Option<String>>(13)?
+                        .and_then(|u| serde_json::from_str(&u).ok()),
                     thinking: String::new(),
                 })
             })?
@@ -591,6 +601,7 @@ mod tests {
             steer: false,
             thinking: String::new(),
             finished_at: None,
+            usage: None,
         }
     }
 

@@ -239,6 +239,27 @@ fn claude_tool_use(
     }
 }
 
+/// The tokens of the model request an assistant message came from. Claude sends one message
+/// per content block, and each carries its request's usage, so the request id tells them apart.
+fn request_usage(message: &Value, top_level: bool) -> Option<Parsed> {
+    let usage = message.get("usage")?;
+    let count = |key: &str| usage[key].as_u64().unwrap_or(0);
+    let input = count("input_tokens");
+    let cache_read = count("cache_read_input_tokens");
+    let cache_write = count("cache_creation_input_tokens");
+    Some(Parsed::RequestUsage {
+        request_id: message["id"].as_str()?.into(),
+        usage: TokenUsage {
+            input,
+            cache_read,
+            cache_write,
+            output: count("output_tokens"),
+            context: input + cache_read + cache_write,
+        },
+        top_level,
+    })
+}
+
 /// Maps one line of `claude -p --output-format stream-json` output.
 pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
     let mut out = Vec::new();
@@ -311,6 +332,7 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                     claude_tool_use(block, root, message_id, parent, &mut out);
                 }
             }
+            out.extend(request_usage(&v["message"], parent.is_none()));
         }
         Some("user") => {
             for block in blocks.iter().filter(|b| b["type"] == "tool_result") {
