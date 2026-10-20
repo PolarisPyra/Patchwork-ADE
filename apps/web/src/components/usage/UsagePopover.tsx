@@ -68,10 +68,9 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
   }, [open, load]);
 
   return (
-    <div className="relative flex-none py-1.5 px-2" ref={ref}>
+    <div className="relative flex-none py-1.5 px-2 border-t border-border" ref={ref}>
       <button
         className={`flex items-center gap-1.5 w-full h-7 px-2 border-none rounded-[var(--radius-sm)] bg-transparent text-fg-muted text-[length:var(--fs-sm)] cursor-pointer hover:bg-hover hover:text-fg${open ? " bg-hover text-fg" : ""}`}
-        title="Usage"
         aria-label="Usage"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

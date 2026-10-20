@@ -131,7 +131,7 @@ export default function Sidebar(props: SidebarProps) {
   return (
     <aside className="flex min-h-0 w-[264px] flex-none flex-col border-r border-border bg-panel text-[length:var(--fs-md)] [--fs-xs:12px] [--fs-sm:13px] [--fs-md:14px]">
       <button
-        className="mx-2 mt-3 mb-0.5 flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none bg-transparent px-2 text-[length:var(--fs-sm)] text-fg-muted hover:bg-hover hover:text-fg"
+        className="mx-2 mt-3 mb-0.5 flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border border-border bg-input px-2 text-[length:var(--fs-sm)] text-fg-muted hover:border-border-strong hover:text-fg"
         onClick={props.onOpenPalette}
       >
         <MagnifyingGlassIcon size={16} />
