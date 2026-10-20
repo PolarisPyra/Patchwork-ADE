@@ -6,6 +6,11 @@
 - The user keeps their own `pnpm tauri dev` session open alongside and views changes there; Vite hot-reloads UI edits, and Rust changes rebuild on save.
 - Verify changes with `pnpm typecheck` (web) and `cargo test --workspace` / `cargo clippy --workspace --all-targets` (Rust) instead.
 
+## Tests
+
+- Never write tests. Do not add unit, integration, or frontend tests, test files, test runners, test dependencies, or test scripts, even when a change would benefit from one.
+- Verify with `pnpm typecheck`, `cargo clippy --workspace --all-targets`, and the existing `cargo test --workspace`.
+
 ## Committing
 
 - Always commit once a requested change is complete, unless the app crashes on launch.

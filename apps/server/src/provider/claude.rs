@@ -389,56 +389,6 @@ mod tests {
     }
 
     #[test]
-    fn task_call_reports_its_subagent() {
-        let task = json!({"type": "assistant", "message": {"content": [{
-            "type": "tool_use", "id": "t1", "name": "Task",
-            "input": {"subagent_type": "Explore", "description": "map auth", "model": "haiku"}
-        }]}});
-        let out = parse(&task, "/abs", "m1");
-        let Parsed::Event(AgentEvent::ToolStarted { tool, .. }) = &out[0] else {
-            panic!("expected a tool start");
-        };
-        assert_eq!(
-            tool.subagent,
-            Some(SubAgent {
-                kind: "Explore".into(),
-                description: "map auth".into(),
-                model: Some("haiku".into()),
-            })
-        );
-    }
-
-    #[test]
-    fn calls_inside_a_subagent_name_their_parent() {
-        let inner = json!({"type": "assistant", "parent_tool_use_id": "t1",
-            "message": {"content": [{"type": "tool_use", "id": "r1", "name": "Read",
-                "input": {"file_path": "/abs/a.rs"}}]}});
-        let out = parse(&inner, "/abs", "m1");
-        let Parsed::Event(AgentEvent::ToolStarted { tool, .. }) = &out[0] else {
-            panic!("expected a tool start");
-        };
-        assert_eq!(tool.parent.as_deref(), Some("t1"));
-        assert_eq!(tool.subagent, None);
-    }
-
-    #[test]
-    fn user_message_carries_images_as_base64_blocks() {
-        let images = [Image {
-            media_type: "image/png",
-            data: "AAAA".into(),
-        }];
-        let line: Value = serde_json::from_str(&user_message("look", &images)).unwrap();
-        assert_eq!(
-            line["message"]["content"][0],
-            json!({"type": "text", "text": "look"})
-        );
-        assert_eq!(
-            line["message"]["content"][1],
-            json!({"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AAAA"}})
-        );
-    }
-
-    #[test]
     fn claude_args_include_resume_model_and_mode() {
         let mut spec = TurnSpec {
             root: "/abs",

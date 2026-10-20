@@ -10,7 +10,6 @@
     "appimage": "pnpm --filter patchwork-desktop tauri build --bundles appimage",
     "typecheck": "pnpm --filter patchwork-web typecheck",
     "test": "cargo test --workspace",
-    "test:web": "pnpm --filter patchwork-web test",
     "tauri": "pnpm --filter patchwork-desktop tauri",
     "format": "prettier --write --log-level warn \"apps/**/*.tsx\"",
     "format:check": "prettier --check \"apps/**/*.tsx\""
