@@ -108,6 +108,8 @@ interface SidebarProps {
   onNewFolder: (projectId: string) => Promise<Folder | null>;
   onRenameFolder: (id: string, name: string) => void;
   onRemoveFolder: (id: string) => void;
+  /** Starts a task at the top of a folder; `threadIds` are the folder's tasks in order. */
+  onNewTaskInFolder: (projectId: string, folderId: string, threadIds: string[]) => void;
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
@@ -180,6 +182,7 @@ function TasksView({
   onNewFolder,
   onRenameFolder,
   onRemoveFolder,
+  onNewTaskInFolder,
   onOpenFolder,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
@@ -419,7 +422,7 @@ function TasksView({
                     <div key={f.id}>
                       <div
                         {...target.attrs}
-                        className={`group my-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 py-1 text-fg hover:bg-hover ${target.edge}`}
+                        className={`group mb-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 py-1 text-fg hover:bg-hover ${target.edge}`}
                         onClick={() => toggle(key)}
                         onContextMenu={(e) => openMenu(e, { kind: "folder", id: f.id })}
                       >
@@ -443,11 +446,24 @@ function TasksView({
                             {f.name}
                           </span>
                         )}
+                        <button
+                          className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex"
+                          title={`New task in ${f.name}`}
+                          aria-label={`New task in ${f.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNewTaskInFolder(
+                              p.id,
+                              f.id,
+                              inside.map((t) => t.id),
+                            );
+                          }}
+                        >
+                          <PlusIcon size={15} />
+                        </button>
                       </div>
                       <Collapse open={folderOpen}>
-                        <div className="pb-1 pl-3.5">
-                          {inside.map((t) => taskRow(t, f.id, inside))}
-                        </div>
+                        <div className="pl-3.5">{inside.map((t) => taskRow(t, f.id, inside))}</div>
                       </Collapse>
                     </div>
                   );
@@ -527,7 +543,7 @@ function ThreadRow({
     <div
       {...drag.attrs}
       draggable={!editing}
-      className={`group flex min-h-[26px] w-full cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none mb-1 px-2.5 py-2 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
+      className={`group flex min-h-[26px] w-full cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none mb-1.5 px-2.5 py-2 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
       onClick={() => onSelectThread(thread.id)}
       onContextMenu={(e) => onContextMenu(e, { kind: "thread", id: thread.id })}
     >

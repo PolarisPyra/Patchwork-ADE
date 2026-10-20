@@ -172,6 +172,18 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     });
   const newChat = () => newThreadIn(null);
 
+  /** Creates a task at the project's top level, then moves it to the top of `folderId`. */
+  const newThreadInFolder = (projectId: string, folderId: string, threadIds: string[]) =>
+    attempt(async () => {
+      const thread = await createThread(projectId, {
+        agent: defaultAgent,
+        model: null,
+        accessMode: lastAccessMode(),
+      });
+      await reorderThreads([thread.id, ...threadIds], folderId);
+      await rememberProject(projectId);
+    });
+
   const openCanvasAt = (path: string, message: Message | null, tab: CanvasTab) => {
     if (!projectId) return;
     setCanvas((prev) => ({ seq: (prev?.seq ?? 0) + 1, projectId, path, message, tab }));
@@ -304,6 +316,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             onNewFolder={newFolder}
             onRenameFolder={(id, name) => attempt(() => renameFolder(id, name))}
             onRemoveFolder={(id) => attempt(() => removeFolder(id))}
+            onNewTaskInFolder={newThreadInFolder}
             onOpenFolder={openFolder}
             onRefreshChanges={() => attempt(refreshGit)}
             onOpenChange={(path) => openCanvasAt(path, null, "diff")}
