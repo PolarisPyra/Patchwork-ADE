@@ -15,3 +15,16 @@
 
 - Do not commit or push until the user has reviewed the change and says to. Leave finished work uncommitted in the working tree.
 - Do not push at all unless the user explicitly asks.
+
+## Offering choices
+
+- When asking the user to pick between options, put them in a fenced block with the language `choices`, containing a JSON array of short option labels, and nothing else in the block. Example:
+
+  ````
+  ```choices
+  ["Commit and push", "Commit without pushing", "Leave uncommitted"]
+  ```
+  ````
+
+- The app shows the options as numbered keys above the compose box and adds "Submit my own response" itself, so do not list that option in the array.
+- Do not also write the options as a plain list.

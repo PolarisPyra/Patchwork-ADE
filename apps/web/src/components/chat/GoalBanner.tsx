@@ -28,7 +28,16 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-export default function GoalBanner({ goal, onStop }: { goal: Goal; onStop: () => void }) {
+/** The banner for a goal. The square stops an active goal; the X only hides a finished one. */
+export default function GoalBanner({
+  goal,
+  onStop,
+  onDismiss,
+}: {
+  goal: Goal;
+  onStop: () => void;
+  onDismiss: () => void;
+}) {
   const active = goal.status === "active";
   const [now, setNow] = useState(() => Date.now());
   // Only an active goal's elapsed time moves; the others show the time they stopped at.
@@ -67,7 +76,7 @@ export default function GoalBanner({ goal, onStop }: { goal: Goal; onStop: () =>
       <span className="min-w-0 flex-1 truncate text-fg-muted">{goal.objective}</span>
       <button
         className="grid h-6 w-6 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-transparent text-fg-subtle hover:bg-hover hover:text-fg"
-        onClick={onStop}
+        onClick={complete ? onDismiss : onStop}
         title={label}
         aria-label={label}
       >

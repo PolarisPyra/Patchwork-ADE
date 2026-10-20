@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { SYNTAX_CLASSES } from "~/components/canvas/syntaxClasses";
 import {
   describeFile,
   highlightLines,
@@ -28,7 +29,9 @@ export default function CodeView({ path, content }: CodeViewProps) {
   }
 
   return (
-    <div className="w-max min-w-full py-3 font-[family-name:var(--font-mono)] text-[length:var(--fs-md)] leading-[1.65] text-fg tab-2 select-text [&_.hljs-keyword]:text-[color:var(--syn-keyword)] [&_.hljs-selector-tag]:text-[color:var(--syn-keyword)] [&_.hljs-built\_in]:text-[color:var(--syn-keyword)] [&_.hljs-literal]:text-[color:var(--syn-keyword)] [&_.hljs-string]:text-[color:var(--syn-string)] [&_.hljs-regexp]:text-[color:var(--syn-string)] [&_.hljs-number]:text-[color:var(--syn-number)] [&_.hljs-comment]:text-[color:var(--syn-comment)] [&_.hljs-comment]:italic [&_.hljs-meta]:text-[color:var(--syn-comment)] [&_.hljs-title]:text-[color:var(--syn-function)] [&_.hljs-title.class\_]:text-[color:var(--syn-type)] [&_.hljs-attr]:text-[color:var(--syn-property)] [&_.hljs-attribute]:text-[color:var(--syn-property)] [&_.hljs-property]:text-[color:var(--syn-property)] [&_.hljs-variable]:text-[color:var(--syn-property)] [&_.hljs-type]:text-[color:var(--syn-type)] [&_.hljs-tag]:text-[color:var(--syn-tag)] [&_.hljs-name]:text-[color:var(--syn-tag)] [&_.hljs-selector-class]:text-[color:var(--syn-tag)]">
+    <div
+      className={`w-max min-w-full py-3 font-[family-name:var(--font-mono)] text-[length:var(--fs-md)] leading-[1.65] text-fg tab-2 select-text ${SYNTAX_CLASSES}`}
+    >
       {lines.map((line, i) => (
         <div
           className="flex hover:bg-[color:color-mix(in_srgb,var(--bg-hover)_40%,transparent)]"

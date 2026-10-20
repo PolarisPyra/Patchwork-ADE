@@ -150,6 +150,11 @@ impl Server {
         self.store.reorder_threads(ids, folder_id)
     }
 
+    /// Files of a project that a mention can refer to.
+    pub fn list_files(&self, project_id: &str) -> Res<Vec<String>> {
+        workspace::list_files(&self.project_root(project_id)?)
+    }
+
     /// The thread that was open when the app last closed, if one was recorded.
     pub fn last_thread_id(&self) -> Option<String> {
         self.store.state(LAST_THREAD_KEY)
@@ -370,7 +375,16 @@ impl Server {
 
     /// Stops the turn working on the goal, if any, and forgets the goal.
     pub fn stop_goal(&self, thread_id: &str) -> Res<()> {
-        self.cancel_turn(thread_id);
+        // Only a goal still being pursued stops the turn it runs in. Clearing a finished goal
+        // must not cut off an unrelated reply that is streaming.
+        let pursuing = self
+            .store
+            .thread(thread_id)
+            .and_then(|t| t.goal)
+            .is_some_and(|g| g.status == crate::types::GoalStatus::Active);
+        if pursuing {
+            self.cancel_turn(thread_id);
+        }
         self.store.update_thread(thread_id, |t| t.goal = None)?;
         self.emit(AgentEventEnvelope {
             thread_id: thread_id.into(),

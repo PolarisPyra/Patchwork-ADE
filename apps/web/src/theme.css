@@ -415,3 +415,20 @@
   user-select: text;
 }
 }
+
+/* Composer editor: placeholder text and task lists, which Tailwind classes cannot reach. */
+.composer-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+.composer-editor ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+.composer-editor ul[data-type="taskList"] li {
+  display: flex;
+  gap: 6px;
+}

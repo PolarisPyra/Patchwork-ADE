@@ -179,6 +179,24 @@ fn line_count(path: &Path) -> u32 {
     }
 }
 
+/// Most files a mention menu offers; a large repo is cut off here.
+const MAX_LISTED_FILES: usize = 5000;
+
+/// Files git knows about: tracked files and untracked ones that are not ignored. A folder
+/// that is not a git repository has none.
+pub fn list_files(root: &str) -> Result<Vec<String>, String> {
+    if !git_succeeds(root, &["rev-parse", "--is-inside-work-tree"]) {
+        return Ok(vec![]);
+    }
+    let out = git(root, &["ls-files", "-z", "--cached", "--others", "--exclude-standard"])?;
+    Ok(out
+        .split('\0')
+        .filter(|path| !path.is_empty())
+        .take(MAX_LISTED_FILES)
+        .map(String::from)
+        .collect())
+}
+
 pub fn git_changes(root: &str) -> Result<Vec<FileChange>, String> {
     if !git_succeeds(root, &["rev-parse", "--is-inside-work-tree"]) {
         return Ok(vec![]);

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { FolderPlusIcon } from "@phosphor-icons/react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
@@ -14,9 +23,11 @@ import {
 import ProviderLogos from "~/components/ProviderLogos";
 import type { CanvasTab } from "~/components/canvas/Canvas";
 import { lastAccessMode } from "~/components/chat/AccessPicker";
+import ChoicePanel from "~/components/chat/ChoicePanel";
+import { parseChoices } from "~/components/chat/choices";
 import GoalBanner from "~/components/chat/GoalBanner";
 import LineageCard from "~/components/chat/LineageCard";
-import Composer, { type HistoryEntry } from "~/components/chat/Composer";
+import type { HistoryEntry } from "~/components/chat/Composer";
 import Messages from "~/components/chat/Messages";
 import { isWorking, type NewThreadOptions } from "~/hooks/useThreads";
 import { errorText } from "~/lib/util";
@@ -49,6 +60,9 @@ interface ChatProps {
   onSetAccessMode: (threadId: string, mode: AccessMode) => Promise<void>;
 }
 
+// The editor (Tiptap) is large and the chat can show before it loads, so it loads on its own.
+const Composer = lazy(() => import("~/components/chat/Composer"));
+
 export default function Chat({
   project,
   thread,
@@ -68,6 +82,30 @@ export default function Chat({
   // Files and images dropped into the composer, kept per thread like drafts.
   const [pending, setPending] = useState<Record<string, Attachment[]>>({});
   const [dropping, setDropping] = useState(false);
+  // A finished goal the user dismissed. Hiding it changes nothing on the agent side.
+  const [dismissedGoal, setDismissedGoal] = useState<string | null>(null);
+  const goalKey = thread?.goal ? `${thread.id}:${thread.goal.startedAt}` : null;
+  // Files the @ mention menu offers; they follow the project.
+  const [files, setFiles] = useState<string[]>([]);
+  const projectId = project?.id ?? null;
+  useEffect(() => {
+    if (!projectId) {
+      setFiles([]);
+      return;
+    }
+    let cancelled = false;
+    api.listFiles(projectId).then(
+      (list) => {
+        if (!cancelled) setFiles(list);
+      },
+      () => {
+        if (!cancelled) setFiles([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
   // Agent/model/access chosen for the next thread; null means the defaults.
   const [pick, setPick] = useState<NewThreadOptions | null>(null);
   const [sending, setSending] = useState(false);
@@ -202,10 +240,15 @@ export default function Chat({
   );
   const showChanges = useCallback((paths: string[]) => latest.current.onShowChanges(paths), []);
 
+  // Stops the running turn and, with a goal active, the goal too: between turns there is no
+  // turn to cancel, so the goal is what keeps the agent going.
   function stop() {
     if (!thread) return;
     setError(null);
-    onCancel(thread.id).catch((e: unknown) => setError(errorText(e)));
+    if (thread.goal?.status === "active") stopGoal();
+    if (thread.messages.some((m) => m.status === "streaming")) {
+      onCancel(thread.id).catch((e: unknown) => setError(errorText(e)));
+    }
   }
 
   function stopGoal() {
@@ -244,6 +287,24 @@ export default function Chat({
     [threadId],
   );
 
+  // Choices the agent offered in its last finished reply, until the user answers or dismisses them.
+  const lastMessage = thread?.messages.at(-1);
+  const choiceSource =
+    !working && lastMessage?.role === "assistant" && lastMessage.status === "complete"
+      ? lastMessage
+      : null;
+  const choices = choiceSource ? parseChoices(choiceSource.text) : null;
+  const [dismissedChoices, setDismissedChoices] = useState<string | null>(null);
+  const showChoices =
+    choices !== null && choiceSource !== null && dismissedChoices !== choiceSource.id;
+  const answerChoice = (option: string) => {
+    if (choiceSource) setDismissedChoices(choiceSource.id);
+    void dispatch(option, [], true);
+  };
+  const writeOwnAnswer = () => {
+    if (choiceSource) setDismissedChoices(choiceSource.id);
+    document.querySelector<HTMLElement>(".composer-editor .ProseMirror")?.focus();
+  };
   const isNew = !thread || empty;
   return (
     <div
@@ -297,25 +358,46 @@ export default function Chat({
         )}
       </div>
       <div className="w-full flex-none box-border px-6 pb-4">
-        {thread?.goal && <GoalBanner goal={thread.goal} onStop={stopGoal} />}
-        <Composer
-          value={draft}
-          onChange={setDraft}
-          onSubmit={submit}
-          onStop={stop}
-          working={working}
-          error={error}
-          agent={agent}
-          model={model}
-          agents={empty ? offered : [agent]}
-          onPickModel={pickModel}
-          accessMode={accessMode}
-          onPickAccess={pickAccess}
-          attachments={attachments}
-          onRemoveAttachment={(i) => setAttachments(attachments.filter((_, j) => j !== i))}
-          dropping={dropping}
-          history={history}
-        />
+        {showChoices && choices && (
+          <ChoicePanel
+            options={choices}
+            onPick={answerChoice}
+            onOwn={writeOwnAnswer}
+            draftEmpty={!draft.trim() && attachments.length === 0}
+          />
+        )}
+        {thread?.goal && goalKey !== dismissedGoal && (
+          <GoalBanner
+            goal={thread.goal}
+            onStop={stopGoal}
+            onDismiss={() => setDismissedGoal(goalKey)}
+          />
+        )}
+        <Suspense
+          fallback={
+            <div className="h-[106px] rounded-[8px] border border-border-strong bg-editor" />
+          }
+        >
+          <Composer
+            value={draft}
+            onChange={setDraft}
+            onSubmit={submit}
+            onStop={stop}
+            working={working}
+            error={error}
+            agent={agent}
+            model={model}
+            agents={empty ? offered : [agent]}
+            onPickModel={pickModel}
+            accessMode={accessMode}
+            onPickAccess={pickAccess}
+            attachments={attachments}
+            onRemoveAttachment={(i) => setAttachments(attachments.filter((_, j) => j !== i))}
+            dropping={dropping}
+            history={history}
+            files={files}
+          />
+        </Suspense>
       </div>
     </div>
   );

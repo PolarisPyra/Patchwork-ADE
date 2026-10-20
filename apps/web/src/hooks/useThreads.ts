@@ -18,9 +18,11 @@ export interface NewThreadOptions {
   accessMode: AccessMode;
 }
 
-/** True while any message in the thread is still streaming. */
+/** True while a message is streaming, or a goal is active: between its turns the agent works
+ * on the goal without any message streaming. */
 export function isWorking(thread: Thread | null): boolean {
-  return thread?.messages.some((m) => m.status === "streaming") ?? false;
+  if (!thread) return false;
+  return thread.goal?.status === "active" || thread.messages.some((m) => m.status === "streaming");
 }
 
 /** Same rule as the backend: first line, trimmed, at most 60 characters. */

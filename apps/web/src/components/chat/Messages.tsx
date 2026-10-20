@@ -1,4 +1,4 @@
-import { memo, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowClockwiseIcon,
@@ -26,8 +26,11 @@ import {
 } from "~/api";
 import type { CanvasTab } from "~/components/canvas/Canvas";
 import AttachmentChip, { AttachmentTile } from "~/components/chat/AttachmentChip";
-import Markdown, { ACTION_CLASS, CopyButton } from "~/components/chat/Markdown";
+import { ACTION_CLASS, CopyButton } from "~/components/chat/CopyButton";
 import { formatClock } from "~/lib/util";
+
+// Markdown pulls in the renderer, so it loads on first use; plain text shows until then.
+const Markdown = lazy(() => import("~/components/chat/Markdown"));
 
 type OpenCanvas = (path: string, message: Message | null, tab: CanvasTab) => void;
 
@@ -90,6 +93,16 @@ export default function Messages({
     // Runs after the virtualizer reads each scroll event, so isAtEnd() sees the new position.
     onChange: (instance) => setAtEnd(instance.isAtEnd()),
   });
+
+  // The banner above the composer and the window size change the viewport height without
+  // a scroll, so the rows are measured again when it changes.
+  useLayoutEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => virtualizer.measure());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [virtualizer]);
 
   // Start at the latest message and jump to it again after each send. Agent output
   // is not followed while streaming; the reader scrolls on their own.
@@ -223,7 +236,11 @@ const AssistantMessage = memo(function AssistantMessage({
     <section className="flex min-w-0 flex-col gap-2.5">
       {/* While streaming, WorkingRow shows the agent instead, after the latest message. */}
       {!streaming && <AgentLabel agent={agent} status={message.status} />}
-      {message.text && <Markdown text={message.text} />}
+      {message.text && (
+        <Suspense fallback={<div className="whitespace-pre-wrap">{message.text}</div>}>
+          <Markdown text={message.text} />
+        </Suspense>
+      )}
       {message.plan.length > 0 && <PlanList steps={message.plan} />}
       {message.tools.some((t) => !t.parent) && (
         <ToolActivity tools={message.tools.filter((t) => !t.parent)} />

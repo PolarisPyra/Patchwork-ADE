@@ -99,3 +99,9 @@ export function highlightLines(lines: string[], grammar: string): string[] {
   out.push(current + "</span>".repeat(open.length));
   return out;
 }
+
+/** Highlighted HTML for a whole code block, or null when the language is not registered. */
+export function highlightBlock(code: string, lang: string): string | null {
+  if (!hljs.getLanguage(lang)) return null;
+  return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+}

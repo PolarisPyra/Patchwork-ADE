@@ -111,6 +111,11 @@ fn remove_folder(server: Srv, id: String) -> Res<()> {
 }
 
 #[tauri::command]
+fn list_files(server: Srv, project_id: String) -> Res<Vec<String>> {
+    server.list_files(&project_id)
+}
+
+#[tauri::command]
 fn get_last_thread(server: Srv) -> Option<String> {
     server.last_thread_id()
 }
@@ -294,6 +299,7 @@ pub fn run() {
             create_folder,
             rename_folder,
             remove_folder,
+            list_files,
             get_last_thread,
             set_last_thread,
             get_collapsed,
