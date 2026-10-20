@@ -269,6 +269,36 @@ impl Turn {
         publish(&self.server, &self.thread_id, &self.message_id, event);
     }
 
+    /// Streams a text delta to the frontend without saving it; the reader
+    /// collects it in `unsaved` so it is stored in one write later.
+    fn stream_text(&self, event: AgentEvent, unsaved: &mut String) {
+        if let AgentEvent::TextDelta { text, .. } = &event {
+            unsaved.push_str(text);
+        }
+        self.server.emit(AgentEventEnvelope {
+            thread_id: self.thread_id.clone(),
+            event,
+        });
+    }
+
+    /// Saves text that was streamed but not yet stored.
+    fn save_text(&self, unsaved: &mut String) {
+        if unsaved.is_empty() {
+            return;
+        }
+        let event = AgentEvent::TextDelta {
+            message_id: self.message_id.clone(),
+            text: std::mem::take(unsaved),
+        };
+        if let Err(e) = self
+            .server
+            .store
+            .update_thread(&self.thread_id, |t| apply(t, &self.message_id, &event))
+        {
+            log::warn!("failed to save agent text: {e}");
+        }
+    }
+
     fn spec(&self) -> TurnSpec<'_> {
         TurnSpec {
             root: &self.root,
@@ -289,6 +319,9 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
     let mut last_was_text = false;
     let mut started = HashSet::new();
     let mut stream_error: Option<String> = None;
+    // Text streamed to the frontend but not yet stored; saving every delta
+    // stalls the reader, so it is stored before the next event and at the end.
+    let mut unsaved = String::new();
 
     for line in BufReader::new(stdout).lines() {
         let Ok(line) = line else { continue };
@@ -314,6 +347,7 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
                         .insert(approval.id.clone(), reply);
+                    turn.save_text(&mut unsaved);
                     turn.publish(AgentEvent::ApprovalRequested {
                         message_id: turn.message_id.clone(),
                         approval,
@@ -361,11 +395,18 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
                         _ => {}
                     }
                     last_was_text = matches!(event, AgentEvent::TextDelta { .. });
-                    turn.publish(event);
+                    if last_was_text {
+                        turn.stream_text(event, &mut unsaved);
+                    } else {
+                        turn.save_text(&mut unsaved);
+                        turn.publish(event);
+                    }
                 }
             }
         }
     }
+    // The stream has closed, whether the turn finished, failed, or was cancelled.
+    turn.save_text(&mut unsaved);
 
     let exit = child.wait().ok();
     let tail = stderr_tail.join().unwrap_or_default();
