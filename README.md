@@ -1,6 +1,6 @@
 # Patchwork
 
-An agentic development environment built with Rust + Tauri 2 and a React/TypeScript UI styled after JetBrains IDEs (light and dark themes).
+An agentic development environment built with Rust + Tauri 2 and a React/TypeScript UI with light and dark themes.
 
 Patchwork drives the **Claude Code**, **Codex**, and **Antigravity** CLIs already installed and signed in on your machine. Each task is a conversation with one agent; edits land directly in your project, and you review them in the canvas (Plan / Code / Diff) where **Stage** stages a file (`git add`) and **Reject** restores it.
 
@@ -44,7 +44,7 @@ The repo is split into `apps/web`, `apps/server`, and `apps/desktop`:
 - `apps/web` — the React UI (`~/` imports resolve to `apps/web/src`)
   - `src/app/` — app root; `src/api.ts` — typed bridge mirroring `apps/server/src/types.rs`
   - `src/components/{chat,sidebar,usage,settings,onboarding,canvas,workspace}/` — UI
-  - `src/hooks/`, `src/lib/` — state and helpers; `src/theme.css` — JetBrains Int UI tokens
+  - `src/hooks/`, `src/lib/` — state and helpers; `src/theme.css` — design tokens
 
 ## Data model
 
