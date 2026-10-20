@@ -111,6 +111,8 @@ interface SidebarProps {
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
+  /** Opens a file's current contents, for files with no uncommitted change. */
+  onOpenFile: (path: string) => void;
   /** Files of the reply the Changes view was opened from, if any. */
   changeFocus: string[] | null;
   /** Opens the command palette. */
@@ -510,9 +512,12 @@ function ChangesView({
   changeFocus,
   onRefreshChanges,
   onOpenChange,
+  onOpenFile,
 }: SidebarProps) {
   const [error, setError] = useState<string | null>(null);
   const pinned = changes.filter((c) => changeFocus?.includes(c.path));
+  // Files of the reply that git no longer reports as changed, because they have been committed.
+  const committed = (changeFocus ?? []).filter((p) => !changes.some((c) => c.path === p));
   const folders = new Map<string, FileChange[]>();
   for (const c of changes) {
     if (pinned.includes(c)) continue;
@@ -590,18 +595,31 @@ function ChangesView({
         {changes.length === 0 && (
           <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No changes</div>
         )}
-        {pinned.length > 0 && (
+        {(pinned.length > 0 || committed.length > 0) && (
           <div className="flex flex-col gap-px rounded-[var(--radius)] border border-accent bg-selected-muted p-1">
             <div className="flex items-center justify-between gap-1 px-1.5 pt-0.5 pb-1">
               <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.04em] text-accent-text uppercase">
                 From this reply
               </span>
-              <span className="flex gap-1">
-                <BulkButton onClick={() => applyAll(pinned)}>Apply</BulkButton>
-                <BulkButton onClick={() => void rejectAll(pinned)}>Reject</BulkButton>
-              </span>
+              {pinned.length > 0 && (
+                <span className="flex gap-1">
+                  <BulkButton onClick={() => applyAll(pinned)}>Apply</BulkButton>
+                  <BulkButton onClick={() => void rejectAll(pinned)}>Reject</BulkButton>
+                </span>
+              )}
             </div>
             {pinned.map(row)}
+            {committed.map((path) => (
+              <button
+                key={path}
+                className="flex min-h-[26px] cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-3 py-0.5 text-fg text-left hover:bg-hover"
+                title={path}
+                onClick={() => onOpenFile(path)}
+              >
+                <span className="min-w-0 flex-1 truncate">{baseName(path)}</span>
+                <span className="text-[length:var(--fs-xs)] text-fg-subtle">committed</span>
+              </button>
+            ))}
           </div>
         )}
         {[...folders]
