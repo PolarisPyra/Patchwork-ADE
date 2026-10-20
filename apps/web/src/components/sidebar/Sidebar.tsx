@@ -452,33 +452,33 @@ function ChangeRow({
 }) {
   const name = baseName(change.path);
   return (
-    <div className="group flex min-h-[26px] items-center gap-1 rounded-[var(--radius-sm)] py-0.5 pr-1 pl-1.5 hover:bg-hover">
+    <div className="group flex min-h-[30px] items-center gap-1 rounded-[var(--radius-sm)] py-1 pr-2 pl-1.5 hover:bg-hover">
       <button
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-fg text-left"
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 border-none bg-transparent p-0 text-fg text-left"
         title={change.path}
         onClick={onOpen}
       >
         <span className="min-w-0 flex-1 truncate">{name}</span>
-        <span className="text-success">+{change.additions}</span>
-        <span className="text-danger">−{change.deletions}</span>
-        <PencilSimpleIcon size={12} className="flex-none text-fg-muted" aria-label="Edited" />
+        <span className="flex flex-none items-center gap-2.5 tabular-nums">
+          <span className="text-success">+{change.additions}</span>
+          <span className="text-danger">−{change.deletions}</span>
+          <PencilSimpleIcon size={12} className="text-fg-muted" aria-label="Edited" />
+        </span>
       </button>
-      <button
-        className="btn-icon opacity-0 group-hover:opacity-100 focus:opacity-100"
-        title="Apply"
-        aria-label={`Apply ${name}`}
-        onClick={onApply}
-      >
-        <CheckIcon size={14} />
-      </button>
-      <button
-        className="btn-icon opacity-0 group-hover:opacity-100 focus:opacity-100"
-        title="Reject"
-        aria-label={`Reject ${name}`}
-        onClick={onReject}
-      >
-        <ArrowCounterClockwiseIcon size={14} />
-      </button>
+      {/* Takes no room until hovered, so the counts sit at the right edge. */}
+      <span className="hidden flex-none group-focus-within:flex group-hover:flex">
+        <button className="btn-icon" title="Apply" aria-label={`Apply ${name}`} onClick={onApply}>
+          <CheckIcon size={14} />
+        </button>
+        <button
+          className="btn-icon"
+          title="Reject"
+          aria-label={`Reject ${name}`}
+          onClick={onReject}
+        >
+          <ArrowCounterClockwiseIcon size={14} />
+        </button>
+      </span>
     </div>
   );
 }
@@ -486,12 +486,16 @@ function ChangeRow({
 /** Changed files. Those from the reply the view was opened from are pinned on top; the rest are grouped by folder. */
 function ChangesView({
   project,
+  threads,
+  selectedId,
   changes,
   changeFocus,
   onRefreshChanges,
   onOpenChange,
 }: SidebarProps) {
   const [error, setError] = useState<string | null>(null);
+  // With full access nothing waits for review, so the bulk actions are left out.
+  const fullAccess = threads.find((t) => t.id === selectedId)?.accessMode === "full-access";
   // The reply's files, listed whether or not they still have uncommitted changes.
   const replyFiles = changeFocus ?? [];
   const pinned = changes.filter((c) => replyFiles.includes(c.path));
@@ -563,7 +567,7 @@ function ChangesView({
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
-        {changes.length > 0 && (
+        {changes.length > 0 && !fullAccess && (
           <div className="flex justify-end gap-1 px-1">
             <BulkButton onClick={() => applyAll(changes)}>Apply all</BulkButton>
             <BulkButton onClick={() => void rejectAll(changes)}>Reject all</BulkButton>
@@ -578,7 +582,7 @@ function ChangesView({
               <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.04em] text-accent-text uppercase">
                 From this reply
               </span>
-              {pinned.length > 0 && (
+              {pinned.length > 0 && !fullAccess && (
                 <span className="flex gap-1">
                   <BulkButton onClick={() => applyAll(pinned)}>Apply</BulkButton>
                   <BulkButton onClick={() => void rejectAll(pinned)}>Reject</BulkButton>
