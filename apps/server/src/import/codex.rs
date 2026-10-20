@@ -2,6 +2,8 @@
 //! Archived sessions live elsewhere and are not imported.
 
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use serde_json::Value;
@@ -19,8 +21,7 @@ pub fn sessions() -> Vec<Session> {
     provider::codex::rollout_files(&home.join("sessions"))
         .into_iter()
         .filter_map(|(_, path)| {
-            let text = std::fs::read_to_string(&path).ok()?;
-            let mut session = parse(&text)?;
+            let mut session = parse(BufReader::new(File::open(&path).ok()?))?;
             session.title = titles.get(&session.session_id).cloned();
             Some(session)
         })
@@ -48,12 +49,13 @@ fn joined_text(content: &Value, block_type: &str) -> String {
         .join("\n")
 }
 
-/// Parses one rollout file. Subagent sessions (e.g. guardian reviews) are flagged.
-fn parse(text: &str) -> Option<Session> {
-    let mut lines = text
-        .lines()
-        .filter_map(|l| serde_json::from_str::<Value>(l).ok());
-    let meta = lines.next().filter(|v| v["type"] == "session_meta")?;
+/// Parses one rollout file, line by line. Subagent sessions (e.g. guardian reviews) are flagged.
+fn parse(reader: impl BufRead) -> Option<Session> {
+    let mut lines = reader.lines().map_while(Result::ok);
+    let meta = lines
+        .by_ref()
+        .find_map(|l| serde_json::from_str::<Value>(&l).ok())
+        .filter(|v| v["type"] == "session_meta")?;
     let payload = &meta["payload"];
     let user_thread = payload["thread_source"]
         .as_str()
@@ -68,7 +70,12 @@ fn parse(text: &str) -> Option<Session> {
 
     // Newer CLIs record whole items; older ones record user_message / agent_message events.
     let (mut items, mut legacy) = (Vec::new(), Vec::new());
-    for v in lines.filter(|v| v["type"] == "event_msg") {
+    // Most lines are large tool output; only event lines are worth parsing.
+    let events = lines
+        .filter(|l| l.contains("\"event_msg\""))
+        .filter_map(|l| serde_json::from_str::<Value>(&l).ok())
+        .filter(|v| v["type"] == "event_msg");
+    for v in events {
         let at = v["timestamp"]
             .as_str()
             .and_then(parse_rfc3339_ms)
@@ -143,7 +150,7 @@ mod tests {
             json!({"type": "event_msg", "payload": {"type": "item_completed",
                 "item": {"type": "AgentMessage", "content": [{"type": "Text", "text": "Done"}]}}}),
         ]);
-        let s = parse(&items).unwrap();
+        let s = parse(items.as_bytes()).unwrap();
         assert_eq!(
             (s.session_id.as_str(), s.cwd.as_str(), s.created_at),
             ("s1", "/p", 1000)
@@ -160,13 +167,13 @@ mod tests {
             json!({"type": "event_msg", "payload": {"type": "user_message", "message": "hi"}}),
             json!({"type": "event_msg", "payload": {"type": "agent_message", "message": "hello"}}),
         ]);
-        assert_eq!(parse(&legacy).unwrap().messages.len(), 2);
+        assert_eq!(parse(legacy.as_bytes()).unwrap().messages.len(), 2);
     }
 
     #[test]
     fn flags_subagent_sessions() {
         let sub = json!({"type": "session_meta", "payload": {"id": "s", "cwd": "/p",
             "source": {"subagent": {"other": "guardian"}}, "thread_source": "guardian_review"}});
-        assert!(parse(&sub.to_string()).is_some_and(|s| s.subagent));
+        assert!(parse(sub.to_string().as_bytes()).is_some_and(|s| s.subagent));
     }
 }
