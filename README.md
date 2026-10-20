@@ -1,6 +1,6 @@
 # Patchwork
 
-An agentic development environment in the spirit of [t3code](https://github.com/pingdotgg/t3code), built with Rust + Tauri 2 and a React/TypeScript UI styled after JetBrains IDEs (light and dark themes).
+An agentic development environment built with Rust + Tauri 2 and a React/TypeScript UI styled after JetBrains IDEs (light and dark themes).
 
 Patchwork drives the **Claude Code**, **Codex**, and **Gemini** CLIs already installed and signed in on your machine. Each task is a conversation with one agent; edits land directly in your project, and you review them in the canvas (Plan / Code / Diff) where **Apply** stages a file (`git add`) and **Reject** restores it.
 
@@ -29,7 +29,7 @@ cargo test -p patchwork-server -- --ignored  # live turns against the real agent
 
 ## Layout
 
-Like t3code, the repo is split into `apps/web`, `apps/server`, and `apps/desktop`:
+The repo is split into `apps/web`, `apps/server`, and `apps/desktop`:
 
 - `apps/server` — the backend, a Rust crate with no Tauri dependency
   - `src/lib.rs` — `Server`, the operations the UI calls
