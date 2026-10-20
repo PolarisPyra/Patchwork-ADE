@@ -1,7 +1,9 @@
 import { useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import {
+  ArrowCounterClockwiseIcon,
   ArrowsClockwiseIcon,
   CaretRightIcon,
+  CheckIcon,
   ChatsIcon,
   CircleNotchIcon,
   FolderIcon,
@@ -15,13 +17,20 @@ import {
   TrashIcon,
   type Icon,
 } from "@phosphor-icons/react";
-import { AGENT_LABELS, type AgentKind, type FileChange, type Project, type Thread } from "~/api";
+import {
+  AGENT_LABELS,
+  api,
+  type AgentKind,
+  type FileChange,
+  type Project,
+  type Thread,
+} from "~/api";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import ProviderLogos from "~/components/ProviderLogos";
 import ContextMenu, { type MenuItem } from "~/components/sidebar/ContextMenu";
 import UsagePopover from "~/components/usage/UsagePopover";
 import { isWorking } from "~/hooks/useThreads";
-import { baseName, dirName, displayTitle, formatRelative } from "~/lib/util";
+import { baseName, dirName, displayTitle, errorText, formatRelative } from "~/lib/util";
 
 export type SidebarView = "tasks" | "changes";
 
@@ -431,7 +440,32 @@ function ThreadRow({
   );
 }
 
-function ChangesView({ changes, onRefreshChanges, onOpenChange }: SidebarProps) {
+/** Changed files grouped by folder, each with Apply (stage) and Reject (revert). */
+function ChangesView({ project, changes, onRefreshChanges, onOpenChange }: SidebarProps) {
+  const [error, setError] = useState<string | null>(null);
+  const folders = new Map<string, FileChange[]>();
+  for (const c of changes) {
+    const dir = dirName(c.path);
+    folders.set(dir, [...(folders.get(dir) ?? []), c]);
+  }
+
+  async function act(action: () => Promise<void>) {
+    setError(null);
+    try {
+      await action();
+      onRefreshChanges();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
+
+  async function reject(path: string) {
+    if (!project) return;
+    const question = `Discard changes to ${baseName(path)}?`;
+    if (!(await confirm(question, { title: "Reject", kind: "warning" }))) return;
+    void act(() => api.revertFile(project.id, path));
+  }
+
   return (
     <>
       <div className="flex h-8 flex-none items-center justify-between pr-2 pl-3 text-[length:var(--fs-sm)] font-semibold">
@@ -445,32 +479,58 @@ function ChangesView({ changes, onRefreshChanges, onOpenChange }: SidebarProps) 
           <ArrowsClockwiseIcon size={16} />
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto p-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
         {changes.length === 0 && (
           <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No changes</div>
         )}
-        {changes.map((c) => (
-          <button
-            key={c.path}
-            className="flex min-h-[26px] w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-fg text-left hover:bg-hover"
-            title={c.path}
-            onClick={() => onOpenChange(c.path)}
-          >
-            <span
-              className={`w-3.5 flex-none text-center font-[family-name:var(--font-mono)] text-[length:var(--fs-xs)] font-bold ${STATUS_COLOR[c.status]}`}
-            >
-              {STATUS_LETTER[c.status]}
-            </span>
-            <span className="flex min-w-0 flex-1 gap-1.5 overflow-hidden whitespace-nowrap">
-              <span className="flex-none">{baseName(c.path)}</span>
-              <span className="min-w-0 overflow-hidden text-ellipsis text-fg-subtle">
-                {dirName(c.path)}
-              </span>
-            </span>
-            <span className="text-success">+{c.additions}</span>
-            <span className="text-danger">−{c.deletions}</span>
-          </button>
-        ))}
+        {[...folders]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([dir, files]) => (
+            <div key={dir} className="flex flex-col gap-px">
+              <div className="flex items-center gap-1.5 px-1.5 pt-1 text-[length:var(--fs-xs)] text-fg-subtle">
+                <FolderIcon size={12} />
+                <span className="min-w-0 truncate">{dir || "Project root"}</span>
+              </div>
+              {files.map((c) => (
+                <div
+                  key={c.path}
+                  className="group flex min-h-[26px] items-center gap-1 rounded-[var(--radius-sm)] py-0.5 pr-1 pl-3 hover:bg-hover"
+                >
+                  <button
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-fg text-left"
+                    title={c.path}
+                    onClick={() => onOpenChange(c.path)}
+                  >
+                    <span
+                      className={`w-3.5 flex-none text-center font-[family-name:var(--font-mono)] text-[length:var(--fs-xs)] font-bold ${STATUS_COLOR[c.status]}`}
+                    >
+                      {STATUS_LETTER[c.status]}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{baseName(c.path)}</span>
+                    <span className="text-success">+{c.additions}</span>
+                    <span className="text-danger">−{c.deletions}</span>
+                  </button>
+                  <button
+                    className="btn-icon opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    title="Apply"
+                    aria-label={`Apply ${baseName(c.path)}`}
+                    onClick={() => project && void act(() => api.acceptFile(project.id, c.path))}
+                  >
+                    <CheckIcon size={14} />
+                  </button>
+                  <button
+                    className="btn-icon opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    title="Reject"
+                    aria-label={`Reject ${baseName(c.path)}`}
+                    onClick={() => void reject(c.path)}
+                  >
+                    <ArrowCounterClockwiseIcon size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ))}
+        {error && <div className="px-2 text-[length:var(--fs-sm)] text-danger">{error}</div>}
       </div>
     </>
   );

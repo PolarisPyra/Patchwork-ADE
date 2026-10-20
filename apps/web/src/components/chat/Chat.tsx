@@ -40,6 +40,7 @@ interface ChatProps {
   agents: AgentKind[];
   onOpenFolder: () => void;
   onOpenCanvas: (path: string, message: Message | null, tab: CanvasTab) => void;
+  onShowChanges: () => void;
   onSend: (text: string, attachments: Attachment[], draft: NewThreadOptions) => Promise<void>;
   onCancel: (threadId: string) => Promise<void>;
   onSetModel: (threadId: string, agent: AgentKind, model: string | null) => Promise<void>;
@@ -54,6 +55,7 @@ export default function Chat({
   agents,
   onOpenFolder,
   onOpenCanvas,
+  onShowChanges,
   onSend,
   onCancel,
   onSetModel,
@@ -236,6 +238,7 @@ export default function Chat({
             changes={changes}
             busy={working}
             onOpenCanvas={project ? onOpenCanvas : undefined}
+            onShowChanges={onShowChanges}
             onRetry={retry}
             onRespond={respond}
           />

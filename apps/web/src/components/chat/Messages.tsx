@@ -6,9 +6,8 @@ import {
   CheckIcon,
   CircleIcon,
   CircleNotchIcon,
-  CodeIcon,
+  GitDiffIcon,
   ShieldWarningIcon,
-  SidebarSimpleIcon,
   XCircleIcon,
 } from "@phosphor-icons/react";
 import {
@@ -26,7 +25,7 @@ import {
 import type { CanvasTab } from "~/components/canvas/Canvas";
 import AttachmentChip from "~/components/chat/AttachmentChip";
 import Markdown, { ACTION_CLASS, CopyButton } from "~/components/chat/Markdown";
-import { baseName, formatClock, languageLabel } from "~/lib/util";
+import { formatClock } from "~/lib/util";
 
 type OpenCanvas = (path: string, message: Message | null, tab: CanvasTab) => void;
 
@@ -34,8 +33,10 @@ interface MessagesProps {
   thread: Thread;
   changes: FileChange[];
   busy: boolean;
-  /** Omitted for chats without a project: file cards are hidden. */
+  /** Omitted for chats without a project: the change summary is hidden. */
   onOpenCanvas?: OpenCanvas;
+  /** Opens the sidebar's Changes view. */
+  onShowChanges: () => void;
   onRetry: (message: Message) => void;
   /** Answers a pending approval in the running turn. */
   onRespond: (approvalId: string, allow: boolean) => void;
@@ -46,6 +47,7 @@ export default function Messages({
   changes,
   busy,
   onOpenCanvas,
+  onShowChanges,
   onRetry,
   onRespond,
 }: MessagesProps) {
@@ -64,6 +66,7 @@ export default function Messages({
             retryMessage={messages[i - 1]?.role === "user" ? messages[i - 1] : null}
             busy={busy}
             onOpenCanvas={onOpenCanvas}
+            onShowChanges={onShowChanges}
             onRetry={onRetry}
             onRespond={onRespond}
           />
@@ -102,6 +105,7 @@ interface AssistantProps {
   retryMessage: Message | null;
   busy: boolean;
   onOpenCanvas?: OpenCanvas;
+  onShowChanges: () => void;
   onRetry: (message: Message) => void;
   onRespond: (approvalId: string, allow: boolean) => void;
 }
@@ -113,6 +117,7 @@ function AssistantMessage({
   retryMessage,
   busy,
   onOpenCanvas,
+  onShowChanges,
   onRetry,
   onRespond,
 }: AssistantProps) {
@@ -131,15 +136,9 @@ function AssistantMessage({
       {message.approvals.map((approval) => (
         <ApprovalCard key={approval.id} approval={approval} onRespond={onRespond} />
       ))}
-      {onOpenCanvas &&
-        message.files.map((path) => (
-          <FileCard
-            key={path}
-            path={path}
-            change={changes.find((c) => c.path === path)}
-            onOpen={() => onOpenCanvas(path, message, "code")}
-          />
-        ))}
+      {onOpenCanvas && message.files.length > 0 && (
+        <ChangeSummary paths={message.files} changes={changes} onShow={onShowChanges} />
+      )}
       {message.error && (
         <div className="rounded-[var(--radius)] bg-[var(--danger-soft)] px-3 py-2 text-[length:var(--fs-sm)] whitespace-pre-wrap text-danger [word-break:break-word]">
           {message.error}
@@ -286,40 +285,34 @@ function ToolActivity({ tools }: { tools: ToolCall[] }) {
   );
 }
 
-function FileCard({
-  path,
-  change,
-  onOpen,
+/** One line for the files a message touched; the list itself lives in the Changes view. */
+function ChangeSummary({
+  paths,
+  changes,
+  onShow,
 }: {
-  path: string;
-  change: FileChange | undefined;
-  onOpen: () => void;
+  paths: string[];
+  changes: FileChange[];
+  onShow: () => void;
 }) {
+  const found = changes.filter((c) => paths.includes(c.path));
+  const additions = found.reduce((sum, c) => sum + c.additions, 0);
+  const deletions = found.reduce((sum, c) => sum + c.deletions, 0);
   return (
-    <div className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-panel px-4 py-3">
-      <div className="grid h-10 w-10 flex-none place-items-center rounded-[var(--radius)] bg-accent-soft text-accent-text">
-        <CodeIcon size={20} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div
-          className="overflow-hidden text-ellipsis whitespace-nowrap text-[length:var(--fs-lg)] font-semibold"
-          title={path}
-        >
-          {baseName(path)}
-        </div>
-        <div className="flex gap-2 text-[length:var(--fs-sm)] text-fg-muted">
-          <span>{languageLabel(path)}</span>
-          {change && (
-            <>
-              <span className="text-success">+{change.additions}</span>
-              <span className="text-danger">−{change.deletions}</span>
-            </>
-          )}
-        </div>
-      </div>
-      <button className="btn" onClick={onOpen}>
-        <SidebarSimpleIcon size={14} />
-        Open canvas
+    <div className="flex items-center gap-3 rounded-[var(--radius)] border border-border bg-panel px-3 py-2 text-[length:var(--fs-sm)]">
+      <GitDiffIcon size={14} className="flex-none text-fg-muted" />
+      <span>
+        {paths.length} {paths.length === 1 ? "file" : "files"} changed
+      </span>
+      {found.length > 0 && (
+        <>
+          <span className="text-success">+{additions}</span>
+          <span className="text-danger">−{deletions}</span>
+        </>
+      )}
+      <span className="flex-1" />
+      <button className="btn" onClick={onShow}>
+        Show changes
       </button>
     </div>
   );
