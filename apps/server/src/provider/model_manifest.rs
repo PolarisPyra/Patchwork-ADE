@@ -17,16 +17,20 @@ const CACHE_FILE: &str = "model-manifest.json";
 static CACHE: OnceLock<PathBuf> = OnceLock::new();
 
 /// Starts the background fetch. Call once at startup with the config directory.
-/// Without `PATCHWORK_MANIFEST_TOKEN` nothing is fetched.
+/// Without a token (environment or `.env`) nothing is fetched.
 pub fn start(config_dir: &Path) {
     let path = config_dir.join(CACHE_FILE);
     let _ = CACHE.set(path.clone());
-    let token = match std::env::var(TOKEN_VAR) {
-        Ok(token) if !token.trim().is_empty() => token.trim().to_owned(),
-        _ => {
-            eprintln!("model manifest: {TOKEN_VAR} is not set; no models will be listed");
-            return;
-        }
+    let token = std::env::var(TOKEN_VAR)
+        .ok()
+        .or_else(|| dotenv_value(TOKEN_VAR))
+        .map(|t| t.trim().to_owned())
+        .filter(|t| !t.is_empty());
+    let Some(token) = token else {
+        eprintln!(
+            "model manifest: {TOKEN_VAR} is not set in the environment or .env; no models will be listed"
+        );
+        return;
     };
     std::thread::spawn(move || {
         if let Err(e) = refresh(&path, &token) {
@@ -43,6 +47,23 @@ pub fn models(provider: &str) -> Vec<ModelOption> {
         .and_then(|path| std::fs::read_to_string(path).ok())
         .map(|text| models_in(&text, provider))
         .unwrap_or_default()
+}
+
+/// `key` from the nearest `.env` above the working directory, as `KEY=value` lines.
+fn dotenv_value(key: &str) -> Option<String> {
+    let dir = std::env::current_dir().ok()?;
+    let text = dir
+        .ancestors()
+        .map(|d| d.join(".env"))
+        .find_map(|p| std::fs::read_to_string(p).ok())?;
+    value_in(&text, key)
+}
+
+fn value_in(text: &str, key: &str) -> Option<String> {
+    text.lines().find_map(|line| {
+        let (k, v) = line.trim().split_once('=')?;
+        (k.trim() == key).then(|| v.trim().trim_matches(['"', '\'']).to_owned())
+    })
 }
 
 fn refresh(path: &Path, token: &str) -> Result<(), String> {
@@ -116,6 +137,17 @@ mod tests {
         assert_eq!(claude[0].id.as_deref(), Some("claude-opus-5-5"));
         assert_eq!(claude[0].label, "Opus 5.5");
         assert_eq!(models_in(MANIFEST, "codex").len(), 0);
+    }
+
+    #[test]
+    fn dotenv_value_reads_the_key() {
+        let text = "# comment\nOTHER=1\nPATCHWORK_MANIFEST_TOKEN=\"abc\"\n";
+        assert_eq!(value_in(text, TOKEN_VAR).as_deref(), Some("abc"));
+        assert_eq!(
+            value_in("PATCHWORK_MANIFEST_TOKEN=\n", TOKEN_VAR).as_deref(),
+            Some("")
+        );
+        assert_eq!(value_in(text, "MISSING"), None);
     }
 
     #[test]
