@@ -114,6 +114,16 @@ export default function Messages({
               </div>
             );
           }
+          if (item.role === "user" && item.text.trim() === "/compact") {
+            const before = [...messages.slice(0, index)].reverse().find((m) => m.usage)?.usage;
+            return (
+              <div className="px-6">
+                <div className="flex pb-5">
+                  <CompactedDivider before={tokens.showUsage ? before?.context : undefined} />
+                </div>
+              </div>
+            );
+          }
           const previous = messages[index - 1];
           const usage = item.role === "assistant" && item.status !== "streaming" && tokens.showUsage;
           return (
@@ -303,6 +313,18 @@ function UsageLine({ usage, warnAbove }: { usage: TokenUsage; warnAbove: number 
 }
 
 /** A resolved approval, kept in the transcript with its outcome. */
+function CompactedDivider({ before }: { before: number | undefined }) {
+  return (
+    <div className="flex w-full items-center gap-3 text-[length:var(--fs-xs)] text-fg-subtle">
+      <span className="h-px flex-1 bg-border" />
+      <span>
+        Context compacted{before !== undefined && ` · was ${formatTokens(before)} tokens`}
+      </span>
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
 function ApprovalCard({ approval }: { approval: Approval }) {
   const { title, detail, status } = approval;
   return (

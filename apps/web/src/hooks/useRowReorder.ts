@@ -40,8 +40,12 @@ export function useRowReorder(
   const [target, setTarget] = useState<{ key: string; after: boolean } | null>(null);
 
   // Clears the drop line only when the pointer leaves the element, not when it moves onto a child.
+  // WebKit (Tauri on Linux) often leaves relatedTarget null, so the pointer position decides.
   const leave = (e: DragEvent<HTMLElement>) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTarget(null);
+    const box = e.currentTarget.getBoundingClientRect();
+    const inside =
+      e.clientX >= box.left && e.clientX < box.right && e.clientY >= box.top && e.clientY < box.bottom;
+    if (!inside) setTarget(null);
   };
 
   const end = () => {
