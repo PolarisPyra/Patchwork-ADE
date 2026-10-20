@@ -1,4 +1,11 @@
-import { useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import {
   ArrowLeftIcon,
   ArrowsClockwiseIcon,
@@ -186,6 +193,20 @@ function TasksView({
   onOpenFolder,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  // Collapsed state is restored before the lists show, so nothing animates shut on launch.
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    api.getCollapsed().then(
+      (ids) => {
+        setCollapsed(new Set(ids));
+        setLoaded(true);
+      },
+      () => setLoaded(true),
+    );
+  }, []);
+  useEffect(() => {
+    if (loaded) void api.setCollapsed([...collapsed]);
+  }, [collapsed, loaded]);
   const [menu, setMenu] = useState<{ x: number; y: number; target: Target } | null>(null);
   const [renaming, setRenaming] = useState<Target | null>(null);
   const reorder = useRowReorder((group, ids, folderId) =>
@@ -274,6 +295,8 @@ function TasksView({
     });
     setRenaming({ kind: "folder", id: folder.id });
   };
+
+  if (!loaded) return null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto p-2">

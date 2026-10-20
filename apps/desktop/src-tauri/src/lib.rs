@@ -121,6 +121,16 @@ fn set_last_thread(server: Srv, id: String) -> Res<()> {
 }
 
 #[tauri::command]
+fn get_collapsed(server: Srv) -> Vec<String> {
+    server.collapsed_sections()
+}
+
+#[tauri::command]
+fn set_collapsed(server: Srv, ids: Vec<String>) -> Res<()> {
+    server.set_collapsed_sections(&ids)
+}
+
+#[tauri::command]
 fn create_thread(
     server: Srv,
     project_id: Option<String>,
@@ -286,6 +296,8 @@ pub fn run() {
             remove_folder,
             get_last_thread,
             set_last_thread,
+            get_collapsed,
+            set_collapsed,
             create_thread,
             delete_thread,
             set_thread_model,

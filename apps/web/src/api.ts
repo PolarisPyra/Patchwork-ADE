@@ -294,6 +294,9 @@ export const api = {
   /** The thread that was open when the app last closed. */
   getLastThread: () => invoke<string | null>("get_last_thread"),
   setLastThread: (id: string) => invoke<void>("set_last_thread", { id }),
+  /** Ids of the projects and folders collapsed in the sidebar. */
+  getCollapsed: () => invoke<string[]>("get_collapsed"),
+  setCollapsed: (ids: string[]) => invoke<void>("set_collapsed", { ids }),
   createFolder: (projectId: string, name: string) =>
     invoke<Folder>("create_folder", { projectId, name }),
   renameFolder: (id: string, name: string) => invoke<void>("rename_folder", { id, name }),

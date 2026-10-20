@@ -34,6 +34,8 @@ pub struct Server {
 /// Trims a user-entered name; blank names are refused.
 /// `app_state` key for the thread the user had open last.
 const LAST_THREAD_KEY: &str = "last_thread_id";
+/// `app_state` key for the projects and folders the sidebar has collapsed (JSON array).
+const COLLAPSED_KEY: &str = "collapsed_sections";
 
 fn clean_name(name: &str) -> Res<String> {
     let name = name.trim();
@@ -155,6 +157,19 @@ impl Server {
 
     pub fn set_last_thread_id(&self, id: &str) -> Res<()> {
         self.store.set_state(LAST_THREAD_KEY, id)
+    }
+
+    /// Ids of the projects and folders that were collapsed in the sidebar.
+    pub fn collapsed_sections(&self) -> Vec<String> {
+        self.store
+            .state(COLLAPSED_KEY)
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn set_collapsed_sections(&self, ids: &[String]) -> Res<()> {
+        let json = serde_json::to_string(ids).map_err(|e| e.to_string())?;
+        self.store.set_state(COLLAPSED_KEY, &json)
     }
 
     // ---- folders ---------------------------------------------------------
