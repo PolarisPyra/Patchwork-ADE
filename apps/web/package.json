@@ -16,6 +16,7 @@
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.3",
     "@tiptap/core": "^3.32.0",
+    "@tiptap/extension-code-block": "^3.32.0",
     "@tiptap/extension-mention": "^3.32.0",
     "@tiptap/extension-placeholder": "^3.32.0",
     "@tiptap/extension-table": "^3.32.0",

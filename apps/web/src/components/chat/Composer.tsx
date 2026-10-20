@@ -7,6 +7,7 @@ import EffortPicker from "~/components/chat/EffortPicker";
 import AttachmentChip from "~/components/chat/AttachmentChip";
 import {
   composerExtensions,
+  continueList,
   keepDraftText,
   type MentionSuggestion,
 } from "~/components/chat/composerExtensions";
@@ -58,6 +59,23 @@ const COMMANDS = [
   { name: "/clear", description: "Delete this chat's messages and start the agent fresh" },
   { name: "/compact", description: "Ask Claude to summarise the conversation to free context" },
 ];
+
+/** Most characters a prompt can hold; a longer draft cannot be sent. */
+const PROMPT_LIMIT = 120_000;
+
+/**
+ * How well a command name matches the typed query (without the "/"): lower is better, and null
+ * drops the command. Prefixes rank above matches that start a word, which rank above any match.
+ */
+function commandScore(name: string, query: string): number | null {
+  const bare = name.slice(1);
+  if (bare === query) return 0;
+  if (bare.startsWith(query)) return 2;
+  for (let i = bare.indexOf(query, 1); i > 0; i = bare.indexOf(query, i + 1)) {
+    if ("-_/".includes(bare[i - 1])) return 4;
+  }
+  return bare.includes(query) ? 6 : null;
+}
 
 /** An entry in the @ menu. */
 interface MentionItem {
@@ -122,9 +140,19 @@ export default function Composer({
   // The slash menu lists commands for a draft that is still one "/word"; Escape hides it
   // until the draft changes again.
   const [menuClosed, setMenuClosed] = useState(false);
+  const [commandIndex, setCommandIndex] = useState(0);
   const slash = agent !== "gemini" && /^\/\S*$/.test(value) ? value.toLowerCase() : null;
-  const matches = COMMANDS.filter((c) => slash !== null && c.name.startsWith(slash));
-  const menuOpen = !menuClosed && matches.length > 0;
+  const matches =
+    slash === null
+      ? []
+      : COMMANDS.flatMap((c) => {
+          const score = commandScore(c.name, slash.slice(1));
+          return score === null ? [] : [{ ...c, score }];
+        }).sort((a, b) => a.score - b.score);
+  const menuOpen = !menuClosed && slash !== null;
+  const activeCommand = matches[Math.min(commandIndex, matches.length - 1)];
+
+  const overBy = value.length - PROMPT_LIMIT;
 
   // The @ menu lists project files. Its handlers run inside the editor, so state they touch
   // lives in refs as well as in React state, and the editor always sees the current values.
@@ -216,6 +244,7 @@ export default function Composer({
     },
     onUpdate: ({ editor }) => {
       setMenuClosed(false);
+      setCommandIndex(0);
       changed.current(editor.getMarkdown());
     },
   });
@@ -288,18 +317,31 @@ export default function Composer({
         setMenuClosed(true);
         return true;
       }
+      if (event.key === "ArrowDown" && matches.length > 0) {
+        setCommandIndex((i) => (i + 1) % matches.length);
+        return true;
+      }
+      if (event.key === "ArrowUp" && matches.length > 0) {
+        setCommandIndex((i) => (i + matches.length - 1) % matches.length);
+        return true;
+      }
       // Enter on a command typed in full sends it (a bare "/goal" shows the goal).
-      const typed = value.toLowerCase() === matches[0].name;
-      if (event.key === "Tab" || (event.key === "Enter" && !typed && !event.shiftKey)) {
-        complete(matches[0].name);
+      const typed = activeCommand !== undefined && value.toLowerCase() === activeCommand.name;
+      if (
+        activeCommand &&
+        (event.key === "Tab" || (event.key === "Enter" && !typed && !event.shiftKey))
+      ) {
+        complete(activeCommand.name);
         return true;
       }
     }
-    // Enter sends; Shift+Enter starts a new line (the editor's default).
+    // Enter sends, unless the draft is over the limit; Shift+Enter continues a list, or starts a
+    // new line (the editor's default) elsewhere.
     if (event.key === "Enter" && !event.shiftKey) {
-      onSubmit();
+      if (overBy <= 0) onSubmit();
       return true;
     }
+    if (event.key === "Enter" && continueList(editor)) return true;
     return false;
   }
   keyDown.current = handleKey;
@@ -310,10 +352,15 @@ export default function Composer({
     >
       {menuOpen && (
         <div className="absolute right-0 bottom-full left-0 mb-1.5 flex flex-col gap-px rounded-[var(--radius)] border border-border bg-panel p-1 shadow-[var(--shadow-popup)]">
+          {matches.length === 0 && (
+            <div className="px-2 py-1.5 text-[length:var(--fs-sm)] text-fg-muted">
+              No matching command.
+            </div>
+          )}
           {matches.map((c) => (
             <button
               key={c.name}
-              className="flex w-full cursor-pointer items-baseline gap-2.5 rounded-[var(--radius)] border-none bg-transparent px-2 py-1.5 text-left hover:bg-hover"
+              className={`flex w-full cursor-pointer items-baseline gap-2.5 rounded-[var(--radius)] border-none px-2 py-1.5 text-left ${c.name === activeCommand?.name ? "bg-selected" : "bg-transparent hover:bg-hover"}`}
               // Keeps the focus in the editor.
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => complete(c.name)}
@@ -377,7 +424,7 @@ export default function Composer({
           <button
             className="grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-accent text-on-accent enabled:hover:bg-accent-hover disabled:cursor-default disabled:bg-selected-muted disabled:text-fg-subtle"
             onClick={onSubmit}
-            disabled={!value.trim() && attachments.length === 0}
+            disabled={(!value.trim() && attachments.length === 0) || overBy > 0}
             title={working ? "Steer the running turn" : "Send"}
             aria-label={working ? "Steer the running turn" : "Send"}
           >
@@ -386,6 +433,11 @@ export default function Composer({
         )}
       </div>
       {error && <div className="text-[length:var(--fs-sm)] text-danger">{error}</div>}
+      {overBy > 0 && (
+        <div role="alert" className="text-[length:var(--fs-sm)] text-danger">
+          {`Prompt is ${overBy.toLocaleString("en-US")} ${overBy === 1 ? "character" : "characters"} over the ${PROMPT_LIMIT.toLocaleString("en-US")}-character limit. Shorten or split it before sending.`}
+        </div>
+      )}
     </div>
   );
 }

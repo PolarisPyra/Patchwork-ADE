@@ -1,12 +1,25 @@
 import { Children, useEffect, useState, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { TextAlignLeftIcon } from "@phosphor-icons/react";
 import { SYNTAX_CLASSES } from "~/components/canvas/syntaxClasses";
-import { CopyButton } from "~/components/chat/CopyButton";
+import { ACTION_CLASS, CopyButton } from "~/components/chat/CopyButton";
 import { CHOICES_LANG } from "~/components/chat/choices";
 
 /** Links are shown as text unless they use one of these protocols. Nothing is opened from a reply. */
 const SAFE_LINK = /^(https?:|mailto:)/i;
+/** Matches title="...", file=..., or filename='...' in a fence's info string. */
+const TITLE_ATTR = /(?:^|\s)(?:title|file|filename)=(?:"([^"]*)"|'([^']*)'|([^\s"']+))/;
+/** A bare token that looks like a filename, such as app.tsx or Cargo.toml. */
+const FILE_TOKEN = /^[\w@][\w@./-]*\.[A-Za-z0-9]+$/;
+
+/** The block title from a fence's meta, or null when it has none. */
+function codeTitle(meta: string | null | undefined): string | null {
+  if (!meta) return null;
+  const attr = TITLE_ATTR.exec(meta);
+  if (attr) return (attr[1] ?? attr[2] ?? attr[3]) || null;
+  return meta.split(/\s+/).find((token) => FILE_TOKEN.test(token)) ?? null;
+}
 
 const components: Components = {
   h1: ({ children }) => (
@@ -48,7 +61,7 @@ const components: Components = {
       {children}
     </code>
   ),
-  pre: ({ children }) => {
+  pre: ({ children, node }) => {
     // remark always gives a fenced block one <code> child, with its language as a class.
     const child = Children.only(children) as ReactElement<{
       className?: string;
@@ -58,7 +71,9 @@ const components: Components = {
     // A choices block is shown as a panel above the composer, not as code.
     if (lang === CHOICES_LANG) return null;
     const code = String(child.props.children ?? "").replace(/\n$/, "");
-    return <CodeBlock lang={lang} code={code} />;
+    // The fence's info string after the language is kept on the hast <code> node as data.meta.
+    const meta = (node?.children[0] as { data?: { meta?: string | null } } | undefined)?.data?.meta;
+    return <CodeBlock lang={lang} code={code} title={codeTitle(meta)} />;
   },
   a: ({ href, children }) =>
     href && SAFE_LINK.test(href) ? (
@@ -82,9 +97,11 @@ export default function Markdown({ text }: { text: string }) {
   );
 }
 
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
+function CodeBlock({ lang, code, title }: { lang: string; code: string; title: string | null }) {
   // Highlighting loads on demand, so the chat does not pull every grammar up front.
   const [html, setHtml] = useState<string | null>(null);
+  // Long lines wrap by default; the toggle switches back to horizontal scroll.
+  const [wrap, setWrap] = useState(true);
   useEffect(() => {
     let current = true;
     void import("~/components/canvas/highlight").then(({ highlightBlock }) => {
@@ -97,10 +114,22 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   return (
     <div className="my-2 overflow-hidden rounded-[var(--radius)] border border-border bg-panel">
       <div className="flex items-center justify-between border-b border-border py-0.5 pr-1 pl-2.5 text-[length:var(--fs-xs)] text-fg-subtle">
-        <span>{lang || "text"}</span>
-        <CopyButton text={code} />
+        <span className="min-w-0 truncate">{title || lang || "text"}</span>
+        <div className="flex items-center">
+          <button
+            className={`${ACTION_CLASS} aria-pressed:text-fg`}
+            aria-pressed={wrap}
+            onClick={() => setWrap(!wrap)}
+            title="Wrap lines"
+          >
+            <TextAlignLeftIcon size={13} />
+          </button>
+          <CopyButton text={code} />
+        </div>
       </div>
-      <pre className="m-0 overflow-x-auto px-3 py-2.5 text-[12px] leading-[1.5]">
+      <pre
+        className={`m-0 px-3 py-2.5 text-[12px] leading-[1.5] ${wrap ? "break-words whitespace-pre-wrap" : "overflow-x-auto"}`}
+      >
         {html === null ? (
           <code>{code}</code>
         ) : (

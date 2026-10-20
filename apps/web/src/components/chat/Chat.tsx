@@ -31,6 +31,7 @@ import GoalBanner, { currentActivity } from "~/components/chat/GoalBanner";
 import LineageCard from "~/components/chat/LineageCard";
 import type { HistoryEntry } from "~/components/chat/Composer";
 import Messages from "~/components/chat/Messages";
+import PendingApprovalBanner from "~/components/chat/PendingApprovalBanner";
 import { isWorking, type NewThreadOptions } from "~/hooks/useThreads";
 import { displayTitle, errorText } from "~/lib/util";
 
@@ -351,6 +352,8 @@ export default function Chat({
     },
     [threadId],
   );
+  const pendingApprovals =
+    thread?.messages.flatMap((m) => m.approvals).filter((a) => a.status === "pending") ?? [];
 
   // Choices the agent offered in its last finished reply, until the user answers or dismisses them.
   const lastMessage = thread?.messages.at(-1);
@@ -389,7 +392,6 @@ export default function Chat({
             onOpenCanvas={project ? openCanvas : undefined}
             onShowChanges={showChanges}
             onRetry={retry}
-            onRespond={respond}
           />
         ) : (
           <div className="flex h-auto flex-col items-center justify-center gap-4 p-6 text-center">
@@ -423,6 +425,9 @@ export default function Chat({
         )}
       </div>
       <div className="w-full flex-none box-border px-6 pb-4">
+        {pendingApprovals.length > 0 && (
+          <PendingApprovalBanner approvals={pendingApprovals} onRespond={respond} />
+        )}
         {showChoices && choices && (
           <ChoicePanel
             options={choices}

@@ -54,8 +54,6 @@ interface MessagesProps {
   /** Opens the sidebar's Changes view. */
   onShowChanges: (paths: string[]) => void;
   onRetry: (message: Message) => void;
-  /** Answers a pending approval in the running turn. */
-  onRespond: (approvalId: string, allow: boolean) => void;
 }
 
 export default function Messages({
@@ -65,7 +63,6 @@ export default function Messages({
   onOpenCanvas,
   onShowChanges,
   onRetry,
-  onRespond,
 }: MessagesProps) {
   const { messages } = thread;
   const listRef = useRef<LegendListRef>(null);
@@ -125,7 +122,6 @@ export default function Messages({
                     onOpenCanvas={onOpenCanvas}
                     onShowChanges={onShowChanges}
                     onRetry={onRetry}
-                    onRespond={onRespond}
                   />
                 )}
               </div>
@@ -166,8 +162,10 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
         </div>
       )}
       {message.text && (
-        <div className="rounded-[12px] bg-[color-mix(in_srgb,var(--text)_10%,var(--bg-editor))] px-4 py-2.5 leading-[1.55] whitespace-pre-wrap text-fg [word-break:break-word] selectable">
-          {message.text}
+        <div className="rounded-[12px] bg-[color-mix(in_srgb,var(--text)_10%,var(--bg-editor))] px-4 py-2.5 leading-[1.55] whitespace-pre-wrap text-fg [word-break:break-word] selectable [&_h3]:mt-0 [&_h3]:mb-0">
+          <Suspense fallback={<div className="whitespace-pre-wrap">{message.text}</div>}>
+            <Markdown text={message.text} />
+          </Suspense>
         </div>
       )}
     </div>
@@ -183,7 +181,6 @@ interface AssistantProps {
   onOpenCanvas?: OpenCanvas;
   onShowChanges: (paths: string[]) => void;
   onRetry: (message: Message) => void;
-  onRespond: (approvalId: string, allow: boolean) => void;
 }
 
 const AssistantMessage = memo(function AssistantMessage({
@@ -195,7 +192,6 @@ const AssistantMessage = memo(function AssistantMessage({
   onOpenCanvas,
   onShowChanges,
   onRetry,
-  onRespond,
 }: AssistantProps) {
   const streaming = message.status === "streaming";
   const subagents = message.tools.filter((t) => t.subagent && !t.parent);
@@ -227,9 +223,20 @@ const AssistantMessage = memo(function AssistantMessage({
       )}
       {actions.length > 0 && <ToolActivity tools={actions} />}
       {streaming && live && <LiveTool tool={live} />}
-      {message.approvals.map((approval) => (
-        <ApprovalCard key={approval.id} approval={approval} onRespond={onRespond} />
-      ))}
+      {/* A pending approval is answered in the banner above the composer. */}
+      {message.approvals.map((approval) =>
+        approval.status === "pending" ? (
+          <p
+            key={approval.id}
+            className="m-0 flex items-center gap-1.5 px-1 text-[length:var(--fs-sm)] text-warning"
+          >
+            <ShieldWarningIcon size={15} />
+            Waiting for approval: {approval.title}
+          </p>
+        ) : (
+          <ApprovalCard key={approval.id} approval={approval} />
+        ),
+      )}
       {onOpenCanvas && message.files.length > 0 && (
         <ChangeSummary
           paths={message.files}
@@ -259,47 +266,22 @@ const AssistantMessage = memo(function AssistantMessage({
   );
 });
 
-function ApprovalCard({
-  approval,
-  onRespond,
-}: {
-  approval: Approval;
-  onRespond: (approvalId: string, allow: boolean) => void;
-}) {
-  const { id, title, detail, status } = approval;
+/** A resolved approval, kept in the transcript with its outcome. */
+function ApprovalCard({ approval }: { approval: Approval }) {
+  const { title, detail, status } = approval;
   return (
-    <div
-      className={`flex flex-col gap-2 rounded-[var(--radius)] border bg-panel px-3 py-2.5 text-[length:var(--fs-sm)] ${status === "pending" ? "border-warning" : "border-border-strong"}`}
-    >
+    <div className="flex flex-col gap-2 rounded-[var(--radius)] border border-border-strong bg-panel px-3 py-2.5 text-[length:var(--fs-sm)]">
       <div
-        className={`flex items-center gap-1.5 ${status === "pending" ? "text-warning" : status === "allowed" ? "text-success" : "text-danger"}`}
+        className={`flex items-center gap-1.5 ${status === "allowed" ? "text-success" : "text-danger"}`}
       >
-        {status === "pending" ? (
-          <ShieldWarningIcon size={15} />
-        ) : status === "allowed" ? (
-          <CheckCircleIcon size={15} />
-        ) : (
-          <XCircleIcon size={15} />
-        )}
+        {status === "allowed" ? <CheckCircleIcon size={15} /> : <XCircleIcon size={15} />}
         <span className="font-semibold text-fg">{title}</span>
-        {status !== "pending" && (
-          <span className="ml-auto">{status === "allowed" ? "Allowed" : "Denied"}</span>
-        )}
+        <span className="ml-auto">{status === "allowed" ? "Allowed" : "Denied"}</span>
       </div>
       {detail && (
         <code className="rounded-[var(--radius-sm)] bg-editor px-2 py-1.5 font-[family-name:var(--font-mono)] break-all whitespace-pre-wrap selectable">
           {detail}
         </code>
-      )}
-      {status === "pending" && (
-        <div className="flex justify-end gap-1.5">
-          <button className="btn" onClick={() => onRespond(id, false)}>
-            Deny
-          </button>
-          <button className="btn btn-primary" onClick={() => onRespond(id, true)}>
-            Allow
-          </button>
-        </div>
       )}
     </div>
   );

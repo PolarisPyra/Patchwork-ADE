@@ -1,11 +1,17 @@
-import { InputRule, mergeAttributes, Node } from "@tiptap/core";
+import { type Editor, Extension, InputRule, mergeAttributes, Node } from "@tiptap/core";
+import CodeBlock from "@tiptap/extension-code-block";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { TaskList } from "@tiptap/extension-task-list";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "@tiptap/markdown";
 import Mention, { type MentionOptions } from "@tiptap/extension-mention";
 import { TableKit } from "@tiptap/extension-table";
+import { ReactNodeViewRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { Plugin } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import CodeBlockNodeView from "~/components/chat/CodeBlockNodeView";
+import { codeHighlightPlugin } from "~/components/chat/codeHighlight";
 
 const GOAL_CLASS =
   "rounded-[4px] bg-accent/30 px-1 py-0.5 font-[family-name:var(--font-mono)] text-fg";
@@ -52,8 +58,46 @@ const FileMention = Mention.extend({
     `@${node.attrs?.label ?? node.attrs?.id ?? ""}`,
 });
 
+/**
+ * Styles a line that starts with `#`, `##`, `###` or `> ` in place. The text stays a plain
+ * paragraph with its markers, so the line does not break and the draft keeps its Markdown.
+ */
+const MarkdownLine = Extension.create({
+  name: "markdownLine",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          decorations(state) {
+            const decorations: Decoration[] = [];
+            state.doc.descendants((node, pos) => {
+              if (node.type.name !== "paragraph") return true;
+              const heading = /^(#{1,3}) /.exec(node.textContent);
+              const quote = node.textContent.startsWith("> ");
+              const className = heading
+                ? `composer-heading-${heading[1].length}`
+                : quote
+                  ? "composer-quote"
+                  : null;
+              if (className) {
+                decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: className }));
+              }
+              return false;
+            });
+            return DecorationSet.create(state.doc, decorations);
+          },
+        },
+      }),
+    ];
+  },
+});
+
 /** The suggestions behind the `@` trigger: the project's files, filtered as the user types. */
 export type MentionSuggestion = MentionOptions["suggestion"];
+
+// The live editor keeps the extensions it was built with, so an edit here needs a full reload
+// to take effect.
+import.meta.hot?.accept(() => window.location.reload());
 
 /**
  * Everything the composer edits: Markdown blocks (code, lists, task lists), links, the
@@ -64,19 +108,56 @@ export function composerExtensions(placeholder: string, mentionSuggestion: Menti
     // Links keep their Markdown form; clicking one in a draft does not open it.
     // Dropped files become attachments (see Chat.tsx), so the drop cursor would point at a
     // place nothing is inserted.
-    StarterKit.configure({ dropcursor: false, link: { openOnClick: false, autolink: false } }),
+    // Headings and quotes stay as typed text (see MarkdownLine), so they do not become block nodes.
+    StarterKit.configure({
+      codeBlock: false,
+      blockquote: false,
+      heading: false,
+      dropcursor: false,
+      trailingNode: false,
+      link: { openOnClick: false, autolink: false },
+    }),
+    // Code blocks show their language in a header that can be changed.
+    CodeBlock.extend({
+      addNodeView() {
+        return ReactNodeViewRenderer(CodeBlockNodeView);
+      },
+      // Keeps the stock plugin (it handles pasting from VS Code) and adds the highlighter.
+      addProseMirrorPlugins() {
+        return [...(this.parent?.() ?? []), codeHighlightPlugin()];
+      },
+    }),
     TaskList,
     TaskItem.configure({ nested: true }),
     TableKit,
     Placeholder.configure({ placeholder }),
     Markdown,
     GoalCommand,
+    MarkdownLine,
     FileMention.configure({
       HTMLAttributes: { class: MENTION_CLASS },
       renderText: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
       suggestion: mentionSuggestion,
     }),
   ];
+}
+
+/**
+ * Shift+Enter inside a list starts the next item, or leaves the list when the item is empty.
+ * Returns false elsewhere, so Shift+Enter keeps its hard break.
+ */
+export function continueList(editor: Editor): boolean {
+  const { $from } = editor.state.selection;
+  for (let depth = $from.depth; depth > 0; depth--) {
+    const name = $from.node(depth).type.name;
+    if (name !== "listItem" && name !== "taskItem") continue;
+    if ($from.parent.textContent === "") return editor.commands.liftListItem(name);
+    return editor.commands.splitListItem(
+      name,
+      name === "taskItem" ? { checked: false } : undefined,
+    );
+  }
+  return false;
 }
 
 /**

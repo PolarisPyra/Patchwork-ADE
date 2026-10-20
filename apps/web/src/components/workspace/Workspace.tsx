@@ -267,6 +267,18 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       run: () => setSettingsOpen(true),
     },
     { id: "open-folder", group: "Actions", label: "Open folder…", run: openFolder },
+    // Development only: a fresh load also rebuilds the composer editor.
+    ...(import.meta.env.DEV
+      ? [
+          {
+            id: "reload-webview",
+            group: "Actions",
+            label: "Reload webview",
+            hint: "Ctrl R",
+            run: () => window.location.reload(),
+          },
+        ]
+      : []),
     ...threads.map((t) => ({
       id: `task-${t.id}`,
       group: settings.projects.find((p) => p.id === t.projectId)?.name ?? "Chats",

@@ -460,6 +460,26 @@
   list-style: none;
   padding-left: 0;
 }
+/* Markdown lines in the composer (see MarkdownLine in composerExtensions.ts). */
+.composer-editor .ProseMirror p.composer-heading-1 {
+  font-size: 1.5em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.composer-editor .ProseMirror p.composer-heading-2 {
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.composer-editor .ProseMirror p.composer-heading-3 {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+.composer-editor .ProseMirror p.composer-quote {
+  border-left: 2px solid var(--border);
+  padding-left: 0.75rem;
+  color: var(--text-muted);
+}
 .composer-editor ul[data-type="taskList"] li {
   display: flex;
   gap: 6px;
