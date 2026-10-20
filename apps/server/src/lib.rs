@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use persistence::Store;
-use runner::Runner;
+use runner::{Delivery, Runner};
 use types::*;
 
 pub type Res<T> = Result<T, String>;
@@ -162,6 +162,7 @@ impl Server {
             session_id: None,
             created_at: now_ms(),
             messages: vec![],
+            goal: None,
         };
         self.store.insert_threads(vec![thread.clone()])?;
         Ok(thread)
@@ -174,7 +175,7 @@ impl Server {
     }
 
     pub fn delete_thread(&self, id: &str) {
-        self.runner.cancel(id);
+        self.runner.cancel(id, None);
         if self
             .store
             .thread(id)
@@ -214,7 +215,21 @@ impl Server {
         attachments: Vec<Attachment>,
     ) -> Res<Message> {
         let images = provider::load_images(&attachments)?;
-        let msg = Message {
+        if provider::is_goal_command(&text) {
+            if self.runner.is_running(&thread_id) {
+                return Err(
+                    "A /goal command runs as a turn of its own; send it once this turn ends".into(),
+                );
+            }
+            if self
+                .store
+                .thread(&thread_id)
+                .is_some_and(|t| t.agent == AgentKind::Gemini)
+            {
+                return Err("Gemini has no /goal command".into());
+            }
+        }
+        let mut msg = Message {
             id: new_id(),
             role: Role::User,
             text: text.clone(),
@@ -226,29 +241,63 @@ impl Server {
             error: None,
             approvals: vec![],
             attachments: attachments.clone(),
+            steer: false,
         };
-        // While a turn runs, the message steers it rather than starting another.
-        if self.runner.is_running(&thread_id) {
-            self.runner
-                .steer(self, &thread_id, &text, &attachments, &images)?;
-            self.store
-                .update_thread(&thread_id, |t| t.messages.push(msg.clone()))?;
-            return Ok(msg);
-        }
+        // Stored before the agent sees it, so its answer is stored after it.
         let m = msg.clone();
+        let mut session_id = None;
         self.store.update_thread(&thread_id, |t| {
             if t.messages.is_empty() {
                 t.title = title_from(&text);
             }
             t.messages.push(m);
+            session_id = t.session_id.clone();
         })?;
-        self.runner
-            .start_turn(self, thread_id, text, attachments, images)?;
+        // While a turn runs, the message steers it, or waits for it to end when the
+        // agent cannot take it now.
+        match self.runner.steer(
+            &thread_id,
+            session_id.as_deref(),
+            &text,
+            &attachments,
+            &images,
+        ) {
+            Delivery::Steered => {
+                msg.steer = true;
+                self.store.update_thread(&thread_id, |t| {
+                    if let Some(m) = t.messages.iter_mut().find(|m| m.id == msg.id) {
+                        m.steer = true;
+                    }
+                })?;
+            }
+            Delivery::Queued => {}
+            Delivery::NotRunning => {
+                self.runner
+                    .start_turn(self, thread_id, text, attachments, images)?
+            }
+        }
         Ok(msg)
     }
 
+    /// Stops the running turn. Codex is first told to pause the goal it is pursuing,
+    /// so it does not carry on with it later.
     pub fn cancel_turn(&self, thread_id: &str) {
-        self.runner.cancel(thread_id);
+        let pause = self.store.thread(thread_id).and_then(|t| {
+            let active = t.goal.is_some_and(|g| g.status == GoalStatus::Active);
+            provider::goal_pause(t.agent, t.session_id.as_deref()?).filter(|_| active)
+        });
+        self.runner.cancel(thread_id, pause);
+    }
+
+    /// Stops the turn working on the goal, if any, and forgets the goal.
+    pub fn stop_goal(&self, thread_id: &str) -> Res<()> {
+        self.cancel_turn(thread_id);
+        self.store.update_thread(thread_id, |t| t.goal = None)?;
+        self.emit(AgentEventEnvelope {
+            thread_id: thread_id.into(),
+            event: AgentEvent::GoalUpdated { goal: None },
+        });
+        Ok(())
     }
 
     /// Answers a pending approval in the thread's running turn.

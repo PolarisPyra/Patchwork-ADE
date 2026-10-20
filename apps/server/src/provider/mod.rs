@@ -179,6 +179,7 @@ pub struct TurnSpec<'a> {
 }
 
 /// An attached image, base64-encoded for the agent's input.
+#[derive(Clone)]
 pub struct Image {
     pub media_type: &'static str,
     pub data: String,
@@ -234,8 +235,9 @@ fn prompt_text(text: &str, attachments: &[Attachment]) -> String {
         .to_string()
 }
 
-/// The stdin line that adds a message to a turn that is already running, or why the
-/// agent cannot take one. Gemini reads its whole prompt up front, so it cannot be steered.
+/// The stdin line that adds a message to a turn that is already running, or None when
+/// the agent cannot take one now and the message waits for the turn to end. Gemini reads
+/// its whole prompt up front; Codex needs the turn's id, which it reports once started.
 pub fn steer_input(
     agent: AgentKind,
     text: &str,
@@ -243,25 +245,32 @@ pub fn steer_input(
     images: &[Image],
     session_id: Option<&str>,
     turn_id: Option<&str>,
-) -> Result<String, String> {
+) -> Option<String> {
     match agent {
-        AgentKind::Claude => Ok(claude::steer_message(
+        AgentKind::Claude => Some(claude::steer_message(
             &prompt_text(text, attachments),
             images,
         )),
-        AgentKind::Codex => match (session_id, turn_id) {
-            (Some(thread), Some(turn)) => Ok(codex::steer_input(
-                thread,
-                turn,
-                &prompt_text(text, attachments),
-                attachments,
-            )),
-            _ => Err("Codex is still starting this turn; try again in a moment".into()),
-        },
-        AgentKind::Gemini => {
-            Err("Gemini cannot take a message during a turn; send it when the turn finishes".into())
-        }
+        AgentKind::Codex => Some(codex::steer_input(
+            session_id?,
+            turn_id?,
+            &prompt_text(text, attachments),
+            attachments,
+        )),
+        AgentKind::Gemini => None,
     }
+}
+
+/// The stdin line that pauses the agent's goal, for agents that pursue it on their own.
+pub fn goal_pause(agent: AgentKind, session_id: &str) -> Option<String> {
+    (agent == AgentKind::Codex).then(|| codex::goal_pause(session_id))
+}
+
+/// `/goal`, alone or with arguments, which runs as a turn of its own.
+pub fn is_goal_command(text: &str) -> bool {
+    text.trim_start()
+        .strip_prefix("/goal")
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
 }
 
 /// Command-line arguments for one turn.
@@ -319,8 +328,28 @@ pub enum Parsed {
         detail: String,
         reply: Value,
     },
+    /// The agent took a steering message (Codex acknowledges each one).
+    Steered,
+    /// The agent refused a steering message, so it waits for the turn to end.
+    SteerRejected(String),
+    Goal(GoalUpdate),
     /// The turn is over; stdin is closed so the agent exits.
     Finished,
+}
+
+/// A change to the thread's `/goal`, as the agent reports it.
+#[derive(Debug)]
+pub enum GoalUpdate {
+    /// Claude set the goal, or restated it with the checks made so far.
+    Set {
+        objective: String,
+        checks: Option<u32>,
+    },
+    /// Claude's evaluator found the goal not met yet, so the agent keeps going.
+    Checked,
+    Cleared,
+    /// Codex reports the whole goal.
+    Reported(Goal),
 }
 
 /// Collapses whitespace and caps the length, for tool summaries.

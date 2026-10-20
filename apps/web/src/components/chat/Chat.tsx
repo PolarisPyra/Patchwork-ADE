@@ -14,6 +14,7 @@ import {
 import ProviderLogos from "~/components/ProviderLogos";
 import type { CanvasTab } from "~/components/canvas/Canvas";
 import { lastAccessMode } from "~/components/chat/AccessPicker";
+import GoalBanner from "~/components/chat/GoalBanner";
 import LineageCard from "~/components/chat/LineageCard";
 import Composer from "~/components/chat/Composer";
 import Messages from "~/components/chat/Messages";
@@ -196,6 +197,12 @@ export default function Chat({
     onCancel(thread.id).catch((e: unknown) => setError(errorText(e)));
   }
 
+  function stopGoal() {
+    if (!thread) return;
+    setError(null);
+    api.stopGoal(thread.id).catch((e: unknown) => setError(errorText(e)));
+  }
+
   function pickModel(nextAgent: AgentKind, nextModel: string | null) {
     if (!thread) {
       setPick({ ...newOpts, agent: nextAgent, model: nextModel });
@@ -277,6 +284,7 @@ export default function Chat({
         )}
       </div>
       <div className="w-full flex-none box-border px-6 pb-4">
+        {thread?.goal && <GoalBanner goal={thread.goal} onStop={stopGoal} />}
         <Composer
           value={draft}
           onChange={setDraft}

@@ -2,18 +2,19 @@
 //! output into `AgentEvent`s. Each turn is one child process; its stdin stays
 //! open while the turn runs so approvals can be answered.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
 use crate::Server;
-use crate::provider::{self, Parsed, TurnSpec};
+use crate::provider::{self, GoalUpdate, Parsed, TurnSpec};
 use crate::types::*;
 use crate::workspace;
 use serde_json::Value;
@@ -24,8 +25,31 @@ const STDERR_TAIL_BYTES: usize = 4096;
 /// The agent's stdin; None once the turn has finished.
 type Stdin = Arc<Mutex<Option<ChildStdin>>>;
 
-/// Pending approvals of one turn: approval id → the provider's reply context.
-type Pending = Arc<Mutex<HashMap<String, Value>>>;
+/// Pending approvals of one turn: approval id → its message and the provider's reply context.
+type Pending = Arc<Mutex<HashMap<String, (String, Value)>>>;
+
+/// A message sent during a turn, kept until the agent answers it or the turn ends.
+struct FollowUp {
+    text: String,
+    attachments: Vec<Attachment>,
+    images: Vec<provider::Image>,
+}
+
+/// Steering messages written to the agent that it has not yet answered, oldest first.
+type Steers = Arc<Mutex<VecDeque<FollowUp>>>;
+
+/// Messages the agent could not take mid-turn; they start the next turn.
+type Queue = Arc<Mutex<Vec<FollowUp>>>;
+
+/// What became of a message sent to a thread.
+pub enum Delivery {
+    /// Written to the running turn.
+    Steered,
+    /// Waiting for the running turn to end.
+    Queued,
+    /// No turn is running.
+    NotRunning,
+}
 
 /// The agent's id for the turn now running (Codex reports it once the turn starts).
 type NativeTurn = Arc<Mutex<Option<String>>>;
@@ -34,10 +58,11 @@ struct RunningTurn {
     pid: u32,
     cancelled: Arc<AtomicBool>,
     agent: AgentKind,
-    message_id: String,
     stdin: Stdin,
     pending: Pending,
     native_turn: NativeTurn,
+    steers: Steers,
+    queue: Queue,
 }
 
 #[derive(Default)]
@@ -124,22 +149,12 @@ impl Runner {
             write_line(&stdin, line);
         }
 
-        let message = Message {
-            id: new_id(),
-            role: Role::Assistant,
-            text: String::new(),
-            created_at: now_ms(),
-            status: MessageStatus::Streaming,
-            tools: vec![],
-            plan: vec![],
-            files: vec![],
-            error: None,
-            approvals: vec![],
-            attachments: vec![],
-        };
+        let message = assistant_message();
         let cancelled = Arc::new(AtomicBool::new(false));
         let pending = Pending::default();
         let native_turn = NativeTurn::default();
+        let steers = Steers::default();
+        let queue = Queue::default();
         let turn = Turn {
             server: server.clone(),
             thread_id: thread_id.clone(),
@@ -150,6 +165,8 @@ impl Runner {
             stdin: stdin.clone(),
             pending: pending.clone(),
             native_turn: native_turn.clone(),
+            steers: steers.clone(),
+            queue: queue.clone(),
             root,
             session_id,
             model,
@@ -167,10 +184,11 @@ impl Runner {
                     pid: child.id(),
                     cancelled,
                     agent,
-                    message_id: message.id.clone(),
                     stdin,
                     pending,
                     native_turn,
+                    steers,
+                    queue,
                 },
             );
         turn.publish(AgentEvent::MessageStarted { message });
@@ -178,47 +196,84 @@ impl Runner {
         Ok(())
     }
 
-    /// Adds a message to the turn running in `thread_id`. Nothing is sent on error.
+    /// Hands a message to the turn running in `thread_id`: written to the agent when it
+    /// can take input mid-turn, otherwise kept to start the next turn.
     pub fn steer(
         &self,
-        server: &Arc<Server>,
         thread_id: &str,
+        session_id: Option<&str>,
         text: &str,
         attachments: &[Attachment],
         images: &[provider::Image],
-    ) -> Result<(), String> {
-        let session_id = server.store.thread(thread_id).and_then(|t| t.session_id);
-        let (agent, stdin, native_turn) = {
-            let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
-            let turn = turns
-                .get(thread_id)
-                .ok_or("This turn is no longer running")?;
-            (turn.agent, turn.stdin.clone(), turn.native_turn.clone())
+    ) -> Delivery {
+        let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(turn) = turns.get(thread_id) else {
+            return Delivery::NotRunning;
         };
-        let turn_id = native_turn
+        let follow_up = FollowUp {
+            text: text.into(),
+            attachments: attachments.to_vec(),
+            images: images.to_vec(),
+        };
+        // A stopped turn takes nothing more; the message starts the next turn.
+        if turn.cancelled.load(Ordering::SeqCst) {
+            turn.queue
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(follow_up);
+            return Delivery::Queued;
+        }
+        let turn_id = turn
+            .native_turn
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
         let line = provider::steer_input(
-            agent,
+            turn.agent,
             text,
             attachments,
             images,
-            session_id.as_deref(),
+            session_id,
             turn_id.as_deref(),
-        )?;
-        if write_line(&stdin, &line) {
-            Ok(())
-        } else {
-            Err("This turn no longer accepts messages".into())
+        );
+        // Under the stdin lock, so the reader cannot close stdin between the write and
+        // recording that an answer is due.
+        let mut stdin = turn.stdin.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(line) = line
+            && write_to(&mut stdin, &line)
+        {
+            turn.steers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push_back(follow_up);
+            return Delivery::Steered;
         }
+        turn.queue
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(follow_up);
+        Delivery::Queued
     }
 
-    pub fn cancel(&self, thread_id: &str) {
+    /// Stops the turn and drops the messages waiting for it. `last_line` is written
+    /// to the agent first, with a moment to act on it.
+    pub fn cancel(&self, thread_id: &str, last_line: Option<String>) {
         let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(turn) = turns.get(thread_id) {
             turn.cancelled.store(true, Ordering::SeqCst);
-            workspace::signal_process_group(turn.pid, libc::SIGTERM);
+            turn.queue
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clear();
+            let pid = turn.pid;
+            if last_line.is_some_and(|line| write_line(&turn.stdin, &line)) {
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(300));
+                    workspace::signal_process_group(pid, libc::SIGTERM);
+                });
+            } else {
+                workspace::signal_process_group(pid, libc::SIGTERM);
+            }
         }
     }
 
@@ -230,7 +285,7 @@ impl Runner {
         approval_id: &str,
         allow: bool,
     ) -> Result<(), String> {
-        let (agent, message_id, stdin, reply) = {
+        let (agent, stdin, (message_id, reply)) = {
             let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
             let turn = turns
                 .get(thread_id)
@@ -241,18 +296,12 @@ impl Runner {
                 .unwrap_or_else(PoisonError::into_inner)
                 .remove(approval_id)
                 .ok_or("This request was already answered")?;
-            (
-                turn.agent,
-                turn.message_id.clone(),
-                turn.stdin.clone(),
-                reply,
-            )
+            (turn.agent, turn.stdin.clone(), reply)
         };
         write_line(&stdin, &provider::approval_reply(agent, &reply, allow));
         publish(
             server,
             thread_id,
-            &message_id,
             AgentEvent::ApprovalResolved {
                 message_id: message_id.clone(),
                 approval_id: approval_id.into(),
@@ -265,7 +314,13 @@ impl Runner {
 
 /// Writes one line to the agent's stdin, if it is still open.
 fn write_line(stdin: &Mutex<Option<ChildStdin>>, line: &str) -> bool {
-    let mut stdin = stdin.lock().unwrap_or_else(PoisonError::into_inner);
+    write_to(
+        &mut stdin.lock().unwrap_or_else(PoisonError::into_inner),
+        line,
+    )
+}
+
+fn write_to(stdin: &mut Option<ChildStdin>, line: &str) -> bool {
     let Some(pipe) = stdin.as_mut() else {
         return false;
     };
@@ -279,11 +334,8 @@ fn write_line(stdin: &Mutex<Option<ChildStdin>>, line: &str) -> bool {
 }
 
 /// Saves `event` onto the stored message, then streams it to the frontend.
-fn publish(server: &Server, thread_id: &str, message_id: &str, event: AgentEvent) {
-    if let Err(e) = server
-        .store
-        .update_thread(thread_id, |t| apply(t, message_id, &event))
-    {
+fn publish(server: &Server, thread_id: &str, event: AgentEvent) {
+    if let Err(e) = server.store.update_thread(thread_id, |t| apply(t, &event)) {
         log::warn!("failed to save agent event: {e}");
     }
     server.emit(AgentEventEnvelope {
@@ -304,6 +356,8 @@ struct Turn {
     stdin: Stdin,
     pending: Pending,
     native_turn: NativeTurn,
+    steers: Steers,
+    queue: Queue,
     root: String,
     session_id: Option<String>,
     model: Option<String>,
@@ -315,7 +369,30 @@ struct Turn {
 
 impl Turn {
     fn publish(&self, event: AgentEvent) {
-        publish(&self.server, &self.thread_id, &self.message_id, event);
+        publish(&self.server, &self.thread_id, event);
+    }
+
+    /// Starts a new assistant message for what the agent says after taking a steering
+    /// message, so the answer follows that message instead of growing the reply above it.
+    fn next_segment(&mut self, unsaved: &mut String) {
+        self.save_text(unsaved);
+        let message = assistant_message();
+        self.message_id = message.id.clone();
+        self.publish(AgentEvent::MessageStarted { message });
+    }
+
+    /// Closes stdin, which lets the agent exit, unless it still owes an answer to a
+    /// steering message.
+    fn close_unless_steered(&self) {
+        let mut stdin = self.stdin.lock().unwrap_or_else(PoisonError::into_inner);
+        if self
+            .steers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_empty()
+        {
+            stdin.take();
+        }
     }
 
     /// Streams a text delta to the frontend without saving it; the reader
@@ -342,7 +419,7 @@ impl Turn {
         if let Err(e) = self
             .server
             .store
-            .update_thread(&self.thread_id, |t| apply(t, &self.message_id, &event))
+            .update_thread(&self.thread_id, |t| apply(t, &event))
         {
             log::warn!("failed to save agent text: {e}");
         }
@@ -361,13 +438,70 @@ impl Turn {
     }
 }
 
+/// An empty assistant message the agent's output streams into.
+fn assistant_message() -> Message {
+    Message {
+        id: new_id(),
+        role: Role::Assistant,
+        text: String::new(),
+        created_at: now_ms(),
+        status: MessageStatus::Streaming,
+        tools: vec![],
+        plan: vec![],
+        files: vec![],
+        error: None,
+        approvals: vec![],
+        attachments: vec![],
+        steer: false,
+    }
+}
+
+/// The thread's goal after the agent reports `update`.
+fn next_goal(current: Option<&Goal>, update: GoalUpdate) -> Option<Goal> {
+    match update {
+        GoalUpdate::Set { objective, checks } => Some(Goal {
+            // Restating the same goal keeps when it was set.
+            started_at: current
+                .filter(|g| g.objective == objective)
+                .map_or_else(now_ms, |g| g.started_at),
+            objective,
+            status: GoalStatus::Active,
+            checks,
+            tokens_used: None,
+            token_budget: None,
+            time_used_seconds: None,
+        }),
+        GoalUpdate::Checked => current.map(|g| Goal {
+            status: GoalStatus::Active,
+            checks: Some(g.checks.unwrap_or(0) + 1),
+            ..g.clone()
+        }),
+        GoalUpdate::Cleared => None,
+        GoalUpdate::Reported(goal) => Some(goal),
+    }
+}
+
 /// Reads the agent's stdout until it closes, then records the final status.
-fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHandle<String>) {
+fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHandle<String>) {
     let mut has_text = false;
     // Gemini streams one text block as many deltas; other agents send whole blocks.
     let mut last_was_text = false;
-    let mut started = HashSet::new();
+    // Tool id → the message it was started in, which a steer may since have moved on from.
+    let mut tool_owner: HashMap<String, String> = HashMap::new();
+    // Every message of the turn: the first reply, then one per steering message taken.
+    let mut segments = vec![turn.message_id.clone()];
     let mut stream_error: Option<String> = None;
+    let mut goal = turn
+        .server
+        .store
+        .thread(&turn.thread_id)
+        .and_then(|t| t.goal);
+    // Whether the agent did any work toward the goal since it was set (Claude).
+    let mut worked = false;
+    // The agent reported its turn finished; Codex may start another for an active goal.
+    let mut ended = false;
+    // Codex reported this run's goal active, so it starts further turns toward it.
+    let mut goal_run = false;
     // Text streamed to the frontend but not yet stored; saving every delta
     // stalls the reader, so it is stored before the next event and at the end.
     let mut unsaved = String::new();
@@ -397,29 +531,107 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
                     turn.pending
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
-                        .insert(approval.id.clone(), reply);
+                        .insert(approval.id.clone(), (turn.message_id.clone(), reply));
                     turn.save_text(&mut unsaved);
                     turn.publish(AgentEvent::ApprovalRequested {
                         message_id: turn.message_id.clone(),
                         approval,
                     });
                 }
-                // Closing stdin lets the agent exit.
-                Parsed::Finished => drop(
-                    turn.stdin
+                Parsed::Finished => {
+                    ended = true;
+                    let steered = !turn
+                        .steers
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
-                        .take(),
-                ),
+                        .is_empty();
+                    // Claude ends its reply to take the steering messages, then answers them.
+                    if steered && turn.agent == AgentKind::Claude {
+                        turn.steers
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .clear();
+                        turn.next_segment(&mut unsaved);
+                        segments.push(turn.message_id.clone());
+                        (has_text, last_was_text) = (false, false);
+                        // Its answer ends with another result; stdin stays open for more.
+                        ended = false;
+                        continue;
+                    }
+                    // The finished turn can no longer be steered; until Codex starts the
+                    // next one, messages wait for the run to end.
+                    *turn
+                        .native_turn
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner) = None;
+                    if stream_error.is_some() {
+                        goal_run = false;
+                    }
+                    if !goal_run {
+                        turn.close_unless_steered();
+                    }
+                }
+                Parsed::Steered => {
+                    turn.steers
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .pop_front();
+                    turn.next_segment(&mut unsaved);
+                    segments.push(turn.message_id.clone());
+                    (has_text, last_was_text) = (false, false);
+                    if ended && !goal_run {
+                        turn.close_unless_steered();
+                    }
+                }
+                Parsed::SteerRejected(message) => {
+                    log::warn!("the agent did not take the steering message: {message}");
+                    let refused = turn
+                        .steers
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .pop_front();
+                    turn.queue
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .extend(refused);
+                    if ended && !goal_run {
+                        turn.close_unless_steered();
+                    }
+                }
+                Parsed::Goal(update) => {
+                    // Once stopped, the agent's last word on the goal no longer applies.
+                    if turn.cancelled.load(Ordering::SeqCst) {
+                        continue;
+                    }
+                    if matches!(update, GoalUpdate::Set { .. }) {
+                        worked = false;
+                    }
+                    let next = next_goal(goal.as_ref(), update);
+                    if next != goal {
+                        goal = next;
+                        turn.save_text(&mut unsaved);
+                        turn.publish(AgentEvent::GoalUpdated { goal: goal.clone() });
+                    }
+                    // Codex goes on toward an active goal in turns it starts itself.
+                    goal_run = turn.agent == AgentKind::Codex
+                        && goal
+                            .as_ref()
+                            .is_some_and(|g| g.status == GoalStatus::Active);
+                    if ended && !goal_run {
+                        turn.close_unless_steered();
+                    }
+                }
                 Parsed::SessionId(id) => {
                     let store = &turn.server.store;
                     if let Err(e) =
-                        store.update_thread(&turn.thread_id, |t| t.session_id = Some(id))
+                        store.update_thread(&turn.thread_id, |t| t.session_id = Some(id.clone()))
                     {
                         log::warn!("failed to save session id: {e}");
                     }
+                    turn.session_id = Some(id);
                 }
                 Parsed::TurnStarted(id) => {
+                    ended = false;
                     *turn
                         .native_turn
                         .lock()
@@ -444,13 +656,24 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
                         }
                         // Codex reports a tool when it starts and again when it completes;
                         // only the first ToolStarted for an id is kept.
-                        AgentEvent::ToolStarted { tool, .. }
-                            if !started.insert(tool.id.clone()) =>
-                        {
-                            continue;
+                        AgentEvent::ToolStarted { tool, message_id } => {
+                            if tool_owner.contains_key(&tool.id) {
+                                continue;
+                            }
+                            tool_owner.insert(tool.id.clone(), message_id.clone());
+                        }
+                        AgentEvent::ToolFinished {
+                            tool_id,
+                            message_id,
+                            ..
+                        } => {
+                            if let Some(owner) = tool_owner.get(tool_id) {
+                                message_id.clone_from(owner);
+                            }
                         }
                         _ => {}
                     }
+                    worked = true;
                     last_was_text = matches!(event, AgentEvent::TextDelta { .. });
                     if last_was_text {
                         turn.stream_text(event, &mut unsaved);
@@ -467,7 +690,8 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
 
     let exit = child.wait().ok();
     let tail = stderr_tail.join().unwrap_or_default();
-    let (status, error) = if turn.cancelled.load(Ordering::SeqCst) {
+    let cancelled = turn.cancelled.load(Ordering::SeqCst);
+    let (status, error) = if cancelled {
         (MessageStatus::Cancelled, None)
     } else if stream_error.is_some() || !exit.is_some_and(|s| s.success()) {
         let error = stream_error
@@ -489,19 +713,93 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
         });
     }
 
+    // A stopped goal is paused; Claude's goal is met once a run working on it ends well.
+    // The stored goal is read again, since the user may have cleared it meanwhile.
+    let goal = turn
+        .server
+        .store
+        .thread(&turn.thread_id)
+        .and_then(|t| t.goal);
+    if let Some(g) = goal.as_ref().filter(|g| g.status == GoalStatus::Active) {
+        let status = if cancelled {
+            Some(GoalStatus::Paused)
+        } else if turn.agent == AgentKind::Claude && status == MessageStatus::Complete && worked {
+            Some(GoalStatus::Complete)
+        } else {
+            None
+        };
+        if let Some(status) = status {
+            let goal = Some(Goal {
+                status,
+                ..g.clone()
+            });
+            turn.publish(AgentEvent::GoalUpdated { goal });
+        }
+    }
+
     // Forget the turn before announcing it, so a follow-up message sent on
-    // TurnCompleted is not rejected as "already running".
-    turn.server
-        .runner
-        .turns
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .remove(&turn.thread_id);
+    // TurnCompleted is not rejected as "already running". Messages that waited for
+    // the turn are taken at the same moment, so none is left behind.
+    let waiting = {
+        let mut turns = turn
+            .server
+            .runner
+            .turns
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        turns.remove(&turn.thread_id);
+        let mut waiting =
+            std::mem::take(&mut *turn.queue.lock().unwrap_or_else(PoisonError::into_inner));
+        // Steering messages the agent never answered wait too, unless the turn was
+        // stopped; messages sent after Stop still start the next turn.
+        let unanswered = turn
+            .steers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .drain(..)
+            .collect::<Vec<_>>();
+        if !cancelled {
+            waiting.extend(unanswered);
+        }
+        waiting
+    };
+    // Earlier messages of the turn were answered in full before a steer moved it on.
+    for id in &segments[..segments.len() - 1] {
+        turn.publish(AgentEvent::TurnCompleted {
+            message_id: id.clone(),
+            status: MessageStatus::Complete,
+            error: None,
+        });
+    }
     turn.publish(AgentEvent::TurnCompleted {
         message_id: turn.message_id.clone(),
         status,
         error,
     });
+
+    if !waiting.is_empty() {
+        let text = waiting
+            .iter()
+            .map(|f| f.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let (attachments, images) = waiting.into_iter().map(|f| (f.attachments, f.images)).fold(
+            (vec![], vec![]),
+            |(mut a, mut i), (fa, fi)| {
+                a.extend(fa);
+                i.extend(fi);
+                (a, i)
+            },
+        );
+        let server = turn.server.clone();
+        if let Err(e) =
+            server
+                .runner
+                .start_turn(&server, turn.thread_id.clone(), text, attachments, images)
+        {
+            log::warn!("failed to start the turn for queued messages: {e}");
+        }
+    }
 }
 
 /// Paths whose git status or line counts differ between two snapshots.
@@ -551,14 +849,28 @@ fn last_lines(tail: &str) -> Option<String> {
 }
 
 /// Applies one event to the stored message. Used for both persistence and replay.
-fn apply(thread: &mut Thread, message_id: &str, event: &AgentEvent) {
-    if let AgentEvent::MessageStarted { message } = event {
-        if !thread.messages.iter().any(|m| m.id == message.id) {
-            thread.messages.push(message.clone());
+fn apply(thread: &mut Thread, event: &AgentEvent) {
+    let message_id = match event {
+        AgentEvent::MessageStarted { message } => {
+            if !thread.messages.iter().any(|m| m.id == message.id) {
+                thread.messages.push(message.clone());
+            }
+            return;
         }
-        return;
-    }
-    let Some(msg) = thread.messages.iter_mut().find(|m| m.id == message_id) else {
+        AgentEvent::GoalUpdated { goal } => {
+            thread.goal = goal.clone();
+            return;
+        }
+        AgentEvent::TextDelta { message_id, .. }
+        | AgentEvent::ToolStarted { message_id, .. }
+        | AgentEvent::ToolFinished { message_id, .. }
+        | AgentEvent::PlanUpdated { message_id, .. }
+        | AgentEvent::FileTouched { message_id, .. }
+        | AgentEvent::ApprovalRequested { message_id, .. }
+        | AgentEvent::ApprovalResolved { message_id, .. }
+        | AgentEvent::TurnCompleted { message_id, .. } => message_id,
+    };
+    let Some(msg) = thread.messages.iter_mut().find(|m| m.id == *message_id) else {
         return;
     };
     match event {
@@ -627,7 +939,7 @@ fn apply(thread: &mut Thread, message_id: &str, event: &AgentEvent) {
                 step.status = StepStatus::Pending;
             }
         }
-        AgentEvent::MessageStarted { .. } => {}
+        AgentEvent::MessageStarted { .. } | AgentEvent::GoalUpdated { .. } => {}
     }
 }
 

@@ -141,6 +141,11 @@ fn cancel_turn(server: Srv, thread_id: String) {
 }
 
 #[tauri::command]
+fn stop_goal(server: Srv, thread_id: String) -> Res<()> {
+    server.stop_goal(&thread_id)
+}
+
+#[tauri::command]
 fn respond_approval(server: Srv, thread_id: String, approval_id: String, allow: bool) -> Res<()> {
     server.respond_approval(&thread_id, &approval_id, allow)
 }
@@ -242,6 +247,7 @@ pub fn run() {
             attachment_for_path,
             allow_preview,
             cancel_turn,
+            stop_goal,
             respond_approval,
             scan_imports,
             import_threads,

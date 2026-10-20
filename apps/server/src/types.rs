@@ -249,6 +249,9 @@ pub struct Message {
     /// Files, folders, and images the user dropped into the message.
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    /// Sent while a turn was running, to steer that turn rather than start one.
+    #[serde(default)]
+    pub steer: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -266,6 +269,36 @@ pub struct Thread {
     pub session_id: Option<String>,
     pub created_at: u64,
     pub messages: Vec<Message>,
+    /// The `/goal` the agent is working toward, as the agent last reported it.
+    #[serde(default)]
+    pub goal: Option<Goal>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GoalStatus {
+    Active,
+    Paused,
+    Blocked,
+    UsageLimited,
+    BudgetLimited,
+    Complete,
+}
+
+/// A condition the agent keeps working toward until it is met (`/goal`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Goal {
+    pub objective: String,
+    pub status: GoalStatus,
+    /// Unix epoch milliseconds.
+    pub started_at: u64,
+    /// Evaluator checks that came back unmet (Claude).
+    pub checks: Option<u32>,
+    /// What the agent reports having spent on the goal (Codex).
+    pub tokens_used: Option<u64>,
+    pub token_budget: Option<u64>,
+    pub time_used_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -379,6 +412,10 @@ pub enum AgentEvent {
         message_id: String,
         approval_id: String,
         allowed: bool,
+    },
+    /// The thread's goal changed; None once it is cleared.
+    GoalUpdated {
+        goal: Option<Goal>,
     },
     /// Terminal event for a turn. `status` is complete | error | cancelled.
     TurnCompleted {

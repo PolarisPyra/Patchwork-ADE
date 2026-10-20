@@ -97,6 +97,8 @@ export interface Message {
   error: string | null;
   approvals: Approval[];
   attachments: Attachment[];
+  /** Sent while a turn was running, steering it. */
+  steer: boolean;
 }
 
 /** Something dropped into the composer, sent to the agent with the message. */
@@ -106,6 +108,23 @@ export interface Attachment {
   path: string;
   /** Last path component, for display. */
   name: string;
+}
+
+export type GoalStatus =
+  "active" | "paused" | "blocked" | "usageLimited" | "budgetLimited" | "complete";
+
+/** A `/goal` the agent keeps working toward until it is met. */
+export interface Goal {
+  objective: string;
+  status: GoalStatus;
+  /** When the goal was set (ms since epoch). */
+  startedAt: number;
+  /** Evaluator checks so far (Claude). */
+  checks: number | null;
+  /** Tokens spent and the budget, and time spent, as the agent reports them (Codex). */
+  tokensUsed: number | null;
+  tokenBudget: number | null;
+  timeUsedSeconds: number | null;
 }
 
 export interface Thread {
@@ -119,6 +138,7 @@ export interface Thread {
   sessionId: string | null;
   createdAt: number;
   messages: Message[];
+  goal: Goal | null;
 }
 
 export interface FileChange {
@@ -162,6 +182,7 @@ export interface ImportScan {
 }
 
 export type AgentEvent =
+  | { type: "goalUpdated"; goal: Goal | null }
   | { type: "messageStarted"; message: Message }
   | { type: "textDelta"; messageId: string; text: string }
   | { type: "toolStarted"; messageId: string; tool: ToolCall }
@@ -276,6 +297,8 @@ export const api = {
   /** Lets the webview show an attached image as a thumbnail. */
   allowPreview: (path: string) => invoke<void>("allow_preview", { path }),
   cancelTurn: (threadId: string) => invoke<void>("cancel_turn", { threadId }),
+  /** Cancels the running turn, if any, and clears the goal. */
+  stopGoal: (threadId: string) => invoke<void>("stop_goal", { threadId }),
   respondApproval: (threadId: string, approvalId: string, allow: boolean) =>
     invoke<void>("respond_approval", { threadId, approvalId, allow }),
 

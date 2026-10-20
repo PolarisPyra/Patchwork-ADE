@@ -120,7 +120,9 @@ pub fn to_thread(session: Session, project_id: Option<String>) -> Thread {
                 error: None,
                 approvals: vec![],
                 attachments: vec![],
+                steer: false,
             })
             .collect(),
+        goal: None,
     }
 }

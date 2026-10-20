@@ -48,6 +48,10 @@ const MIGRATIONS: &[&str] = &[
     ",
     // 3: files, folders, and images attached to a message.
     "ALTER TABLE messages ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';",
+    // 4: a message sent while a turn was running, which steered that turn.
+    "ALTER TABLE messages ADD COLUMN steer INTEGER NOT NULL DEFAULT 0;",
+    // 5: the thread's `/goal`, as JSON.
+    "ALTER TABLE threads ADD COLUMN goal TEXT;",
 ];
 
 /// Brings the schema up to date. Returns the version the database was at before.

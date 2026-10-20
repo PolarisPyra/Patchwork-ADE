@@ -26,6 +26,9 @@ interface ComposerProps {
   dropping: boolean;
 }
 
+/** Slash commands offered while the draft is a single "/word". */
+const COMMANDS = [{ name: "/goal", description: "Keep working until a condition is met" }];
+
 /** Models per agent, fetched once per agent kind. */
 function useModels(agents: AgentKind[]): Partial<Record<AgentKind, ModelOption[]>> {
   const [models, setModels] = useState<Partial<Record<AgentKind, ModelOption[]>>>({});
@@ -74,7 +77,35 @@ export default function Composer({
   }, [value]);
 
   const models = useModels(agents);
+  // The slash menu lists commands for a draft that is still one "/word"; Escape hides it
+  // until the draft changes again.
+  const [menuClosed, setMenuClosed] = useState(false);
+  const slash = agent !== "gemini" && /^\/\S*$/.test(value) ? value.toLowerCase() : null;
+  const matches = COMMANDS.filter((c) => slash !== null && c.name.startsWith(slash));
+  const menuOpen = !menuClosed && matches.length > 0;
+
+  function complete(name: string) {
+    onChange(`${name} `);
+  }
+
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (menuOpen) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMenuClosed(true);
+        return;
+      }
+      // Enter on a command typed in full sends it (a bare "/goal" shows the goal).
+      const typed = value.toLowerCase() === matches[0].name;
+      if (
+        e.key === "Tab" ||
+        (e.key === "Enter" && !typed && !e.shiftKey && !e.nativeEvent.isComposing)
+      ) {
+        e.preventDefault();
+        complete(matches[0].name);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       onSubmit();
@@ -83,8 +114,24 @@ export default function Composer({
 
   return (
     <div
-      className={`flex flex-col gap-2 rounded-[var(--radius-lg)] border bg-editor pt-3.5 pr-3 pb-2.5 pl-3 focus-within:border-accent ${dropping ? "border-dashed border-accent" : "border-border-strong"}`}
+      className={`relative flex flex-col gap-2 rounded-[var(--radius-lg)] border bg-editor pt-3.5 pr-3 pb-2.5 pl-3 focus-within:border-accent ${dropping ? "border-dashed border-accent" : "border-border-strong"}`}
     >
+      {menuOpen && (
+        <div className="absolute right-0 bottom-full left-0 mb-1.5 flex flex-col gap-px rounded-[var(--radius)] border border-border bg-panel p-1 shadow-[var(--shadow-popup)]">
+          {matches.map((c) => (
+            <button
+              key={c.name}
+              className="flex w-full cursor-pointer items-baseline gap-2.5 rounded-[var(--radius)] border-none bg-transparent px-2 py-1.5 text-left hover:bg-hover"
+              // Keeps the focus in the textarea.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => complete(c.name)}
+            >
+              <span className="font-[family-name:var(--font-mono)] text-fg">{c.name}</span>
+              <span className="text-[length:var(--fs-sm)] text-fg-muted">{c.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-1.5">
           {attachments.map((a, i) => (
@@ -98,7 +145,10 @@ export default function Composer({
         rows={1}
         placeholder="Reply or describe the next change…"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          setMenuClosed(false);
+          onChange(e.target.value);
+        }}
         onKeyDown={onKeyDown}
       />
       <div className="flex items-center gap-1.5">

@@ -235,11 +235,12 @@ fn save_settings(tx: &Transaction, settings: &Settings) -> rusqlite::Result<()> 
 fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO threads
-             (id, project_id, title, agent, model, session_id, created_at, access_mode)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             (id, project_id, title, agent, model, session_id, created_at, access_mode, goal)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT (id) DO UPDATE SET project_id = excluded.project_id,
              title = excluded.title, agent = excluded.agent, model = excluded.model,
-             session_id = excluded.session_id, access_mode = excluded.access_mode",
+             session_id = excluded.session_id, access_mode = excluded.access_mode,
+             goal = excluded.goal",
         params![
             t.id,
             t.project_id,
@@ -248,7 +249,8 @@ fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
             t.model,
             t.session_id,
             t.created_at,
-            enc(&t.access_mode)
+            enc(&t.access_mode),
+            t.goal.as_ref().map(json)
         ],
     )?;
     Ok(())
@@ -263,8 +265,8 @@ fn save_message(
     tx.execute(
         "INSERT INTO messages
              (id, thread_id, position, role, text, created_at, status, tools, plan, files, error,
-              approvals, attachments)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+              approvals, attachments, steer)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
          ON CONFLICT (id) DO UPDATE SET position = excluded.position, text = excluded.text,
              status = excluded.status, tools = excluded.tools, plan = excluded.plan,
              files = excluded.files, error = excluded.error, approvals = excluded.approvals,
@@ -282,7 +284,8 @@ fn save_message(
             json(&m.files),
             m.error,
             json(&m.approvals),
-            json(&m.attachments)
+            json(&m.attachments),
+            m.steer
         ],
     )?;
     Ok(())
@@ -309,7 +312,7 @@ fn load_settings(conn: &Connection) -> rusqlite::Result<Settings> {
 
 fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
     let mut stmt = conn.prepare(
-        "SELECT id, project_id, title, agent, model, session_id, created_at, access_mode
+        "SELECT id, project_id, title, agent, model, session_id, created_at, access_mode, goal
          FROM threads",
     )?;
     let mut threads: Vec<Thread> = stmt
@@ -324,12 +327,15 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                 created_at: r.get(6)?,
                 access_mode: dec(r.get(7)?)?,
                 messages: vec![],
+                goal: r
+                    .get::<_, Option<String>>(8)?
+                    .and_then(|g| serde_json::from_str(&g).ok()),
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
     let mut stmt = conn.prepare(
         "SELECT id, role, text, created_at, status, tools, plan, files, error, approvals,
-                attachments
+                attachments, steer
          FROM messages WHERE thread_id = ?1 ORDER BY position",
     )?;
     for t in &mut threads {
@@ -347,6 +353,7 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                     error: r.get(8)?,
                     approvals: from_json(r.get(9)?),
                     attachments: from_json(r.get(10)?),
+                    steer: r.get(11)?,
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -415,6 +422,7 @@ mod tests {
             error: None,
             approvals: vec![],
             attachments: vec![],
+            steer: false,
         }
     }
 
@@ -429,6 +437,7 @@ mod tests {
             access_mode: crate::types::AccessMode::Supervised,
             created_at: 2,
             messages,
+            goal: None,
         }
     }
 

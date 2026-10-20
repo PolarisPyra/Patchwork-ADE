@@ -251,6 +251,14 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                 }
             }
         }
+        // Command output such as `/goal` comes as a whole synthetic message, not streamed.
+        Some("assistant") if parent.is_none() && v["message"]["model"] == "<synthetic>" => {
+            let text = block_text(blocks);
+            if !text.is_empty() {
+                out.push(text_delta(message_id, &text));
+            }
+            out.extend(goal_from_command(&text).map(Parsed::Goal));
+        }
         Some("assistant") => {
             for block in blocks {
                 if block["type"] == "tool_use" {
@@ -264,11 +272,26 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                 let is_error = block["is_error"].as_bool().unwrap_or(false);
                 out.push(tool_finished(message_id, id, is_error));
             }
+            // Each `/goal` check that finds the goal unmet returns as Stop hook feedback.
+            let content = &v["message"]["content"];
+            let text = content
+                .as_str()
+                .map_or_else(|| block_text(blocks), String::from);
+            if parent.is_none()
+                && v["isSynthetic"] == true
+                && text.starts_with("Stop hook feedback:\n[")
+            {
+                out.push(Parsed::Goal(GoalUpdate::Checked));
+            }
         }
         Some("result") => {
             let is_error = v["is_error"].as_bool().unwrap_or(false);
             let subtype = v["subtype"].as_str().unwrap_or("error");
-            if is_error || subtype != "success" {
+            // A steering message cuts the reply short; the agent goes on with it.
+            let steered = v["terminal_reason"]
+                .as_str()
+                .is_some_and(|r| r.starts_with("aborted_"));
+            if (is_error || subtype != "success") && !steered {
                 let text = v["result"]
                     .as_str()
                     .filter(|s| !s.is_empty())
@@ -281,6 +304,42 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
         _ => {}
     }
     out
+}
+
+fn block_text(blocks: &[Value]) -> String {
+    blocks
+        .iter()
+        .filter_map(|b| b["text"].as_str())
+        .collect::<Vec<_>>()
+        .join("")
+        .trim()
+        .to_string()
+}
+
+/// Reads Claude's `/goal` command output: "Goal set: <objective>",
+/// "Goal active: <objective> (3 turns)", or that the goal was cleared.
+fn goal_from_command(text: &str) -> Option<GoalUpdate> {
+    if let Some(objective) = text.strip_prefix("Goal set: ") {
+        return Some(GoalUpdate::Set {
+            objective: objective.trim().into(),
+            checks: Some(0),
+        });
+    }
+    if text.starts_with("Goal cleared") || text.starts_with("No goal set") {
+        return Some(GoalUpdate::Cleared);
+    }
+    let rest = text.strip_prefix("Goal active: ")?;
+    let line = rest.lines().next().unwrap_or(rest);
+    let (objective, count) = line.rsplit_once(" (")?;
+    let checks = count
+        .split_whitespace()
+        .next()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0);
+    Some(GoalUpdate::Set {
+        objective: objective.into(),
+        checks: Some(checks),
+    })
 }
 
 #[cfg(test)]

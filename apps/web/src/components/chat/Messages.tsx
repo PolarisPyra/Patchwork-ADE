@@ -63,17 +63,22 @@ export default function Messages({
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
+  // The agent's working row follows the latest message, after any steering messages.
+  const working = messages.some((m) => m.role === "assistant" && m.status === "streaming");
+  const rowCount = messages.length + (working ? 1 : 0);
+
   const virtualizer = useVirtualizer({
-    count: messages.length,
+    count: rowCount,
     getScrollElement: () => parentRef.current,
     // Close to the real height so the first measurement barely moves scrollTop.
     estimateSize: useCallback((index: number) => {
-      const message = messagesRef.current[index]!;
+      const message = messagesRef.current[index];
+      if (!message) return 40;
       return message.role === "user"
         ? Math.min(900, 60 + Math.ceil(message.text.length / 70) * 22)
         : Math.min(900, 120 + Math.ceil(message.text.length / 90) * 22);
     }, []),
-    getItemKey: useCallback((index: number) => messagesRef.current[index]!.id, []),
+    getItemKey: useCallback((index: number) => messagesRef.current[index]?.id ?? "working", []),
     anchorTo: "end",
     followOnAppend: false,
     scrollEndThreshold: 80,
@@ -100,7 +105,22 @@ export default function Messages({
             row's top itself, so neither is set here. */}
         <div ref={virtualizer.containerRef} style={{ position: "relative", width: "100%" }}>
           {virtualizer.getVirtualItems().map((item) => {
-            const message = messages[item.index]!;
+            const message = messages[item.index];
+            if (!message) {
+              return (
+                <div
+                  key={item.key}
+                  ref={virtualizer.measureElement}
+                  data-index={item.index}
+                  className="px-6"
+                  style={{ position: "absolute", left: 0, width: "100%" }}
+                >
+                  <div className="mx-auto flex max-w-[820px] flex-col pb-5">
+                    <WorkingRow agent={thread.agent} />
+                  </div>
+                </div>
+              );
+            }
             const previous = messages[item.index - 1];
             return (
               <div
@@ -153,6 +173,7 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
     <div className="flex max-w-[75%] flex-col items-end gap-1 self-end">
       <div className="px-2 text-[length:var(--fs-xs)] text-fg-subtle">
         You · {formatClock(message.createdAt)}
+        {message.steer && " · Steer"}
       </div>
       {message.attachments.length > 0 && (
         <div className="flex flex-wrap justify-end gap-1.5">
@@ -200,12 +221,8 @@ const AssistantMessage = memo(function AssistantMessage({
   const streaming = message.status === "streaming";
   return (
     <section className="flex min-w-0 flex-col gap-2.5">
-      <header className="flex items-center gap-2">
-        <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.05em] text-fg-muted uppercase">
-          {AGENT_LABELS[agent]}
-        </span>
-        <StatusBadge status={message.status} />
-      </header>
+      {/* While streaming, WorkingRow shows the agent instead, after the latest message. */}
+      {!streaming && <AgentLabel agent={agent} status={message.status} />}
       {message.text && <Markdown text={message.text} />}
       {message.plan.length > 0 && <PlanList steps={message.plan} />}
       {message.tools.some((t) => !t.parent) && (
@@ -286,6 +303,25 @@ function ApprovalCard({
         </div>
       )}
     </div>
+  );
+}
+
+function AgentLabel({ agent, status }: { agent: AgentKind; status: MessageStatus }) {
+  return (
+    <header className="flex items-center gap-2">
+      <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.05em] text-fg-muted uppercase">
+        {AGENT_LABELS[agent]}
+      </span>
+      <StatusBadge status={status} />
+    </header>
+  );
+}
+
+function WorkingRow({ agent }: { agent: AgentKind }) {
+  return (
+    <section className="flex min-w-0 flex-col gap-2.5">
+      <AgentLabel agent={agent} status="streaming" />
+    </section>
   );
 }
 

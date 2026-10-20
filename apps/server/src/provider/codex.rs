@@ -99,8 +99,112 @@ pub fn turn_input(spec: &TurnSpec) -> Vec<String> {
     .into()
 }
 
+/// Request id of `turn/start`.
+const TURN_REQUEST: u64 = THREAD_REQUEST + 1;
+
+/// What the conversation's first request does once the thread id is known: start the
+/// turn, or carry out a `/goal` command.
+fn begin(spec: &TurnSpec, thread_id: &str) -> Vec<Parsed> {
+    let send = |v: Value| Parsed::Send(v.to_string());
+    let goal =
+        |params: Value| json!({"id": GOAL_REQUEST, "method": "thread/goal/set", "params": params});
+    match goal_command(spec) {
+        None => vec![Parsed::Send(turn_start(spec, thread_id, &prompt(spec)))],
+        // The goal waits paused until its first turn runs, so Codex does not start one first.
+        Some(GoalCommand::Set(objective)) => vec![
+            send(
+                json!({"id": GOAL_SETUP, "method": "thread/goal/clear", "params": {"threadId": thread_id}}),
+            ),
+            send(
+                json!({"id": GOAL_SETUP, "method": "thread/goal/set", "params": {
+                    "threadId": thread_id, "objective": objective, "status": "paused",
+                }}),
+            ),
+            Parsed::Send(turn_start(spec, thread_id, objective)),
+        ],
+        Some(GoalCommand::Resume) => vec![Parsed::Send(turn_start(spec, thread_id, ""))],
+        Some(GoalCommand::Show) => vec![send(
+            json!({"id": GOAL_REQUEST, "method": "thread/goal/get", "params": {"threadId": thread_id}}),
+        )],
+        Some(GoalCommand::Clear) => vec![send(
+            json!({"id": GOAL_REQUEST, "method": "thread/goal/clear", "params": {"threadId": thread_id}}),
+        )],
+        Some(GoalCommand::Pause) => vec![send(goal(
+            json!({"threadId": thread_id, "status": "paused"}),
+        ))],
+    }
+}
+
+/// Request id of a `/goal` command's request; its response ends the turn.
+const GOAL_REQUEST: u64 = 10;
+/// Request id of the goal requests around a goal's turn; only their goal is kept.
+const GOAL_SETUP: u64 = 11;
+
+enum GoalCommand<'a> {
+    Show,
+    Clear,
+    Pause,
+    Resume,
+    Set(&'a str),
+}
+
+/// `/goal` alone shows the goal; `clear`, `pause`, and `resume` act on it; anything else
+/// is a new objective.
+fn goal_command<'a>(spec: &TurnSpec<'a>) -> Option<GoalCommand<'a>> {
+    if !spec.attachments.is_empty() || !is_goal_command(spec.text) {
+        return None;
+    }
+    let arg = spec.text.trim()["/goal".len()..].trim();
+    Some(match arg.to_lowercase().as_str() {
+        "" => GoalCommand::Show,
+        "clear" => GoalCommand::Clear,
+        "pause" => GoalCommand::Pause,
+        "resume" => GoalCommand::Resume,
+        _ => GoalCommand::Set(arg),
+    })
+}
+
+pub fn goal_pause(thread_id: &str) -> String {
+    json!({"id": GOAL_SETUP, "method": "thread/goal/set", "params": {
+        "threadId": thread_id, "status": "paused",
+    }})
+    .to_string()
+}
+
+/// The goal in a `thread/goal/*` response or notification.
+fn goal_of(v: &Value) -> Option<Goal> {
+    let status = serde_json::from_value(v["status"].clone()).ok()?;
+    // Codex counts seconds; older builds may count milliseconds.
+    let created = v["createdAt"].as_u64().unwrap_or(0);
+    Some(Goal {
+        objective: v["objective"].as_str()?.into(),
+        status,
+        started_at: if created < 1_000_000_000_000 {
+            created * 1000
+        } else {
+            created
+        },
+        checks: None,
+        tokens_used: v["tokensUsed"].as_u64(),
+        token_budget: v["tokenBudget"].as_u64(),
+        time_used_seconds: v["timeUsedSeconds"].as_u64(),
+    })
+}
+
+fn goal_reply(spec: &TurnSpec, result: &Value) -> String {
+    match goal_command(spec) {
+        Some(GoalCommand::Clear) if result["cleared"] == true => "Goal cleared.".into(),
+        Some(GoalCommand::Clear) => "No goal to clear.".into(),
+        Some(GoalCommand::Pause) => "Goal paused. Send /goal resume to continue.".into(),
+        _ => match goal_of(&result["goal"]) {
+            Some(goal) => format!("Goal: {}", goal.objective),
+            None => "No goal is set.".into(),
+        },
+    }
+}
+
 /// T3 Code's approval policy and sandbox for each access mode.
-fn turn_start(spec: &TurnSpec, thread_id: &str) -> String {
+fn turn_start(spec: &TurnSpec, thread_id: &str, text: &str) -> String {
     let (policy, reviewer, sandbox) = match spec.mode {
         AccessMode::Supervised => ("untrusted", "user", "readOnly"),
         AccessMode::AutoAcceptEdits => ("on-request", "user", "workspaceWrite"),
@@ -110,7 +214,7 @@ fn turn_start(spec: &TurnSpec, thread_id: &str) -> String {
     let mut params = json!({
         "threadId": thread_id,
         "cwd": spec.root,
-        "input": input_items(&prompt(spec), spec.attachments),
+        "input": if text.is_empty() { vec![] } else { input_items(text, spec.attachments) },
         "approvalPolicy": policy,
         "approvalsReviewer": reviewer,
         "sandboxPolicy": {"type": sandbox},
@@ -118,7 +222,7 @@ fn turn_start(spec: &TurnSpec, thread_id: &str) -> String {
     if let Some(m) = spec.model {
         params["model"] = json!(m);
     }
-    json!({"id": THREAD_REQUEST + 1, "method": "turn/start", "params": params}).to_string()
+    json!({"id": TURN_REQUEST, "method": "turn/start", "params": params}).to_string()
 }
 
 fn input_items(text: &str, attachments: &[Attachment]) -> Vec<Value> {
@@ -277,17 +381,47 @@ pub fn parse(v: &Value, spec: &TurnSpec, message_id: &str) -> Vec<Parsed> {
     match (v.get("id"), v["method"].as_str()) {
         // A response to one of our requests.
         (Some(id), None) => {
+            let error = v["error"]["message"].as_str();
             if id == STEER_REQUEST {
-                if let Some(message) = v["error"]["message"].as_str() {
-                    log::warn!("Codex did not take the steering message: {message}");
-                }
-            } else if let Some(message) = v["error"]["message"].as_str() {
+                out.push(match error {
+                    Some(message) => Parsed::SteerRejected(message.into()),
+                    None => Parsed::Steered,
+                });
+            } else if id == GOAL_SETUP {
+                out.extend(
+                    goal_of(&v["result"]["goal"]).map(|g| Parsed::Goal(GoalUpdate::Reported(g))),
+                );
+            } else if let Some(message) = error {
                 out.extend([Parsed::Error(message.into()), Parsed::Finished]);
             } else if id == THREAD_REQUEST
                 && let Some(thread_id) = v["result"]["thread"]["id"].as_str()
             {
                 out.push(Parsed::SessionId(thread_id.into()));
-                out.push(Parsed::Send(turn_start(spec, thread_id)));
+                out.extend(begin(spec, thread_id));
+            } else if id == TURN_REQUEST
+                && matches!(
+                    goal_command(spec),
+                    Some(GoalCommand::Set(_) | GoalCommand::Resume)
+                )
+                && let Some(thread_id) = spec.session_id
+            {
+                // Its turn is running, so the goal can go active without Codex starting another.
+                out.push(Parsed::Send(
+                    json!({"id": GOAL_SETUP, "method": "thread/goal/set", "params": {
+                        "threadId": thread_id, "status": "active",
+                    }})
+                    .to_string(),
+                ));
+            } else if id == GOAL_REQUEST {
+                let result = &v["result"];
+                if result.get("cleared").is_some() {
+                    out.push(Parsed::Goal(GoalUpdate::Cleared));
+                }
+                out.extend(goal_of(&result["goal"]).map(|g| Parsed::Goal(GoalUpdate::Reported(g))));
+                out.extend([
+                    text_delta(message_id, &goal_reply(spec, result)),
+                    Parsed::Finished,
+                ]);
             }
         }
         (Some(_), Some(_)) => out.push(codex_server_request(v)),
@@ -300,6 +434,10 @@ pub fn parse(v: &Value, spec: &TurnSpec, message_id: &str) -> Vec<Parsed> {
                 &mut out,
             );
         }
+        (None, Some("thread/goal/updated")) => {
+            out.extend(goal_of(&params["goal"]).map(|g| Parsed::Goal(GoalUpdate::Reported(g))));
+        }
+        (None, Some("thread/goal/cleared")) => out.push(Parsed::Goal(GoalUpdate::Cleared)),
         (None, Some("turn/started")) => {
             if let Some(turn_id) = params["turn"]["id"].as_str() {
                 out.push(Parsed::TurnStarted(turn_id.into()));

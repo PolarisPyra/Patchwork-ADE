@@ -42,6 +42,8 @@ function updateMessage(thread: Thread, messageId: string, fn: (m: Message) => Me
 /** Applies one streamed agent event. Pure: returns a new thread object. */
 export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
   switch (event.type) {
+    case "goalUpdated":
+      return { ...thread, goal: event.goal };
     case "messageStarted":
       return { ...thread, messages: upsertMessage(thread.messages, event.message) };
     case "textDelta": {
