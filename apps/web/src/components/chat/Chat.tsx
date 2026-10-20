@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FolderPlusIcon } from "@phosphor-icons/react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
@@ -171,9 +171,23 @@ export default function Chat({
     void dispatch(text, attachments, true);
   }
 
-  function retry(message: Message) {
-    if (!working) void dispatch(message.text, message.attachments, false);
-  }
+  // The latest render's values, so the callbacks handed to Messages keep one identity
+  // and its memoized rows skip re-rendering.
+  const latest = useRef({ dispatch, working, onOpenCanvas, onShowChanges });
+  useLayoutEffect(() => {
+    latest.current = { dispatch, working, onOpenCanvas, onShowChanges };
+  });
+
+  const retry = useCallback((message: Message) => {
+    if (!latest.current.working)
+      void latest.current.dispatch(message.text, message.attachments, false);
+  }, []);
+  const openCanvas = useCallback(
+    (path: string, message: Message | null, tab: CanvasTab) =>
+      latest.current.onOpenCanvas(path, message, tab),
+    [],
+  );
+  const showChanges = useCallback((paths: string[]) => latest.current.onShowChanges(paths), []);
 
   function stop() {
     if (!thread) return;
@@ -199,11 +213,17 @@ export default function Chat({
     onSetAccessMode(thread.id, mode).catch((e: unknown) => setError(errorText(e)));
   }
 
-  function respond(approvalId: string, allow: boolean) {
-    if (!thread) return;
-    setError(null);
-    api.respondApproval(thread.id, approvalId, allow).catch((e: unknown) => setError(errorText(e)));
-  }
+  const threadId = thread?.id;
+  const respond = useCallback(
+    (approvalId: string, allow: boolean) => {
+      if (!threadId) return;
+      setError(null);
+      api
+        .respondApproval(threadId, approvalId, allow)
+        .catch((e: unknown) => setError(errorText(e)));
+    },
+    [threadId],
+  );
 
   const isNew = !thread || empty;
   return (
@@ -219,8 +239,8 @@ export default function Chat({
             thread={thread}
             changes={changes}
             busy={working}
-            onOpenCanvas={project ? onOpenCanvas : undefined}
-            onShowChanges={onShowChanges}
+            onOpenCanvas={project ? openCanvas : undefined}
+            onShowChanges={showChanges}
             onRetry={retry}
             onRespond={respond}
           />

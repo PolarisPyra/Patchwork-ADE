@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowClockwiseIcon,
@@ -60,7 +60,16 @@ export default function Messages({
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 120,
+    // Close to the real height so the first measurement barely moves scrollTop.
+    estimateSize: useCallback(
+      (index: number) => {
+        const message = messages[index]!;
+        return message.role === "user"
+          ? Math.min(900, 60 + Math.ceil(message.text.length / 70) * 22)
+          : Math.min(900, 120 + Math.ceil(message.text.length / 90) * 22);
+      },
+      [messages],
+    ),
     getItemKey: useCallback((index: number) => messages[index]!.id, [messages]),
     anchorTo: "end",
     followOnAppend: true,
@@ -133,7 +142,7 @@ export default function Messages({
   );
 }
 
-function UserMessage({ message }: { message: Message }) {
+const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
   return (
     <div className="flex max-w-[75%] flex-col items-end gap-1 self-end">
       <div className="px-2 text-[length:var(--fs-xs)] text-fg-subtle">
@@ -157,7 +166,7 @@ function UserMessage({ message }: { message: Message }) {
       )}
     </div>
   );
-}
+});
 
 interface AssistantProps {
   message: Message;
@@ -171,7 +180,7 @@ interface AssistantProps {
   onRespond: (approvalId: string, allow: boolean) => void;
 }
 
-function AssistantMessage({
+const AssistantMessage = memo(function AssistantMessage({
   message,
   agent,
   changes,
@@ -226,7 +235,7 @@ function AssistantMessage({
       )}
     </section>
   );
-}
+});
 
 function ApprovalCard({
   approval,

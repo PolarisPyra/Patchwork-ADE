@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react";
 
 // Small, safe Markdown subset rendered to React elements (no HTML injection).
@@ -117,9 +117,10 @@ function renderBlock(block: Block, key: number): ReactNode {
 }
 
 export default function Markdown({ text }: { text: string }) {
+  const blocks = useMemo(() => parseBlocks(text).map((block, i) => renderBlock(block, i)), [text]);
   return (
     <div className="min-w-0 leading-[1.6] [word-break:break-word] selectable [&>:last-child]:mb-0 [&_p]:mt-0 [&_p]:mb-2">
-      {parseBlocks(text).map((block, i) => renderBlock(block, i))}
+      {blocks}
     </div>
   );
 }
