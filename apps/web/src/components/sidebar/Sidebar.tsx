@@ -111,6 +111,8 @@ interface SidebarProps {
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
+  /** Files of the reply the Changes view was opened from, if any. */
+  changeFocus: string[] | null;
   /** Opens the command palette. */
   onOpenPalette: () => void;
 }
@@ -440,11 +442,68 @@ function ThreadRow({
   );
 }
 
-/** Changed files grouped by folder, each with Apply (stage) and Reject (revert). */
-function ChangesView({ project, changes, onRefreshChanges, onOpenChange }: SidebarProps) {
+/** One changed file: opens its diff, with Apply (stage) and Reject (revert) on hover. */
+function ChangeRow({
+  change,
+  onOpen,
+  onApply,
+  onReject,
+}: {
+  change: FileChange;
+  onOpen: () => void;
+  onApply: () => void;
+  onReject: () => void;
+}) {
+  const name = baseName(change.path);
+  return (
+    <div className="group flex min-h-[26px] items-center gap-1 rounded-[var(--radius-sm)] py-0.5 pr-1 pl-3 hover:bg-hover">
+      <button
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-fg text-left"
+        title={change.path}
+        onClick={onOpen}
+      >
+        <span
+          className={`w-3.5 flex-none text-center font-[family-name:var(--font-mono)] text-[length:var(--fs-xs)] font-bold ${STATUS_COLOR[change.status]}`}
+        >
+          {STATUS_LETTER[change.status]}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{name}</span>
+        <span className="text-success">+{change.additions}</span>
+        <span className="text-danger">−{change.deletions}</span>
+      </button>
+      <button
+        className="btn-icon opacity-0 group-hover:opacity-100 focus:opacity-100"
+        title="Apply"
+        aria-label={`Apply ${name}`}
+        onClick={onApply}
+      >
+        <CheckIcon size={14} />
+      </button>
+      <button
+        className="btn-icon opacity-0 group-hover:opacity-100 focus:opacity-100"
+        title="Reject"
+        aria-label={`Reject ${name}`}
+        onClick={onReject}
+      >
+        <ArrowCounterClockwiseIcon size={14} />
+      </button>
+    </div>
+  );
+}
+
+/** Changed files. Those from the reply the view was opened from are pinned on top; the rest are grouped by folder. */
+function ChangesView({
+  project,
+  changes,
+  changeFocus,
+  onRefreshChanges,
+  onOpenChange,
+}: SidebarProps) {
   const [error, setError] = useState<string | null>(null);
+  const pinned = changes.filter((c) => changeFocus?.includes(c.path));
   const folders = new Map<string, FileChange[]>();
   for (const c of changes) {
+    if (pinned.includes(c)) continue;
     const dir = dirName(c.path);
     folders.set(dir, [...(folders.get(dir) ?? []), c]);
   }
@@ -466,6 +525,16 @@ function ChangesView({ project, changes, onRefreshChanges, onOpenChange }: Sideb
     void act(() => api.revertFile(project.id, path));
   }
 
+  const row = (c: FileChange) => (
+    <ChangeRow
+      key={c.path}
+      change={c}
+      onOpen={() => onOpenChange(c.path)}
+      onApply={() => project && void act(() => api.acceptFile(project.id, c.path))}
+      onReject={() => void reject(c.path)}
+    />
+  );
+
   return (
     <>
       <div className="flex h-8 flex-none items-center justify-between pr-2 pl-3 text-[length:var(--fs-sm)] font-semibold">
@@ -483,6 +552,14 @@ function ChangesView({ project, changes, onRefreshChanges, onOpenChange }: Sideb
         {changes.length === 0 && (
           <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No changes</div>
         )}
+        {pinned.length > 0 && (
+          <div className="flex flex-col gap-px rounded-[var(--radius)] border border-accent bg-selected-muted p-1">
+            <div className="px-1.5 pt-0.5 pb-1 text-[length:var(--fs-xs)] font-semibold tracking-[0.04em] text-accent-text uppercase">
+              From this reply
+            </div>
+            {pinned.map(row)}
+          </div>
+        )}
         {[...folders]
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([dir, files]) => (
@@ -491,43 +568,7 @@ function ChangesView({ project, changes, onRefreshChanges, onOpenChange }: Sideb
                 <FolderIcon size={12} />
                 <span className="min-w-0 truncate">{dir || "Project root"}</span>
               </div>
-              {files.map((c) => (
-                <div
-                  key={c.path}
-                  className="group flex min-h-[26px] items-center gap-1 rounded-[var(--radius-sm)] py-0.5 pr-1 pl-3 hover:bg-hover"
-                >
-                  <button
-                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-fg text-left"
-                    title={c.path}
-                    onClick={() => onOpenChange(c.path)}
-                  >
-                    <span
-                      className={`w-3.5 flex-none text-center font-[family-name:var(--font-mono)] text-[length:var(--fs-xs)] font-bold ${STATUS_COLOR[c.status]}`}
-                    >
-                      {STATUS_LETTER[c.status]}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">{baseName(c.path)}</span>
-                    <span className="text-success">+{c.additions}</span>
-                    <span className="text-danger">−{c.deletions}</span>
-                  </button>
-                  <button
-                    className="btn-icon opacity-0 group-hover:opacity-100 focus:opacity-100"
-                    title="Apply"
-                    aria-label={`Apply ${baseName(c.path)}`}
-                    onClick={() => project && void act(() => api.acceptFile(project.id, c.path))}
-                  >
-                    <CheckIcon size={14} />
-                  </button>
-                  <button
-                    className="btn-icon opacity-0 group-hover:opacity-100 focus:opacity-100"
-                    title="Reject"
-                    aria-label={`Reject ${baseName(c.path)}`}
-                    onClick={() => void reject(c.path)}
-                  >
-                    <ArrowCounterClockwiseIcon size={14} />
-                  </button>
-                </div>
-              ))}
+              {files.map(row)}
             </div>
           ))}
         {error && <div className="px-2 text-[length:var(--fs-sm)] text-danger">{error}</div>}

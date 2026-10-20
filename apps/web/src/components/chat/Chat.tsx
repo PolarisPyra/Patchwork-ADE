@@ -41,7 +41,7 @@ interface ChatProps {
   agents: AgentKind[];
   onOpenFolder: () => void;
   onOpenCanvas: (path: string, message: Message | null, tab: CanvasTab) => void;
-  onShowChanges: () => void;
+  onShowChanges: (paths: string[]) => void;
   onSend: (text: string, attachments: Attachment[], draft: NewThreadOptions) => Promise<void>;
   onCancel: (threadId: string) => Promise<void>;
   onSetModel: (threadId: string, agent: AgentKind, model: string | null) => Promise<void>;
@@ -230,7 +230,7 @@ export default function Chat({
     >
       {thread && <LineageCard thread={thread} working={working} />}
       <div
-        className={`min-h-0 overflow-y-auto ${isNew ? "flex-none" : "flex-1"}`}
+        className={`min-h-0 overflow-y-auto [scrollbar-gutter:stable_both-edges] ${isNew ? "flex-none" : "flex-1"}`}
         ref={scrollRef}
         onScroll={onScroll}
       >

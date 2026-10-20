@@ -69,6 +69,8 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
   const connectedAgents = AGENT_KINDS.filter((k) => settings.agents.includes(k));
 
   const [view, setView] = useState<SidebarView | null>("tasks");
+  // Files of the reply whose "Show changes" was clicked; pinned at the top of the Changes view.
+  const [changeFocus, setChangeFocus] = useState<string[] | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [canvas, setCanvas] = useState<CanvasState | null>(null);
@@ -257,6 +259,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             threads={threads}
             selectedId={selected?.id ?? null}
             changes={changes}
+            changeFocus={changeFocus}
             onNewTask={newThreadIn}
             onNewChat={newChat}
             onSelectThread={selectThread}
@@ -281,7 +284,10 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
               agents={connectedAgents}
               onOpenFolder={openFolder}
               onOpenCanvas={openCanvasAt}
-              onShowChanges={() => setView("changes")}
+              onShowChanges={(paths) => {
+                setChangeFocus(paths);
+                setView("changes");
+              }}
               onSend={(text, attachments, draft) => send(text, attachments, draft, projectId)}
               onCancel={(id) => api.cancelTurn(id)}
               onSetModel={setModel}
@@ -320,7 +326,10 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         changeCount={changes.length}
         agent={selected?.agent ?? defaultAgent}
         working={isWorking(selected)}
-        onOpenChanges={() => setView("changes")}
+        onOpenChanges={() => {
+          setChangeFocus(null);
+          setView("changes");
+        }}
       />
 
       {error && (

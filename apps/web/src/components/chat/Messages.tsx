@@ -36,7 +36,7 @@ interface MessagesProps {
   /** Omitted for chats without a project: the change summary is hidden. */
   onOpenCanvas?: OpenCanvas;
   /** Opens the sidebar's Changes view. */
-  onShowChanges: () => void;
+  onShowChanges: (paths: string[]) => void;
   onRetry: (message: Message) => void;
   /** Answers a pending approval in the running turn. */
   onRespond: (approvalId: string, allow: boolean) => void;
@@ -105,7 +105,7 @@ interface AssistantProps {
   retryMessage: Message | null;
   busy: boolean;
   onOpenCanvas?: OpenCanvas;
-  onShowChanges: () => void;
+  onShowChanges: (paths: string[]) => void;
   onRetry: (message: Message) => void;
   onRespond: (approvalId: string, allow: boolean) => void;
 }
@@ -137,7 +137,11 @@ function AssistantMessage({
         <ApprovalCard key={approval.id} approval={approval} onRespond={onRespond} />
       ))}
       {onOpenCanvas && message.files.length > 0 && (
-        <ChangeSummary paths={message.files} changes={changes} onShow={onShowChanges} />
+        <ChangeSummary
+          paths={message.files}
+          changes={changes}
+          onShow={() => onShowChanges(message.files)}
+        />
       )}
       {message.error && (
         <div className="rounded-[var(--radius)] bg-[var(--danger-soft)] px-3 py-2 text-[length:var(--fs-sm)] whitespace-pre-wrap text-danger [word-break:break-word]">
