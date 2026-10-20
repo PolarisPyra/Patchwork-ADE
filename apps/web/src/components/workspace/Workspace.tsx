@@ -44,6 +44,9 @@ interface GitState {
 const CANVAS_MIN_PX = 340;
 const CANVAS_MAX_FRACTION = 0.7;
 
+// One shared empty list, so the chat's memoized rows see the same `changes` on every render.
+const NO_CHANGES: FileChange[] = [];
+
 export default function Workspace({ settings, updateSettings, toggleTheme }: WorkspaceProps) {
   const {
     threads,
@@ -81,7 +84,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
 
   // A canvas belongs to the project it was opened in; it is hidden after a project switch.
   const openCanvas = canvas && canvas.projectId === projectId ? canvas : null;
-  const changes = git && git.projectId === projectId ? git.changes : [];
+  const changes = git && git.projectId === projectId ? git.changes : NO_CHANGES;
   const branch = git && git.projectId === projectId ? git.branch : null;
 
   const refreshGit = useCallback(() => {
