@@ -213,9 +213,6 @@ impl Server {
         text: String,
         attachments: Vec<Attachment>,
     ) -> Res<Message> {
-        if self.runner.is_running(&thread_id) {
-            return Err("A turn is already running in this task".into());
-        }
         let images = provider::load_images(&attachments)?;
         let msg = Message {
             id: new_id(),
@@ -230,6 +227,14 @@ impl Server {
             approvals: vec![],
             attachments: attachments.clone(),
         };
+        // While a turn runs, the message steers it rather than starting another.
+        if self.runner.is_running(&thread_id) {
+            self.runner
+                .steer(self, &thread_id, &text, &attachments, &images)?;
+            self.store
+                .update_thread(&thread_id, |t| t.messages.push(msg.clone()))?;
+            return Ok(msg);
+        }
         let m = msg.clone();
         self.store.update_thread(&thread_id, |t| {
             if t.messages.is_empty() {

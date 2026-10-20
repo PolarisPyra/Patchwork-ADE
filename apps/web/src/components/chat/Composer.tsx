@@ -111,7 +111,7 @@ export default function Composer({
         />
         <AccessPicker mode={accessMode} onPick={onPickAccess} />
         <span className="flex-1" />
-        {working ? (
+        {working && (
           <button
             className="grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-selected-muted text-fg enabled:hover:bg-accent-hover"
             onClick={onStop}
@@ -120,13 +120,14 @@ export default function Composer({
           >
             <SquareIcon size={12} weight="fill" />
           </button>
-        ) : (
+        )}
+        {(!working || value.trim() || attachments.length > 0) && (
           <button
             className="grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-accent text-on-accent enabled:hover:bg-accent-hover disabled:cursor-default disabled:bg-selected-muted disabled:text-fg-subtle"
             onClick={onSubmit}
             disabled={!value.trim() && attachments.length === 0}
-            title="Send"
-            aria-label="Send"
+            title={working ? "Steer the running turn" : "Send"}
+            aria-label={working ? "Steer the running turn" : "Send"}
           >
             <ArrowUpIcon size={16} />
           </button>

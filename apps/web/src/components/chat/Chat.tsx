@@ -165,7 +165,8 @@ export default function Chat({
 
   function submit() {
     const text = draft.trim();
-    if ((!text && attachments.length === 0) || working) return;
+    // While a turn runs, a message steers it (the server decides whether the agent can).
+    if (!text && attachments.length === 0) return;
     setDraft("");
     setAttachments([]);
     void dispatch(text, attachments, true);

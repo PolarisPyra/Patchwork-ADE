@@ -85,6 +85,16 @@ pub fn turn_args(spec: &TurnSpec) -> Vec<String> {
 
 /// The stream-json input line carrying the prompt and any attached images.
 pub fn user_message(text: &str, images: &[Image]) -> String {
+    user_line(text, images, None)
+}
+
+/// A message for a turn that is already running. `priority: "now"` asks Claude to
+/// take it before its next step rather than after the turn.
+pub fn steer_message(text: &str, images: &[Image]) -> String {
+    user_line(text, images, Some("now"))
+}
+
+fn user_line(text: &str, images: &[Image], priority: Option<&str>) -> String {
     let mut content = vec![serde_json::json!({"type": "text", "text": text})];
     content.extend(images.iter().map(|i| {
         serde_json::json!({
@@ -92,13 +102,16 @@ pub fn user_message(text: &str, images: &[Image]) -> String {
             "source": {"type": "base64", "media_type": i.media_type, "data": i.data}
         })
     }));
-    serde_json::json!({
+    let mut message = serde_json::json!({
         "type": "user",
         "message": {"role": "user", "content": content},
         "parent_tool_use_id": null,
         "session_id": "",
-    })
-    .to_string()
+    });
+    if let Some(priority) = priority {
+        message["priority"] = priority.into();
+    }
+    message.to_string()
 }
 
 pub fn approval_reply(reply: &Value, allow: bool) -> String {

@@ -107,17 +107,10 @@ fn turn_start(spec: &TurnSpec, thread_id: &str) -> String {
         AccessMode::Auto => ("on-request", "auto_review", "workspaceWrite"),
         AccessMode::FullAccess => ("never", "user", "dangerFullAccess"),
     };
-    let mut input = vec![json!({"type": "text", "text": prompt(spec)})];
-    input.extend(
-        spec.attachments
-            .iter()
-            .filter(|a| a.kind == AttachmentKind::Image)
-            .map(|a| json!({"type": "localImage", "path": a.path})),
-    );
     let mut params = json!({
         "threadId": thread_id,
         "cwd": spec.root,
-        "input": input,
+        "input": input_items(&prompt(spec), spec.attachments),
         "approvalPolicy": policy,
         "approvalsReviewer": reviewer,
         "sandboxPolicy": {"type": sandbox},
@@ -126,6 +119,35 @@ fn turn_start(spec: &TurnSpec, thread_id: &str) -> String {
         params["model"] = json!(m);
     }
     json!({"id": THREAD_REQUEST + 1, "method": "turn/start", "params": params}).to_string()
+}
+
+fn input_items(text: &str, attachments: &[Attachment]) -> Vec<Value> {
+    let mut input = vec![json!({"type": "text", "text": text})];
+    input.extend(
+        attachments
+            .iter()
+            .filter(|a| a.kind == AttachmentKind::Image)
+            .map(|a| json!({"type": "localImage", "path": a.path})),
+    );
+    input
+}
+
+/// Request id of `turn/steer`; its response is not a reason to end the turn.
+const STEER_REQUEST: u64 = 4;
+
+/// `turn/steer` adds input to the turn that is running now, identified by its native id.
+pub fn steer_input(
+    thread_id: &str,
+    turn_id: &str,
+    text: &str,
+    attachments: &[Attachment],
+) -> String {
+    json!({"id": STEER_REQUEST, "method": "turn/steer", "params": {
+        "threadId": thread_id,
+        "expectedTurnId": turn_id,
+        "input": input_items(text, attachments),
+    }})
+    .to_string()
 }
 
 pub fn approval_reply(reply: &Value, allow: bool) -> String {
@@ -255,7 +277,11 @@ pub fn parse(v: &Value, spec: &TurnSpec, message_id: &str) -> Vec<Parsed> {
     match (v.get("id"), v["method"].as_str()) {
         // A response to one of our requests.
         (Some(id), None) => {
-            if let Some(message) = v["error"]["message"].as_str() {
+            if id == STEER_REQUEST {
+                if let Some(message) = v["error"]["message"].as_str() {
+                    log::warn!("Codex did not take the steering message: {message}");
+                }
+            } else if let Some(message) = v["error"]["message"].as_str() {
                 out.extend([Parsed::Error(message.into()), Parsed::Finished]);
             } else if id == THREAD_REQUEST
                 && let Some(thread_id) = v["result"]["thread"]["id"].as_str()
@@ -273,6 +299,11 @@ pub fn parse(v: &Value, spec: &TurnSpec, message_id: &str) -> Vec<Parsed> {
                 message_id,
                 &mut out,
             );
+        }
+        (None, Some("turn/started")) => {
+            if let Some(turn_id) = params["turn"]["id"].as_str() {
+                out.push(Parsed::TurnStarted(turn_id.into()));
+            }
         }
         (None, Some("turn/plan/updated")) => {
             let steps = params["plan"]

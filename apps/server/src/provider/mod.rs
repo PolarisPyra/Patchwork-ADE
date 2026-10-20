@@ -211,11 +211,14 @@ pub fn load_images(attachments: &[Attachment]) -> Result<Vec<Image>, String> {
 /// The prompt the agent reads: the message, then the paths of what was attached,
 /// so the agent can open files and folders with its own tools.
 pub fn prompt(spec: &TurnSpec) -> String {
-    if spec.attachments.is_empty() {
-        return spec.text.to_string();
+    prompt_text(spec.text, spec.attachments)
+}
+
+fn prompt_text(text: &str, attachments: &[Attachment]) -> String {
+    if attachments.is_empty() {
+        return text.to_string();
     }
-    let lines: Vec<String> = spec
-        .attachments
+    let lines: Vec<String> = attachments
         .iter()
         .map(|a| {
             let kind = match a.kind {
@@ -226,9 +229,39 @@ pub fn prompt(spec: &TurnSpec) -> String {
             format!("- {} ({kind})", a.path)
         })
         .collect();
-    format!("{}\n\nAttached:\n{}", spec.text, lines.join("\n"))
+    format!("{text}\n\nAttached:\n{}", lines.join("\n"))
         .trim_start()
         .to_string()
+}
+
+/// The stdin line that adds a message to a turn that is already running, or why the
+/// agent cannot take one. Gemini reads its whole prompt up front, so it cannot be steered.
+pub fn steer_input(
+    agent: AgentKind,
+    text: &str,
+    attachments: &[Attachment],
+    images: &[Image],
+    session_id: Option<&str>,
+    turn_id: Option<&str>,
+) -> Result<String, String> {
+    match agent {
+        AgentKind::Claude => Ok(claude::steer_message(
+            &prompt_text(text, attachments),
+            images,
+        )),
+        AgentKind::Codex => match (session_id, turn_id) {
+            (Some(thread), Some(turn)) => Ok(codex::steer_input(
+                thread,
+                turn,
+                &prompt_text(text, attachments),
+                attachments,
+            )),
+            _ => Err("Codex is still starting this turn; try again in a moment".into()),
+        },
+        AgentKind::Gemini => {
+            Err("Gemini cannot take a message during a turn; send it when the turn finishes".into())
+        }
+    }
 }
 
 /// Command-line arguments for one turn.
@@ -274,6 +307,8 @@ pub fn approval_reply(agent: AgentKind, reply: &Value, allow: bool) -> String {
 pub enum Parsed {
     Event(AgentEvent),
     SessionId(String),
+    /// The agent's id for the turn now running, which a steering message must name.
+    TurnStarted(String),
     /// The turn failed with this message.
     Error(String),
     /// Write this line to the agent's stdin.

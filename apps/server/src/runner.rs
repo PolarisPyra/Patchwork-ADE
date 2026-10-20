@@ -27,6 +27,9 @@ type Stdin = Arc<Mutex<Option<ChildStdin>>>;
 /// Pending approvals of one turn: approval id → the provider's reply context.
 type Pending = Arc<Mutex<HashMap<String, Value>>>;
 
+/// The agent's id for the turn now running (Codex reports it once the turn starts).
+type NativeTurn = Arc<Mutex<Option<String>>>;
+
 struct RunningTurn {
     pid: u32,
     cancelled: Arc<AtomicBool>,
@@ -34,6 +37,7 @@ struct RunningTurn {
     message_id: String,
     stdin: Stdin,
     pending: Pending,
+    native_turn: NativeTurn,
 }
 
 #[derive(Default)]
@@ -135,6 +139,7 @@ impl Runner {
         };
         let cancelled = Arc::new(AtomicBool::new(false));
         let pending = Pending::default();
+        let native_turn = NativeTurn::default();
         let turn = Turn {
             server: server.clone(),
             thread_id: thread_id.clone(),
@@ -144,6 +149,7 @@ impl Runner {
             baseline,
             stdin: stdin.clone(),
             pending: pending.clone(),
+            native_turn: native_turn.clone(),
             root,
             session_id,
             model,
@@ -164,11 +170,48 @@ impl Runner {
                     message_id: message.id.clone(),
                     stdin,
                     pending,
+                    native_turn,
                 },
             );
         turn.publish(AgentEvent::MessageStarted { message });
         std::thread::spawn(move || drive(turn, child, stdout, stderr_tail));
         Ok(())
+    }
+
+    /// Adds a message to the turn running in `thread_id`. Nothing is sent on error.
+    pub fn steer(
+        &self,
+        server: &Arc<Server>,
+        thread_id: &str,
+        text: &str,
+        attachments: &[Attachment],
+        images: &[provider::Image],
+    ) -> Result<(), String> {
+        let session_id = server.store.thread(thread_id).and_then(|t| t.session_id);
+        let (agent, stdin, native_turn) = {
+            let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+            let turn = turns
+                .get(thread_id)
+                .ok_or("This turn is no longer running")?;
+            (turn.agent, turn.stdin.clone(), turn.native_turn.clone())
+        };
+        let turn_id = native_turn
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let line = provider::steer_input(
+            agent,
+            text,
+            attachments,
+            images,
+            session_id.as_deref(),
+            turn_id.as_deref(),
+        )?;
+        if write_line(&stdin, &line) {
+            Ok(())
+        } else {
+            Err("This turn no longer accepts messages".into())
+        }
     }
 
     pub fn cancel(&self, thread_id: &str) {
@@ -221,12 +264,17 @@ impl Runner {
 }
 
 /// Writes one line to the agent's stdin, if it is still open.
-fn write_line(stdin: &Mutex<Option<ChildStdin>>, line: &str) {
+fn write_line(stdin: &Mutex<Option<ChildStdin>>, line: &str) -> bool {
     let mut stdin = stdin.lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some(pipe) = stdin.as_mut()
-        && let Err(e) = writeln!(pipe, "{line}").and_then(|()| pipe.flush())
-    {
-        log::warn!("failed to write to agent: {e}");
+    let Some(pipe) = stdin.as_mut() else {
+        return false;
+    };
+    match writeln!(pipe, "{line}").and_then(|()| pipe.flush()) {
+        Ok(()) => true,
+        Err(e) => {
+            log::warn!("failed to write to agent: {e}");
+            false
+        }
     }
 }
 
@@ -255,6 +303,7 @@ struct Turn {
     baseline: Vec<FileChange>,
     stdin: Stdin,
     pending: Pending,
+    native_turn: NativeTurn,
     root: String,
     session_id: Option<String>,
     model: Option<String>,
@@ -331,7 +380,9 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
         let parsed = provider::parse_line(turn.agent, &value, &turn.spec(), &turn.message_id);
         for item in parsed {
             match item {
-                Parsed::Send(line) => write_line(&turn.stdin, &line),
+                Parsed::Send(line) => {
+                    write_line(&turn.stdin, &line);
+                }
                 Parsed::Approval {
                     title,
                     detail,
@@ -367,6 +418,12 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
                     {
                         log::warn!("failed to save session id: {e}");
                     }
+                }
+                Parsed::TurnStarted(id) => {
+                    *turn
+                        .native_turn
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner) = Some(id);
                 }
                 Parsed::Error(message) => {
                     stream_error.get_or_insert(message);
@@ -649,9 +706,11 @@ mod tests {
             };
             for item in provider::parse_line(agent, &value, &spec, "m") {
                 match &item {
-                    Parsed::Send(line) => write_line(&stdin, line),
+                    Parsed::Send(line) => {
+                        write_line(&stdin, line);
+                    }
                     Parsed::Approval { reply, .. } => {
-                        write_line(&stdin, &provider::approval_reply(agent, reply, true))
+                        write_line(&stdin, &provider::approval_reply(agent, reply, true));
                     }
                     Parsed::Finished => drop(stdin.lock().unwrap().take()),
                     _ => {}
