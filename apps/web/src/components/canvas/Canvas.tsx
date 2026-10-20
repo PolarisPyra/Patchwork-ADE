@@ -8,7 +8,7 @@ import {
   CopyIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { api, type FileChange, type Message } from "~/api";
+import { api, onProjectFilesChanged, type FileChange, type Message } from "~/api";
 import CodeView from "~/components/canvas/CodeView";
 import DiffView from "~/components/canvas/DiffView";
 import PlanView from "~/components/canvas/PlanView";
@@ -104,6 +104,21 @@ export default function Canvas({
       live = false;
     };
   }, [key, projectId, path, reloadToken]);
+
+  // Files can change outside the agent's stream too; reload once a burst of writes settles.
+  useEffect(() => {
+    let timer: number | undefined;
+    api.watchProject(projectId).catch((e: unknown) => setActionError(errorMessage(e)));
+    const unlisten = onProjectFilesChanged((changed) => {
+      if (changed !== projectId) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setReloadToken((n) => n + 1), 200);
+    });
+    return () => {
+      window.clearTimeout(timer);
+      unlisten.then((stop) => stop());
+    };
+  }, [projectId]);
 
   // The agent may have edited the file while it was streaming.
   const status = message?.status;

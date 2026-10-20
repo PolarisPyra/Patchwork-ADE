@@ -1,13 +1,22 @@
 //! Tauri shell: exposes `patchwork_server::Server` as commands and forwards
 //! agent events to the web UI on the `"agent-event"` channel.
 
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use patchwork_server::types::*;
 use patchwork_server::{Res, Server, persistence, provider};
-use tauri::{Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 type Srv<'a> = State<'a, Arc<Server>>;
+
+/// Holds the watcher for the project the canvas has open. Replacing it stops the old one.
+#[derive(Default)]
+struct ProjectWatch(Mutex<Option<RecommendedWatcher>>);
+
+/// Build output and git internals change constantly and never affect what the canvas shows.
+const IGNORED_DIRS: [&str; 3] = [".git", "target", "node_modules"];
 
 /// Runs blocking work (CLI probes, network, disk scans) off the main thread.
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Res<T> {
@@ -269,6 +278,40 @@ fn git_file_diff(server: Srv, project_id: String, path: String) -> Res<String> {
     workspace::git_file_diff(&server.project_root(&project_id)?, &path)
 }
 
+/// Emits `project-files-changed` with the project id when a file under the project changes.
+#[tauri::command]
+fn watch_project(
+    app: AppHandle,
+    server: Srv,
+    watch: State<ProjectWatch>,
+    project_id: String,
+) -> Res<()> {
+    let root = PathBuf::from(server.project_root(&project_id)?);
+    let event_root = root.clone();
+    let watched_id = project_id.clone();
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        let Ok(event) = res else { return };
+        if matches!(event.kind, EventKind::Access(_)) {
+            return;
+        }
+        let relevant = event.paths.iter().any(|path| {
+            path.strip_prefix(&event_root).is_ok_and(|rel| {
+                !rel.components()
+                    .any(|c| IGNORED_DIRS.iter().any(|dir| c.as_os_str() == *dir))
+            })
+        });
+        if relevant {
+            let _ = app.emit("project-files-changed", &watched_id);
+        }
+    })
+    .map_err(|e| e.to_string())?;
+    watcher
+        .watch(&root, RecursiveMode::Recursive)
+        .map_err(|e| e.to_string())?;
+    *watch.0.lock().map_err(|e| e.to_string())? = Some(watcher);
+    Ok(())
+}
+
 #[tauri::command]
 fn accept_file(server: Srv, project_id: String, path: String) -> Res<()> {
     workspace::accept_file(&server.project_root(&project_id)?, &path)
@@ -309,6 +352,7 @@ pub fn run() {
             )?;
             server.start_idle_compaction();
             app.manage(server);
+            app.manage(ProjectWatch::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -354,6 +398,7 @@ pub fn run() {
             git_branch,
             git_changes,
             git_file_diff,
+            watch_project,
             accept_file,
             revert_file,
             open_in_editor,

@@ -18,3 +18,4 @@ tauri = { version = "2.12.4", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 patchwork-server = { path = "../../server" }
+notify = "8"

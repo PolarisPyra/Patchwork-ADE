@@ -401,8 +401,14 @@ export const api = {
   revertFile: (projectId: string, path: string) => invoke<void>("revert_file", { projectId, path }),
   openInEditor: (projectId: string, path: string) =>
     invoke<void>("open_in_editor", { projectId, path }),
+  /** Starts watching the project's files; `onProjectFilesChanged` then reports changes. */
+  watchProject: (projectId: string) => invoke<void>("watch_project", { projectId }),
 };
 
 export function onAgentEvent(cb: (e: AgentEventEnvelope) => void): Promise<UnlistenFn> {
   return listen<AgentEventEnvelope>("agent-event", (e) => cb(e.payload));
+}
+
+export function onProjectFilesChanged(cb: (projectId: string) => void): Promise<UnlistenFn> {
+  return listen<string>("project-files-changed", (e) => cb(e.payload));
 }
