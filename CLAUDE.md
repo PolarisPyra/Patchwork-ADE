@@ -13,5 +13,5 @@
 
 ## Committing
 
-- Always commit once a requested change is complete, unless the app crashes on launch.
-- Since the app is not launched here (see above), verify with typecheck/tests and treat a crash reported by the user from their dev session as the signal not to commit.
+- Do not commit or push until the user has reviewed the change and says to. Leave finished work uncommitted in the working tree.
+- Do not push at all unless the user explicitly asks.

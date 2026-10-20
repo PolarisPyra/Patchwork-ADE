@@ -277,6 +277,9 @@ pub struct Thread {
     /// The `/goal` the agent is working toward, as the agent last reported it.
     #[serde(default)]
     pub goal: Option<Goal>,
+    /// Sidebar order, lower first. Kept by the store; the UI gets threads already sorted.
+    #[serde(skip)]
+    pub position: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

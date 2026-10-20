@@ -187,6 +187,18 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)));
   }
 
+  /** Moves `ids` (one group's threads) into that order; other threads keep their slots. */
+  async function reorderThreads(ids: string[]): Promise<void> {
+    setThreads((prev) => {
+      const byId = new Map(prev.map((t) => [t.id, t]));
+      const moved = ids.map((id) => byId.get(id)).filter((t): t is Thread => t !== undefined);
+      const movedIds = new Set(moved.map((t) => t.id));
+      let next = 0;
+      return prev.map((t) => (movedIds.has(t.id) ? moved[next++]! : t));
+    });
+    await api.reorderThreads(ids);
+  }
+
   async function setModel(id: string, agent: AgentKind, model: string | null): Promise<void> {
     await api.setThreadModel(id, agent, model);
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, agent, model } : t)));
@@ -228,6 +240,7 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     createThread,
     deleteThread,
     renameThread,
+    reorderThreads,
     setModel,
     setAccessMode,
     send,

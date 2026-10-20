@@ -56,6 +56,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     createThread,
     deleteThread,
     renameThread,
+    reorderThreads,
     setModel,
     setAccessMode,
     send,
@@ -119,6 +120,16 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       await syncProjects(updateSettings);
       await reload();
     });
+
+  // Project order is saved with the settings; the backend keeps the list's order.
+  const reorderProjects = (ids: string[]) =>
+    attempt(() =>
+      updateSettings((s) => ({
+        ...s,
+        projects: ids.flatMap((id) => s.projects.find((p) => p.id === id) ?? []),
+      })),
+    );
+  const reorderThreadsTo = (ids: string[]) => attempt(() => reorderThreads(ids));
 
   /** Remembers the current project so the next launch reopens it. */
   const rememberProject = async (id: string | null) => {
@@ -270,6 +281,8 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             onRenameThread={(id, title) => attempt(() => renameThread(id, title))}
             onRenameProject={renameProjectTo}
             onRemoveProject={removeProjectNow}
+            onReorderProjects={reorderProjects}
+            onReorderThreads={reorderThreadsTo}
             onOpenFolder={openFolder}
             onRefreshChanges={() => attempt(refreshGit)}
             onOpenChange={(path) => openCanvasAt(path, null, "diff")}

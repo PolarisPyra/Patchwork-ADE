@@ -276,8 +276,10 @@ export const api = {
   renameProject: (id: string, name: string) => invoke<void>("rename_project", { id, name }),
   removeProject: (id: string) => invoke<void>("remove_project", { id }),
 
-  /** All threads (project tasks and project-less chats), newest first. */
+  /** All threads (project tasks and project-less chats), in sidebar order. */
   listThreads: () => invoke<Thread[]>("list_threads"),
+  /** Sets the sidebar order of one group of threads, given in their new order. */
+  reorderThreads: (ids: string[]) => invoke<void>("reorder_threads", { ids }),
   createThread: (
     projectId: string | null,
     agent: AgentKind,

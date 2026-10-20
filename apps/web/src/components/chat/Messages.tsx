@@ -115,7 +115,7 @@ export default function Messages({
                   className="px-6"
                   style={{ position: "absolute", left: 0, width: "100%" }}
                 >
-                  <div className="mx-auto flex max-w-[820px] flex-col pb-5">
+                  <div className="flex max-w-[820px] flex-col pb-5">
                     <WorkingRow agent={thread.agent} />
                   </div>
                 </div>
@@ -131,7 +131,7 @@ export default function Messages({
                 style={{ position: "absolute", left: 0, width: "100%" }}
               >
                 <div
-                  className={`mx-auto flex max-w-[820px] flex-col pb-5${item.index === 0 ? " pt-6" : ""}`}
+                  className={`flex flex-col pb-5${item.index === 0 ? " pt-6" : ""}${message.role === "user" ? "" : " max-w-[820px]"}`}
                 >
                   {message.role === "user" ? (
                     <UserMessage message={message} />

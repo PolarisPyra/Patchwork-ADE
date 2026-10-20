@@ -130,11 +130,16 @@ impl Server {
 
     // ---- threads & turns -------------------------------------------------
 
-    /// Every thread (project tasks and project-less chats), newest first.
+    /// Every thread (project tasks and project-less chats), in sidebar order.
     pub fn list_threads(&self) -> Vec<Thread> {
         let mut ts = self.store.threads();
-        ts.sort_by_key(|t| std::cmp::Reverse(t.created_at));
+        ts.sort_by_key(|t| t.position);
         ts
+    }
+
+    /// Puts `ids` (one group's threads, in their new order) first in that order.
+    pub fn reorder_threads(&self, ids: &[String]) -> Res<()> {
+        self.store.reorder_threads(ids)
     }
 
     pub fn create_thread(
@@ -152,6 +157,7 @@ impl Server {
         } else {
             "New chat"
         };
+        let created_at = now_ms();
         let thread = Thread {
             id: new_id(),
             project_id,
@@ -160,9 +166,10 @@ impl Server {
             model,
             access_mode,
             session_id: None,
-            created_at: now_ms(),
+            created_at,
             messages: vec![],
             goal: None,
+            position: -(created_at as i64),
         };
         self.store.insert_threads(vec![thread.clone()])?;
         Ok(thread)

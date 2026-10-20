@@ -188,6 +188,26 @@ impl Store {
         Ok(())
     }
 
+    /// Sets the sidebar order to `ids` (the threads of one group, in their new order).
+    pub fn reorder_threads(&self, ids: &[String]) -> Res<()> {
+        let mut inner = self.lock();
+        let tx = inner.conn.transaction().map_err(err)?;
+        for (i, id) in ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE threads SET position = ?1 WHERE id = ?2",
+                params![i as i64, id],
+            )
+            .map_err(err)?;
+        }
+        tx.commit().map_err(err)?;
+        for t in &mut inner.threads {
+            if let Some(i) = ids.iter().position(|id| *id == t.id) {
+                t.position = i as i64;
+            }
+        }
+        Ok(())
+    }
+
     pub fn delete_thread(&self, id: &str) -> Res<()> {
         let mut inner = self.lock();
         inner
@@ -235,8 +255,9 @@ fn save_settings(tx: &Transaction, settings: &Settings) -> rusqlite::Result<()> 
 fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO threads
-             (id, project_id, title, agent, model, session_id, created_at, access_mode, goal)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             (id, project_id, title, agent, model, session_id, created_at, access_mode, goal,
+              position)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT (id) DO UPDATE SET project_id = excluded.project_id,
              title = excluded.title, agent = excluded.agent, model = excluded.model,
              session_id = excluded.session_id, access_mode = excluded.access_mode,
@@ -250,7 +271,8 @@ fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
             t.session_id,
             t.created_at,
             enc(&t.access_mode),
-            t.goal.as_ref().map(json)
+            t.goal.as_ref().map(json),
+            t.position
         ],
     )?;
     Ok(())
@@ -312,8 +334,9 @@ fn load_settings(conn: &Connection) -> rusqlite::Result<Settings> {
 
 fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
     let mut stmt = conn.prepare(
-        "SELECT id, project_id, title, agent, model, session_id, created_at, access_mode, goal
-         FROM threads",
+        "SELECT id, project_id, title, agent, model, session_id, created_at, access_mode, goal,
+                position
+         FROM threads ORDER BY position",
     )?;
     let mut threads: Vec<Thread> = stmt
         .query_map([], |r| {
@@ -330,6 +353,7 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                 goal: r
                     .get::<_, Option<String>>(8)?
                     .and_then(|g| serde_json::from_str(&g).ok()),
+                position: r.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -438,6 +462,7 @@ mod tests {
             created_at: 2,
             messages,
             goal: None,
+            position: 0,
         }
     }
 

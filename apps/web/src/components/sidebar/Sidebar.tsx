@@ -29,10 +29,16 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import ProviderLogos from "~/components/ProviderLogos";
 import ContextMenu, { type MenuItem } from "~/components/sidebar/ContextMenu";
 import UsagePopover from "~/components/usage/UsagePopover";
+import { useRowReorder, type RowDrag } from "~/hooks/useRowReorder";
 import { isWorking } from "~/hooks/useThreads";
 import { baseName, dirName, displayTitle, errorText, formatRelative } from "~/lib/util";
 
 export type SidebarView = "tasks" | "changes";
+
+/** Drag groups: rows reorder only within their own group. */
+const CHATS_GROUP = "chats";
+const PROJECTS_GROUP = "projects";
+const TASKS_GROUP_PREFIX = "tasks:";
 
 const STRIPE: { view: SidebarView; label: string; Icon: Icon }[] = [
   { view: "tasks", label: "Tasks", Icon: ChatsIcon },
@@ -92,6 +98,10 @@ interface SidebarProps {
   onRenameThread: (id: string, title: string) => void;
   onRenameProject: (id: string, name: string) => void;
   onRemoveProject: (id: string) => void;
+  /** Project ids in their new order. */
+  onReorderProjects: (ids: string[]) => void;
+  /** Thread ids of one group (chats, or one project's tasks) in their new order. */
+  onReorderThreads: (ids: string[]) => void;
   onOpenFolder: () => void;
   onRefreshChanges: () => void;
   onOpenChange: (path: string) => void;
@@ -144,11 +154,16 @@ function TasksView({
   onRenameThread,
   onRenameProject,
   onRemoveProject,
+  onReorderProjects,
+  onReorderThreads,
   onOpenFolder,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [menu, setMenu] = useState<{ x: number; y: number; target: Target } | null>(null);
   const [renaming, setRenaming] = useState<Target | null>(null);
+  const reorder = useRowReorder((group, ids) =>
+    group === PROJECTS_GROUP ? onReorderProjects(ids) : onReorderThreads(ids),
+  );
   const toggle = (id: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -156,6 +171,7 @@ function TasksView({
       return next;
     });
   const chats = threads.filter((t) => t.projectId === null);
+  const chatIds = chats.map((t) => t.id);
 
   const openMenu = (e: MouseEvent, target: Target) => {
     e.preventDefault();
@@ -223,7 +239,7 @@ function TasksView({
         <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No chats yet</div>
       )}
       {chats.map((t) => (
-        <ThreadRow key={t.id} thread={t} {...rowProps} />
+        <ThreadRow key={t.id} thread={t} {...rowProps} drag={reorder(CHATS_GROUP, t.id, chatIds)} />
       ))}
       {menu && (
         <ContextMenu
@@ -254,10 +270,18 @@ function TasksView({
       {projects.map((p) => {
         const open = !collapsed.has(p.id);
         const tasks = threads.filter((t) => t.projectId === p.id);
+        const editing = renaming?.kind === "project" && renaming.id === p.id;
+        const drag = reorder(
+          PROJECTS_GROUP,
+          p.id,
+          projects.map((x) => x.id),
+        );
         return (
           <div key={p.id}>
             <div
-              className="group mt-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-left text-fg hover:bg-hover"
+              {...drag.attrs}
+              draggable={!editing}
+              className={`group mt-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-left text-fg hover:bg-hover ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
               title={p.path}
               onClick={() => toggle(p.id)}
               onContextMenu={(e) => openMenu(e, { kind: "project", id: p.id })}
@@ -266,7 +290,7 @@ function TasksView({
                 <CaretRightIcon size={15} className={open ? "rotate-90" : undefined} />
               </span>
               <FolderIcon size={15} className="text-fg-subtle" />
-              {renaming?.kind === "project" && renaming.id === p.id ? (
+              {editing ? (
                 <InlineName
                   initial={p.name}
                   onCommit={(name) => commitRename({ kind: "project", id: p.id }, name, p.name)}
@@ -297,7 +321,16 @@ function TasksView({
                   </div>
                 )}
                 {tasks.map((t) => (
-                  <ThreadRow key={t.id} thread={t} {...rowProps} />
+                  <ThreadRow
+                    key={t.id}
+                    thread={t}
+                    {...rowProps}
+                    drag={reorder(
+                      `${TASKS_GROUP_PREFIX}${p.id}`,
+                      t.id,
+                      tasks.map((x) => x.id),
+                    )}
+                  />
                 ))}
               </div>
             )}
@@ -353,6 +386,7 @@ function ThreadRow({
   onContextMenu,
   onCommitRename,
   onCancelRename,
+  drag,
 }: {
   thread: Thread;
   selectedId: string | null;
@@ -362,6 +396,7 @@ function ThreadRow({
   onContextMenu: (e: MouseEvent, target: Target) => void;
   onCommitRename: (target: Target, name: string, current: string) => void;
   onCancelRename: () => void;
+  drag: RowDrag;
 }) {
   const editing = renaming?.kind === "thread" && renaming.id === thread.id;
   const selected = thread.id === selectedId;
@@ -369,7 +404,9 @@ function ThreadRow({
   const needsApproval = last?.approvals.some((a) => a.status === "pending") ?? false;
   return (
     <div
-      className={`group flex min-h-[26px] w-full cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none mb-1 px-2.5 py-2 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"}`}
+      {...drag.attrs}
+      draggable={!editing}
+      className={`group flex min-h-[26px] w-full cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none mb-1 px-2.5 py-2 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
       onClick={() => onSelectThread(thread.id)}
       onContextMenu={(e) => onContextMenu(e, { kind: "thread", id: thread.id })}
     >
@@ -467,11 +504,16 @@ function ChangeRow({
       </button>
       {/* Takes no room until hovered, so the counts sit at the right edge. */}
       <span className="hidden flex-none group-focus-within:flex group-hover:flex">
-        <button className="btn-icon" title="Apply" aria-label={`Apply ${name}`} onClick={onApply}>
+        <button
+          className="btn-icon h-5 w-5"
+          title="Apply"
+          aria-label={`Apply ${name}`}
+          onClick={onApply}
+        >
           <CheckIcon size={14} />
         </button>
         <button
-          className="btn-icon"
+          className="btn-icon h-5 w-5"
           title="Reject"
           aria-label={`Reject ${name}`}
           onClick={onReject}
