@@ -4,7 +4,7 @@
 //! cached: reopening the usage popup reuses them, refreshing is throttled, and
 //! a 429 backs off while the last good numbers stay visible.
 
-mod claude;
+pub mod claude;
 mod codex;
 
 use std::collections::HashMap;
@@ -68,6 +68,8 @@ fn is_remote(kind: AgentKind) -> bool {
 
 struct Entry {
     fetched: Instant,
+    /// The numbers came from the agent itself during a turn, not from a fetch.
+    reported: bool,
     usage: ProviderUsage,
     /// No requests before this, after a rate limit.
     blocked_until: Option<Instant>,
@@ -101,7 +103,10 @@ impl UsageCache {
         if let Some(e) = lock().get(&kind) {
             let age = now.saturating_duration_since(e.fetched);
             let blocked = e.blocked_until.is_some_and(|until| now < until);
-            if blocked || age < MIN_REFRESH || (!refresh && age < FRESH_FOR) {
+            // Numbers the agent reported are as current as a fetch, so they are not
+            // fetched again, even on refresh, while fresh.
+            let fresh = age < FRESH_FOR && (!refresh || e.reported);
+            if blocked || age < MIN_REFRESH || fresh {
                 return e.usage.clone();
             }
         }
@@ -110,6 +115,7 @@ impl UsageCache {
         let entry = match result {
             Ok(usage) => Entry {
                 fetched: now,
+                reported: false,
                 usage,
                 blocked_until: None,
             },
@@ -123,6 +129,7 @@ impl UsageCache {
                 usage.error = Some(failure.message);
                 Entry {
                     fetched: now,
+                    reported: false,
                     usage,
                     blocked_until: failure.retry_after.map(|d| now + d.max(MIN_REFRESH)),
                 }
@@ -131,6 +138,39 @@ impl UsageCache {
         let usage = entry.usage.clone();
         entries.insert(kind, entry);
         usage
+    }
+}
+
+impl UsageCache {
+    /// Records the windows the agent reported during a turn, so the popup shows them
+    /// without asking the rate-limited endpoint. Windows it did not report are kept.
+    pub fn record(&self, kind: AgentKind, windows: Vec<UsageWindow>) {
+        let mut entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        let previous = entries.remove(&kind);
+        let mut usage = previous.as_ref().map_or_else(
+            || ProviderUsage {
+                plan: claude::stored_plan(),
+                ..empty(kind)
+            },
+            |e| e.usage.clone(),
+        );
+        for window in windows {
+            match usage.windows.iter_mut().find(|w| w.label == window.label) {
+                Some(w) => *w = window,
+                None => usage.windows.push(window),
+            }
+        }
+        usage.error = None;
+        usage.updated_at = Some(now_ms());
+        entries.insert(
+            kind,
+            Entry {
+                fetched: Instant::now(),
+                reported: true,
+                usage,
+                blocked_until: previous.and_then(|e| e.blocked_until),
+            },
+        );
     }
 }
 

@@ -690,6 +690,7 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                         .unwrap_or_else(PoisonError::into_inner)
                         .insert(tool_id, task_id);
                 }
+                Parsed::Usage(windows) => turn.server.usage.record(turn.agent, windows),
                 Parsed::TaskEnded { tool_id, failed } => {
                     if let Some(Some(call_failed)) = running_tasks.remove(&tool_id)
                         && let Some(owner) = tool_owner.get(&tool_id)

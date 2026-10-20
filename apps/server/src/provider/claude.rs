@@ -255,6 +255,12 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                 });
             }
         }
+        Some("rate_limit_event") => {
+            let windows = crate::usage::claude::windows_from_event(&v["rate_limit_info"]);
+            if !windows.is_empty() {
+                out.push(Parsed::Usage(windows));
+            }
+        }
         Some("system") if v["subtype"] == "task_notification" => {
             if let Some(tool_id) = v["tool_use_id"].as_str() {
                 out.push(Parsed::TaskEnded {

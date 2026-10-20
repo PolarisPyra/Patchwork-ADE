@@ -331,6 +331,8 @@ pub enum Parsed {
         tool_id: String,
         failed: bool,
     },
+    /// Subscription usage the agent reported along the way.
+    Usage(Vec<UsageWindow>),
     /// The agent's id for the turn now running, which a steering message must name.
     TurnStarted(String),
     /// The turn failed with this message.

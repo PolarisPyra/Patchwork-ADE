@@ -47,7 +47,7 @@ fn credentials() -> Option<Value> {
     serde_json::from_str(raw.trim()).ok()
 }
 
-pub fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, Failure> {
+pub(super) fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, Failure> {
     let creds = credentials().ok_or("Not signed in with a Claude subscription")?;
     let oauth = &creds["claudeAiOauth"];
     let token = oauth["accessToken"]
@@ -141,6 +141,30 @@ fn live_plan(profile: &Value) -> Option<String> {
         Some(m) => format!("{plan} {m}"),
         None => plan.to_string(),
     })
+}
+
+/// The plan Claude Code stored at sign-in.
+pub fn stored_plan() -> Option<String> {
+    credentials()?["claudeAiOauth"]["subscriptionType"]
+        .as_str()
+        .map(String::from)
+}
+
+/// The windows in a `rate_limit_event` Claude reports during a turn, which carry the
+/// same numbers as the usage endpoint (as fractions, with resets in seconds).
+pub fn windows_from_event(info: &Value) -> Vec<UsageWindow> {
+    let reported = &info["unifiedWindows"];
+    WINDOWS
+        .iter()
+        .filter_map(|(key, label)| {
+            let w = &reported[*key];
+            Some(UsageWindow {
+                label: (*label).into(),
+                used_percent: w["utilization"].as_f64()? * 100.0,
+                resets_at: w["resetsAt"].as_u64().map(|s| s * 1000),
+            })
+        })
+        .collect()
 }
 
 fn windows(body: &Value) -> Vec<UsageWindow> {
