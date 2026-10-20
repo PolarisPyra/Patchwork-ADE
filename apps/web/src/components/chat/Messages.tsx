@@ -93,6 +93,7 @@ export default function Messages({
                 ref={virtualizer.measureElement}
                 data-index={item.index}
                 className="absolute top-0 left-0 w-full px-6 pb-5"
+                style={{ transform: `translateY(${item.start}px)` }}
               >
                 {message.role === "user" ? (
                   <UserMessage message={message} />
