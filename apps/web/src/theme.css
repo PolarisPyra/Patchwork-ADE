@@ -476,9 +476,24 @@
   font-weight: 600;
 }
 .composer-editor .ProseMirror p.composer-quote {
-  border-left: 2px solid var(--border);
-  padding-left: 0.75rem;
+  position: relative;
+  padding-left: 0.25rem;
   color: var(--text-muted);
+}
+.composer-editor .ProseMirror p.composer-quote::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  bottom: 0.2em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.composer-editor .ProseMirror .composer-quote-marker {
+  color: transparent;
+  caret-color: var(--text);
+  letter-spacing: -0.4em;
 }
 .composer-editor ul[data-type="taskList"] li {
   display: flex;

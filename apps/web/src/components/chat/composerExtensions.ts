@@ -82,6 +82,10 @@ const MarkdownLine = Extension.create({
               if (className) {
                 decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: className }));
               }
+              // Hide the `> ` marker on screen; the text keeps it so the draft stays Markdown.
+              if (quote) {
+                decorations.push(Decoration.inline(pos + 1, pos + 3, { class: "composer-quote-marker" }));
+              }
               return false;
             });
             return DecorationSet.create(state.doc, decorations);
