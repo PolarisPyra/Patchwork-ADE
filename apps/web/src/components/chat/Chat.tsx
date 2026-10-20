@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
+import { useEffect, useRef, useState, type UIEvent } from "react";
 import { FolderPlusIcon } from "@phosphor-icons/react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
@@ -72,9 +72,6 @@ export default function Chat({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Width of the message scroller's scrollbar. The messages are centred beside it, so the
-  // composer is offset by the same amount to line up with them.
-  const [scrollbarWidth, setScrollbarWidth] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
@@ -160,16 +157,6 @@ export default function Chat({
     };
   }, []);
 
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const measure = () => setScrollbarWidth(el.offsetWidth - el.clientWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
   function onScroll(e: UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
     stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
@@ -243,7 +230,7 @@ export default function Chat({
     >
       {thread && <LineageCard thread={thread} working={working} />}
       <div
-        className={`min-h-0 overflow-y-auto [scrollbar-gutter:stable_both-edges] ${isNew ? "flex-none" : "flex-1"}`}
+        className={`min-h-0 overflow-y-auto ${isNew ? "flex-none" : "flex-1"}`}
         ref={scrollRef}
         onScroll={onScroll}
       >
@@ -288,10 +275,7 @@ export default function Chat({
           </div>
         )}
       </div>
-      <div
-        className="mx-auto w-full max-w-[820px] flex-none box-border px-6 pb-4"
-        style={{ marginRight: scrollbarWidth }}
-      >
+      <div className="w-full flex-none box-border px-6 pb-4">
         <Composer
           value={draft}
           onChange={setDraft}
