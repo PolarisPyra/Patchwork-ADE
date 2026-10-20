@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type UIEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
 import { FolderPlusIcon } from "@phosphor-icons/react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
@@ -72,6 +72,9 @@ export default function Chat({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Width of the message scroller's scrollbar. The messages are centred beside it, so the
+  // composer is offset by the same amount to line up with them.
+  const [scrollbarWidth, setScrollbarWidth] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
@@ -155,6 +158,16 @@ export default function Chat({
       cancelled = true;
       unlisten?.();
     };
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setScrollbarWidth(el.offsetWidth - el.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   function onScroll(e: UIEvent<HTMLDivElement>) {
@@ -275,7 +288,10 @@ export default function Chat({
           </div>
         )}
       </div>
-      <div className="mx-auto w-full max-w-[820px] flex-none box-border px-6 pb-4">
+      <div
+        className="mx-auto w-full max-w-[820px] flex-none box-border px-6 pb-4"
+        style={{ marginRight: scrollbarWidth }}
+      >
         <Composer
           value={draft}
           onChange={setDraft}
