@@ -77,7 +77,7 @@ export default function Messages({
     anchorTo: "end",
     followOnAppend: false,
     scrollEndThreshold: 80,
-    overscan: 6,
+    overscan: 20,
     directDomUpdates: true,
     // Rows are placed with `top` rather than translate3d, which makes WebKit give every
     // row its own compositing layer; positions are written only when the range changes.
