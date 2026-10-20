@@ -24,7 +24,8 @@ export default function LineageCard({ thread, working }: { thread: Thread; worki
   const [open, setOpen] = useState(true);
   const tools = latestTurnTools(thread);
   const subagents = tools.filter((t) => t.subagent);
-  if (subagents.length === 0) return null;
+  // Shown only while a subagent is still running; it goes away once they have all finished.
+  if (!subagents.some((t) => t.status === "running")) return null;
 
   return (
     <div className="absolute top-3 right-4 z-10 w-[260px] rounded-[var(--radius-lg)] border border-border bg-panel text-[length:var(--fs-sm)] shadow-[var(--shadow-popup)]">
