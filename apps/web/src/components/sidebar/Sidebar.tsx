@@ -298,8 +298,9 @@ function TasksView({
 
   if (!loaded) return null;
 
+  // Rows keep their full height and the list scrolls, rather than squeezing rows to fit.
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto p-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto overflow-x-hidden p-2 [scrollbar-gutter:stable] *:shrink-0">
       <SectionLabel
         action={
           <button className="btn-icon" title="New chat" aria-label="New chat" onClick={onNewChat}>
@@ -365,6 +366,7 @@ function TasksView({
             thread={t}
             {...rowProps}
             nested={folderId !== null}
+            roomy
             drag={reorder.row(
               group,
               t.id,
@@ -425,7 +427,7 @@ function TasksView({
               </button>
             </div>
             <Collapse open={open}>
-              <div className="pb-1">
+              <div className="flex flex-col gap-px pb-1">
                 {tasks.length === 0 && projectFolders.length === 0 && (
                   <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">
                     No tasks yet
@@ -557,6 +559,7 @@ function ThreadRow({
   onCancelRename,
   drag,
   nested = false,
+  roomy = false,
 }: {
   thread: Thread;
   selectedId: string | null;
@@ -568,6 +571,8 @@ function ThreadRow({
   onCancelRename: () => void;
   drag: RowDrag;
   nested?: boolean;
+  /** Project tasks get more vertical room than chats. */
+  roomy?: boolean;
 }) {
   const editing = renaming?.kind === "thread" && renaming.id === thread.id;
   const selected = thread.id === selectedId;
@@ -577,7 +582,7 @@ function ThreadRow({
     <div
       {...drag.attrs}
       draggable={!editing}
-      className={`group flex min-h-[26px] cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none mb-1.5 ${nested ? "ml-6 mr-1.5" : "mx-1.5"} px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
+      className={`group flex cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none ${roomy ? "my-2" : "mb-1.5"} ${nested ? "ml-6 mr-1.5" : "mx-1.5"} px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
       onClick={() => onSelectThread(thread.id)}
       onContextMenu={(e) => onContextMenu(e, { kind: "thread", id: thread.id })}
     >
@@ -603,7 +608,7 @@ function ThreadRow({
           {formatRelative(last?.createdAt ?? thread.createdAt)}
         </span>
         <button
-          className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex"
+          className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex hover:bg-border-strong"
           title="Delete"
           aria-label="Delete"
           onClick={(e) => {
@@ -626,7 +631,10 @@ function ThreadRow({
             </span>
           )
         )}
-        <span className="inline-flex flex-none" title={AGENT_LABELS[thread.agent]}>
+        <span
+          className="inline-flex h-5 w-5 flex-none items-center justify-center"
+          title={AGENT_LABELS[thread.agent]}
+        >
           <ProviderLogos kind={thread.agent} size={14} />
         </span>
       </div>
