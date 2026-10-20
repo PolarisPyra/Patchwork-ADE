@@ -492,7 +492,9 @@ function ChangesView({
   onOpenChange,
 }: SidebarProps) {
   const [error, setError] = useState<string | null>(null);
-  const pinned = changes.filter((c) => changeFocus?.includes(c.path));
+  // The reply's files, listed whether or not they still have uncommitted changes.
+  const replyFiles = changeFocus ?? [];
+  const pinned = changes.filter((c) => replyFiles.includes(c.path));
   const folders = new Map<string, FileChange[]>();
   for (const c of changes) {
     if (pinned.includes(c)) continue;
@@ -570,7 +572,7 @@ function ChangesView({
         {changes.length === 0 && (
           <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No changes</div>
         )}
-        {pinned.length > 0 && (
+        {replyFiles.length > 0 && (
           <div className="flex flex-col gap-px rounded-[var(--radius)] border border-accent bg-selected-muted p-1">
             <div className="flex items-center justify-between gap-1 px-1.5 pt-0.5 pb-1">
               <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.04em] text-accent-text uppercase">
@@ -583,7 +585,22 @@ function ChangesView({
                 </span>
               )}
             </div>
-            {pinned.map(row)}
+            {replyFiles.map((path) => {
+              const change = changes.find((c) => c.path === path);
+              return change ? (
+                row(change)
+              ) : (
+                <button
+                  key={path}
+                  className="flex min-h-[26px] w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent py-0.5 pr-1 pl-1.5 text-fg text-left hover:bg-hover"
+                  title={path}
+                  onClick={() => onOpenChange(path)}
+                >
+                  <span className="min-w-0 flex-1 truncate">{baseName(path)}</span>
+                  <PencilSimpleIcon size={12} className="flex-none text-fg-muted" />
+                </button>
+              );
+            })}
           </div>
         )}
         {[...folders]
