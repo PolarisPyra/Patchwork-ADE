@@ -64,6 +64,7 @@ pub fn turn_args(spec: &TurnSpec) -> Vec<String> {
         "--output-format",
         "stream-json",
         "--verbose",
+        "--include-partial-messages",
         "--permission-mode",
         mode,
     ]
@@ -226,17 +227,21 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                 out.push(Parsed::SessionId(id.into()));
             }
         }
+        // Text arrives token by token in `stream_event`s; the full `assistant` text is skipped.
+        Some("stream_event") => {
+            let delta = &v["event"]["delta"];
+            // A subagent's text is not part of the reply, so only the top level counts.
+            if parent.is_none() && delta["type"] == "text_delta" {
+                let text = delta["text"].as_str().unwrap_or_default();
+                if !text.is_empty() {
+                    out.push(text_delta(message_id, text));
+                }
+            }
+        }
         Some("assistant") => {
             for block in blocks {
-                match block["type"].as_str() {
-                    Some("text") => {
-                        let text = block["text"].as_str().unwrap_or_default();
-                        if !text.is_empty() {
-                            out.push(text_delta(message_id, text));
-                        }
-                    }
-                    Some("tool_use") => claude_tool_use(block, root, message_id, parent, &mut out),
-                    _ => {}
+                if block["type"] == "tool_use" {
+                    claude_tool_use(block, root, message_id, parent, &mut out);
                 }
             }
         }
@@ -292,18 +297,16 @@ mod tests {
              "input": {"file_path": "/abs/a.css", "old_string": "..", "new_string": ".."}}
         ]}});
         let out = parse(&v, "/abs", "m1");
-        assert_eq!(out.len(), 3);
-        assert!(
-            matches!(&out[0], Parsed::Event(AgentEvent::TextDelta { text, .. }) if text == "hi")
-        );
+        // The text block was already streamed as deltas, so only the tool calls remain.
+        assert_eq!(out.len(), 2);
         assert!(matches!(
-            &out[1],
+            &out[0],
             Parsed::Event(AgentEvent::ToolStarted { tool, .. })
                 if tool.id == "toolu_1" && tool.name == "Edit" && tool.summary == "a.css"
                     && tool.status == StepStatus::Running
         ));
         assert!(
-            matches!(&out[2], Parsed::Event(AgentEvent::FileTouched { path, .. }) if path == "a.css")
+            matches!(&out[1], Parsed::Event(AgentEvent::FileTouched { path, .. }) if path == "a.css")
         );
     }
 
@@ -408,6 +411,7 @@ mod tests {
                 "--output-format",
                 "stream-json",
                 "--verbose",
+                "--include-partial-messages",
                 "--permission-mode",
                 "bypassPermissions",
                 "--resume",

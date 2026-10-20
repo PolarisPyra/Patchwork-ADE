@@ -339,9 +339,13 @@ fn drive(turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHan
                 }
                 Parsed::Event(mut event) => {
                     match &mut event {
-                        // Separate successive text blocks so they do not run together.
+                        // Separate successive text blocks so they do not run together. Gemini
+                        // and Claude stream a block as chunks, so chunks after the first stay
+                        // together.
                         AgentEvent::TextDelta { text, .. } => {
-                            let continues = turn.agent == AgentKind::Gemini && last_was_text;
+                            let streams =
+                                matches!(turn.agent, AgentKind::Gemini | AgentKind::Claude);
+                            let continues = streams && last_was_text;
                             if has_text && !continues {
                                 text.insert_str(0, "\n\n");
                             }
