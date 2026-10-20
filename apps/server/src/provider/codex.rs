@@ -43,40 +43,9 @@ pub fn configured_model() -> Option<String> {
     )
 }
 
-/// The models the CLI caches in `$CODEX_HOME/models_cache.json`.
+/// Current Codex models, from the fetched model manifest.
 pub fn models() -> Vec<ModelOption> {
-    home()
-        .and_then(|h| std::fs::read_to_string(h.join("models_cache.json")).ok())
-        .map(|json| cached_models(&json))
-        .unwrap_or_default()
-}
-
-/// Visible models from Codex's model cache, in the CLI's priority order.
-fn cached_models(json: &str) -> Vec<ModelOption> {
-    let Ok(v) = serde_json::from_str::<Value>(json) else {
-        return vec![];
-    };
-    let mut listed: Vec<(i64, ModelOption)> = v["models"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|m| m["visibility"] == "list")
-        .filter_map(|m| {
-            let slug = m["slug"].as_str()?;
-            let label = m["display_name"].as_str().unwrap_or(slug);
-            let priority = m["priority"].as_i64().unwrap_or(i64::MAX);
-            Some((
-                priority,
-                ModelOption {
-                    id: Some(slug.into()),
-                    label: label.into(),
-                    default_model: None,
-                },
-            ))
-        })
-        .collect();
-    listed.sort_by_key(|(priority, _)| *priority);
-    listed.into_iter().map(|(_, m)| m).collect()
+    model_manifest::models("codex")
 }
 
 /// `(modified time, path)` of every rollout file under `dir`.
@@ -469,20 +438,5 @@ mod tests {
             parse(&rejected, &spec, "m1").as_slice(),
             [Parsed::Error(e), Parsed::Finished] if e == "bad model"
         ));
-    }
-
-    #[test]
-    fn codex_models_lists_visible_models_by_priority() {
-        let json = r#"{"models":[
-            {"slug":"b","display_name":"B","visibility":"list","priority":2},
-            {"slug":"hidden","display_name":"H","visibility":"hide","priority":0},
-            {"slug":"a","display_name":"A","visibility":"list","priority":1}
-        ]}"#;
-        let ids: Vec<_> = cached_models(json)
-            .into_iter()
-            .map(|m| m.id.unwrap())
-            .collect();
-        assert_eq!(ids, ["a", "b"]);
-        assert!(cached_models("not json").is_empty());
     }
 }

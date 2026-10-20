@@ -75,7 +75,7 @@ fn refresh(path: &Path, token: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// `updatedAt` is an ISO date, so a later date compares greater as a string.
+/// `updatedAt` is an ISO timestamp, so a later one compares greater as a string.
 fn is_newer(fetched: &Value, cached: Option<&Value>) -> bool {
     let date = |v: &Value| v["updatedAt"].as_str().unwrap_or_default().to_owned();
     cached.is_none_or(|c| date(fetched) > date(c))
@@ -102,7 +102,7 @@ mod tests {
     use super::*;
 
     const MANIFEST: &str = r#"{
-        "updatedAt": "2026-10-19",
+        "updatedAt": "2026-10-19T20:30:00Z",
         "providers": {
             "claude": [{ "id": "claude-opus-5-5", "name": "Opus 5.5" }],
             "gemini": [{ "id": "gemini-3.8-flash", "name": "3.8 Flash" }]
