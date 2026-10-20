@@ -173,6 +173,7 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -401,6 +402,7 @@
 }
 
 .selectable {
+  -webkit-user-select: text;
   user-select: text;
 }
 }
