@@ -104,7 +104,13 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
             let id = v["tool_id"].as_str().unwrap_or_default();
             let name = v["tool_name"].as_str().unwrap_or("Tool");
             let params = &v["parameters"];
-            out.push(tool_started(message_id, id, name, summarize(params, root)));
+            out.push(tool_started(
+                message_id,
+                id,
+                name,
+                summarize(params, root),
+                None,
+            ));
             if matches!(name, "write_file" | "replace" | "edit")
                 && let Some(path) = params["file_path"].as_str()
             {

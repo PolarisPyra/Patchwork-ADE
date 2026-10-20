@@ -154,7 +154,13 @@ fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: 
         }
         Some("commandExecution") => {
             let command = item["command"].as_str().unwrap_or_default();
-            out.push(tool_started(message_id, id, "Shell", one_line(command)));
+            out.push(tool_started(
+                message_id,
+                id,
+                "Shell",
+                one_line(command),
+                None,
+            ));
             if completed {
                 let exit_failed = item["exitCode"].as_i64().is_some_and(|c| c != 0);
                 out.push(tool_finished(message_id, id, failed || exit_failed));
@@ -166,14 +172,20 @@ fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: 
                 item["server"].as_str().unwrap_or_default(),
                 item["tool"].as_str().unwrap_or_default()
             );
-            out.push(tool_started(message_id, id, "MCP", summary));
+            out.push(tool_started(message_id, id, "MCP", summary, None));
             if completed {
                 out.push(tool_finished(message_id, id, failed));
             }
         }
         Some("webSearch") => {
             let query = item["query"].as_str().unwrap_or_default();
-            out.push(tool_started(message_id, id, "WebSearch", one_line(query)));
+            out.push(tool_started(
+                message_id,
+                id,
+                "WebSearch",
+                one_line(query),
+                None,
+            ));
             if completed {
                 out.push(tool_finished(message_id, id, false));
             }
@@ -191,6 +203,7 @@ fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: 
                 id,
                 "Edit",
                 one_line(&paths.join(", ")),
+                None,
             ));
             if completed {
                 if !failed {

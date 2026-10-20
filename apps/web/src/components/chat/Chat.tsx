@@ -14,6 +14,7 @@ import {
 import ProviderLogos from "~/components/ProviderLogos";
 import type { CanvasTab } from "~/components/canvas/Canvas";
 import { lastAccessMode } from "~/components/chat/AccessPicker";
+import LineageCard from "~/components/chat/LineageCard";
 import Composer from "~/components/chat/Composer";
 import Messages from "~/components/chat/Messages";
 import { isWorking, type NewThreadOptions } from "~/hooks/useThreads";
@@ -224,9 +225,10 @@ export default function Chat({
   const isNew = !thread || empty;
   return (
     <div
-      className={`flex min-h-0 min-w-0 flex-1 flex-col${isNew ? " justify-center" : ""}`}
+      className={`relative flex min-h-0 min-w-0 flex-1 flex-col${isNew ? " justify-center" : ""}`}
       ref={rootRef}
     >
+      {thread && <LineageCard thread={thread} working={working} />}
       <div
         className={`min-h-0 overflow-y-auto ${isNew ? "flex-none" : "flex-1"}`}
         ref={scrollRef}

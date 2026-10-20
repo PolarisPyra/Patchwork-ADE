@@ -111,6 +111,21 @@ pub struct ToolCall {
     /// Short single-line description, e.g. the command or file path.
     pub summary: String,
     pub status: StepStatus,
+    /// Set when the call started a subagent.
+    #[serde(default)]
+    pub subagent: Option<SubAgent>,
+}
+
+/// A subagent an agent started, e.g. with Claude Code's Task tool.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubAgent {
+    /// The subagent type, e.g. "general-purpose" or "Explore".
+    pub kind: String,
+    /// What the subagent was asked to do.
+    pub description: String,
+    /// Model the agent chose for it; None means it inherits the parent's.
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

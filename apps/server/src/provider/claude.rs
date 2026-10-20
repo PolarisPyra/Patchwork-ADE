@@ -158,11 +158,26 @@ fn claude_step_status(status: Option<&str>) -> StepStatus {
     }
 }
 
+/// Task calls carry a `subagent_type`; that is what starts a subagent.
+fn subagent_of(input: &Value) -> Option<SubAgent> {
+    Some(SubAgent {
+        kind: input["subagent_type"].as_str()?.into(),
+        description: input["description"].as_str().unwrap_or_default().into(),
+        model: input["model"].as_str().map(String::from),
+    })
+}
+
 fn claude_tool_use(block: &Value, root: &str, message_id: &str, out: &mut Vec<Parsed>) {
     let id = block["id"].as_str().unwrap_or_default();
     let name = block["name"].as_str().unwrap_or("Tool");
     let input = &block["input"];
-    out.push(tool_started(message_id, id, name, summarize(input, root)));
+    out.push(tool_started(
+        message_id,
+        id,
+        name,
+        summarize(input, root),
+        subagent_of(input),
+    ));
 
     let path_of = |key: &str| input[key].as_str().map(|p| relative(root, p));
     let touched = match name {
@@ -362,6 +377,26 @@ mod tests {
             "request": {"subtype": "hook_callback"}});
         let out = parse(&other, "/abs", "m1");
         assert!(matches!(out.as_slice(), [Parsed::Send(line)] if line.contains("\"error\"")));
+    }
+
+    #[test]
+    fn task_call_reports_its_subagent() {
+        let task = json!({"type": "assistant", "message": {"content": [{
+            "type": "tool_use", "id": "t1", "name": "Task",
+            "input": {"subagent_type": "Explore", "description": "map auth", "model": "haiku"}
+        }]}});
+        let out = parse(&task, "/abs", "m1");
+        let Parsed::Event(AgentEvent::ToolStarted { tool, .. }) = &out[0] else {
+            panic!("expected a tool start");
+        };
+        assert_eq!(
+            tool.subagent,
+            Some(SubAgent {
+                kind: "Explore".into(),
+                description: "map auth".into(),
+                model: Some("haiku".into()),
+            })
+        );
     }
 
     #[test]

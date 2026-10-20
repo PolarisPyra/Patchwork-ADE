@@ -306,7 +306,13 @@ fn relative(root: &str, path: &str) -> String {
         .to_string()
 }
 
-fn tool_started(message_id: &str, id: &str, name: &str, summary: String) -> Parsed {
+fn tool_started(
+    message_id: &str,
+    id: &str,
+    name: &str,
+    summary: String,
+    subagent: Option<SubAgent>,
+) -> Parsed {
     Parsed::Event(AgentEvent::ToolStarted {
         message_id: message_id.into(),
         tool: ToolCall {
@@ -314,6 +320,7 @@ fn tool_started(message_id: &str, id: &str, name: &str, summary: String) -> Pars
             name: name.into(),
             summary,
             status: StepStatus::Running,
+            subagent,
         },
     })
 }

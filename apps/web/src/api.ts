@@ -53,6 +53,15 @@ export interface ToolCall {
   name: string;
   summary: string;
   status: StepStatus;
+  subagent: SubAgent | null;
+}
+
+/** A subagent an agent started, e.g. with Claude Code's Task tool. */
+export interface SubAgent {
+  kind: string;
+  description: string;
+  /** null means the subagent inherits the parent's model. */
+  model: string | null;
 }
 
 export interface PlanStep {
