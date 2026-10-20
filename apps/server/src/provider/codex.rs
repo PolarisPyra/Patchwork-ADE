@@ -160,6 +160,7 @@ fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: 
                 "Shell",
                 one_line(command),
                 None,
+                None,
             ));
             if completed {
                 let exit_failed = item["exitCode"].as_i64().is_some_and(|c| c != 0);
@@ -172,7 +173,7 @@ fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: 
                 item["server"].as_str().unwrap_or_default(),
                 item["tool"].as_str().unwrap_or_default()
             );
-            out.push(tool_started(message_id, id, "MCP", summary, None));
+            out.push(tool_started(message_id, id, "MCP", summary, None, None));
             if completed {
                 out.push(tool_finished(message_id, id, failed));
             }
@@ -184,6 +185,7 @@ fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: 
                 id,
                 "WebSearch",
                 one_line(query),
+                None,
                 None,
             ));
             if completed {
@@ -203,6 +205,7 @@ fn codex_item(completed: bool, item: &Value, root: &str, message_id: &str, out: 
                 id,
                 "Edit",
                 one_line(&paths.join(", ")),
+                None,
                 None,
             ));
             if completed {

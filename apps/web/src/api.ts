@@ -54,6 +54,8 @@ export interface ToolCall {
   summary: string;
   status: StepStatus;
   subagent: SubAgent | null;
+  /** The subagent call (its id) this call ran inside, if any. */
+  parent: string | null;
 }
 
 /** A subagent an agent started, e.g. with Claude Code's Task tool. */
@@ -271,6 +273,8 @@ export const api = {
     invoke<Message>("send_message", { threadId, text, attachments }),
   /** Classifies a dropped path as a file, folder, or image. */
   attachmentForPath: (path: string) => invoke<Attachment>("attachment_for_path", { path }),
+  /** Lets the webview show an attached image as a thumbnail. */
+  allowPreview: (path: string) => invoke<void>("allow_preview", { path }),
   cancelTurn: (threadId: string) => invoke<void>("cancel_turn", { threadId }),
   respondApproval: (threadId: string, approvalId: string, allow: boolean) =>
     invoke<void>("respond_approval", { threadId, approvalId, allow }),

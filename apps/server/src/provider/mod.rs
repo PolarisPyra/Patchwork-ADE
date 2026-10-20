@@ -312,6 +312,7 @@ fn tool_started(
     name: &str,
     summary: String,
     subagent: Option<SubAgent>,
+    parent: Option<&str>,
 ) -> Parsed {
     Parsed::Event(AgentEvent::ToolStarted {
         message_id: message_id.into(),
@@ -321,6 +322,7 @@ fn tool_started(
             summary,
             status: StepStatus::Running,
             subagent,
+            parent: parent.map(String::from),
         },
     })
 }

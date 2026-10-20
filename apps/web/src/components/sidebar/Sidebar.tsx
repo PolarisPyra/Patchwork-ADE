@@ -442,6 +442,18 @@ function ThreadRow({
   );
 }
 
+/** A small text button for acting on several changed files at once. */
+function BulkButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      className="cursor-pointer rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 py-0.5 text-[length:var(--fs-xs)] text-fg-muted hover:bg-hover hover:text-fg"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
 /** One changed file: opens its diff, with Apply (stage) and Reject (revert) on hover. */
 function ChangeRow({
   change,
@@ -525,6 +537,26 @@ function ChangesView({
     void act(() => api.revertFile(project.id, path));
   }
 
+  /** Stages every file in `files`, one after another. */
+  function applyAll(files: FileChange[]) {
+    if (!project) return;
+    void act(async () => {
+      for (const f of files) await api.acceptFile(project.id, f.path);
+    });
+  }
+
+  /** Reverts every file in `files` after one confirmation. */
+  async function rejectAll(files: FileChange[]) {
+    if (!project || files.length === 0) return;
+    const count = files.length === 1 ? "1 file" : `${files.length} files`;
+    if (!(await confirm(`Discard changes to ${count}?`, { title: "Reject", kind: "warning" }))) {
+      return;
+    }
+    void act(async () => {
+      for (const f of files) await api.revertFile(project.id, f.path);
+    });
+  }
+
   const row = (c: FileChange) => (
     <ChangeRow
       key={c.path}
@@ -549,13 +581,25 @@ function ChangesView({
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+        {changes.length > 0 && (
+          <div className="flex justify-end gap-1 px-1">
+            <BulkButton onClick={() => applyAll(changes)}>Apply all</BulkButton>
+            <BulkButton onClick={() => void rejectAll(changes)}>Reject all</BulkButton>
+          </div>
+        )}
         {changes.length === 0 && (
           <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No changes</div>
         )}
         {pinned.length > 0 && (
           <div className="flex flex-col gap-px rounded-[var(--radius)] border border-accent bg-selected-muted p-1">
-            <div className="px-1.5 pt-0.5 pb-1 text-[length:var(--fs-xs)] font-semibold tracking-[0.04em] text-accent-text uppercase">
-              From this reply
+            <div className="flex items-center justify-between gap-1 px-1.5 pt-0.5 pb-1">
+              <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.04em] text-accent-text uppercase">
+                From this reply
+              </span>
+              <span className="flex gap-1">
+                <BulkButton onClick={() => applyAll(pinned)}>Apply</BulkButton>
+                <BulkButton onClick={() => void rejectAll(pinned)}>Reject</BulkButton>
+              </span>
             </div>
             {pinned.map(row)}
           </div>

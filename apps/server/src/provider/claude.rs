@@ -167,7 +167,13 @@ fn subagent_of(input: &Value) -> Option<SubAgent> {
     })
 }
 
-fn claude_tool_use(block: &Value, root: &str, message_id: &str, out: &mut Vec<Parsed>) {
+fn claude_tool_use(
+    block: &Value,
+    root: &str,
+    message_id: &str,
+    parent: Option<&str>,
+    out: &mut Vec<Parsed>,
+) {
     let id = block["id"].as_str().unwrap_or_default();
     let name = block["name"].as_str().unwrap_or("Tool");
     let input = &block["input"];
@@ -177,6 +183,7 @@ fn claude_tool_use(block: &Value, root: &str, message_id: &str, out: &mut Vec<Pa
         name,
         summarize(input, root),
         subagent_of(input),
+        parent,
     ));
 
     let path_of = |key: &str| input[key].as_str().map(|p| relative(root, p));
@@ -211,6 +218,8 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
     let blocks: &[Value] = v["message"]["content"]
         .as_array()
         .map_or(&[], Vec::as_slice);
+    // Messages from inside a subagent name the Agent call they belong to.
+    let parent = v["parent_tool_use_id"].as_str();
     match v["type"].as_str() {
         Some("system") if v["subtype"] == "init" => {
             if let Some(id) = v["session_id"].as_str() {
@@ -226,7 +235,7 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                             out.push(text_delta(message_id, text));
                         }
                     }
-                    Some("tool_use") => claude_tool_use(block, root, message_id, &mut out),
+                    Some("tool_use") => claude_tool_use(block, root, message_id, parent, &mut out),
                     _ => {}
                 }
             }
@@ -397,6 +406,19 @@ mod tests {
                 model: Some("haiku".into()),
             })
         );
+    }
+
+    #[test]
+    fn calls_inside_a_subagent_name_their_parent() {
+        let inner = json!({"type": "assistant", "parent_tool_use_id": "t1",
+            "message": {"content": [{"type": "tool_use", "id": "r1", "name": "Read",
+                "input": {"file_path": "/abs/a.rs"}}]}});
+        let out = parse(&inner, "/abs", "m1");
+        let Parsed::Event(AgentEvent::ToolStarted { tool, .. }) = &out[0] else {
+            panic!("expected a tool start");
+        };
+        assert_eq!(tool.parent.as_deref(), Some("t1"));
+        assert_eq!(tool.subagent, None);
     }
 
     #[test]

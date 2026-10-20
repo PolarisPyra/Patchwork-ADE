@@ -23,7 +23,7 @@ import {
   type ToolCall,
 } from "~/api";
 import type { CanvasTab } from "~/components/canvas/Canvas";
-import AttachmentChip from "~/components/chat/AttachmentChip";
+import AttachmentChip, { AttachmentTile } from "~/components/chat/AttachmentChip";
 import Markdown, { ACTION_CLASS, CopyButton } from "~/components/chat/Markdown";
 import { formatClock } from "~/lib/util";
 
@@ -84,9 +84,13 @@ function UserMessage({ message }: { message: Message }) {
       </div>
       {message.attachments.length > 0 && (
         <div className="flex flex-wrap justify-end gap-1.5">
-          {message.attachments.map((a) => (
-            <AttachmentChip key={a.path} attachment={a} />
-          ))}
+          {message.attachments.map((a) =>
+            a.kind === "image" ? (
+              <AttachmentTile key={a.path} attachment={a} />
+            ) : (
+              <AttachmentChip key={a.path} attachment={a} />
+            ),
+          )}
         </div>
       )}
       {message.text && (
@@ -132,7 +136,9 @@ function AssistantMessage({
       </header>
       {message.text && <Markdown text={message.text} />}
       {message.plan.length > 0 && <PlanList steps={message.plan} />}
-      {message.tools.length > 0 && <ToolActivity tools={message.tools} />}
+      {message.tools.some((t) => !t.parent) && (
+        <ToolActivity tools={message.tools.filter((t) => !t.parent)} />
+      )}
       {message.approvals.map((approval) => (
         <ApprovalCard key={approval.id} approval={approval} onRespond={onRespond} />
       ))}

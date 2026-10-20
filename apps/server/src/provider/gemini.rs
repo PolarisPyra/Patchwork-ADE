@@ -110,6 +110,7 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                 name,
                 summarize(params, root),
                 None,
+                None,
             ));
             if matches!(name, "write_file" | "replace" | "edit")
                 && let Some(path) = params["file_path"].as_str()

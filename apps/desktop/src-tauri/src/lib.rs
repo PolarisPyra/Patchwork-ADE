@@ -126,6 +126,15 @@ fn attachment_for_path(path: String) -> Res<Attachment> {
     Attachment::from_path(&path)
 }
 
+/// Lets the webview load an image for its thumbnail. The asset scope is not kept across restarts,
+/// so this runs again whenever a thumbnail is shown.
+#[tauri::command]
+fn allow_preview(app: tauri::AppHandle, path: String) -> Res<()> {
+    app.asset_protocol_scope()
+        .allow_file(&path)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn cancel_turn(server: Srv, thread_id: String) {
     server.cancel_turn(&thread_id)
@@ -231,6 +240,7 @@ pub fn run() {
             set_thread_access_mode,
             send_message,
             attachment_for_path,
+            allow_preview,
             cancel_turn,
             respond_approval,
             scan_imports,

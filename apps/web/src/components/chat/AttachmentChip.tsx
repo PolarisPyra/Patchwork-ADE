@@ -1,11 +1,35 @@
+import { useEffect, useState } from "react";
 import { FileIcon, FolderIcon, ImageIcon, XIcon } from "@phosphor-icons/react";
-import type { Attachment, AttachmentKind } from "~/api";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { api, type Attachment, type AttachmentKind } from "~/api";
 
 const ICONS: Record<AttachmentKind, typeof FileIcon> = {
   image: ImageIcon,
   file: FileIcon,
   folder: FolderIcon,
 };
+
+/**
+ * The webview URL for an image attachment, or null for other kinds and while it loads.
+ * Asks the backend to allow the file first, since the asset scope is not kept across restarts.
+ */
+export function usePreviewSrc(attachment: Attachment): string | null {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (attachment.kind !== "image") return;
+    let cancelled = false;
+    api.allowPreview(attachment.path).then(
+      () => {
+        if (!cancelled) setSrc(convertFileSrc(attachment.path));
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [attachment.kind, attachment.path]);
+  return src;
+}
 
 interface AttachmentChipProps {
   attachment: Attachment;
@@ -16,12 +40,17 @@ interface AttachmentChipProps {
 /** A dropped file, folder, or image, shown as a badge with its full path on hover. */
 export default function AttachmentChip({ attachment, onRemove }: AttachmentChipProps) {
   const Icon = ICONS[attachment.kind];
+  const src = usePreviewSrc(attachment);
   return (
     <span
       className="inline-flex max-w-[280px] items-center gap-1.5 rounded-[var(--radius)] border border-border-strong bg-panel py-0.5 pr-1 pl-2 text-[length:var(--fs-sm)] text-fg"
       title={attachment.path}
     >
-      <Icon size={13} className="flex-none text-fg-muted" />
+      {src ? (
+        <img src={src} alt="" className="h-5 w-5 flex-none rounded-sm object-cover" />
+      ) : (
+        <Icon size={13} className="flex-none text-fg-muted" />
+      )}
       <span className="truncate">{attachment.name}</span>
       <span className="flex-none text-[length:var(--fs-xs)] text-fg-subtle uppercase">
         {attachment.kind}
@@ -37,5 +66,19 @@ export default function AttachmentChip({ attachment, onRemove }: AttachmentChipP
         </button>
       )}
     </span>
+  );
+}
+
+/** A sent image shown large, as a thumbnail; falls back to a chip until it loads. */
+export function AttachmentTile({ attachment }: { attachment: Attachment }) {
+  const src = usePreviewSrc(attachment);
+  if (!src) return <AttachmentChip attachment={attachment} />;
+  return (
+    <img
+      src={src}
+      alt={attachment.name}
+      title={attachment.path}
+      className="max-h-[180px] max-w-[260px] rounded-[var(--radius)] border border-border object-cover"
+    />
   );
 }

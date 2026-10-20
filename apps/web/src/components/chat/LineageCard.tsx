@@ -10,16 +10,20 @@ const DOT_COLOR: Record<StepStatus, string> = {
   error: "bg-danger",
 };
 
-/** The subagents the agent started in its latest turn that started any. */
-function latestSubagents(thread: Thread): ToolCall[] {
+/** Actions listed under each subagent before the rest are summarised. */
+const SHOWN_ACTIONS = 4;
+
+/** The tool calls of the latest turn that started a subagent, or none. */
+function latestTurnTools(thread: Thread): ToolCall[] {
   const turn = [...thread.messages].reverse().find((m) => m.tools.some((t) => t.subagent));
-  return turn?.tools.filter((t) => t.subagent) ?? [];
+  return turn?.tools ?? [];
 }
 
-/** Parent agent on top, the subagents it spawned below, each with its model and status. */
+/** Parent agent on top, the subagents it spawned below, each with its model, status, and actions. */
 export default function LineageCard({ thread, working }: { thread: Thread; working: boolean }) {
   const [open, setOpen] = useState(true);
-  const subagents = latestSubagents(thread);
+  const tools = latestTurnTools(thread);
+  const subagents = tools.filter((t) => t.subagent);
   if (subagents.length === 0) return null;
 
   return (
@@ -44,23 +48,39 @@ export default function LineageCard({ thread, working }: { thread: Thread; worki
               className={`h-2 w-2 flex-none rounded-full ${working ? DOT_COLOR.running : DOT_COLOR.done}`}
             />
           </div>
-          <div className="ml-3 flex flex-col gap-1.5 border-l-2 border-border pl-3">
-            {subagents.map((tool) => (
-              <div key={tool.id} className="flex min-w-0 flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 flex-none rounded-full ${DOT_COLOR[tool.status]}`} />
-                  <span className="flex-1 truncate font-medium">{tool.subagent?.kind}</span>
-                  <span className="truncate text-fg-muted">
-                    {tool.subagent?.model ?? "inherits"}
-                  </span>
-                </div>
-                {tool.subagent?.description && (
-                  <div className="truncate pl-4 text-fg-subtle" title={tool.subagent.description}>
-                    {tool.subagent.description}
+          <div className="ml-3 flex flex-col gap-2 border-l-2 border-border pl-3">
+            {subagents.map((tool) => {
+              const actions = tools.filter((t) => t.parent === tool.id);
+              return (
+                <div key={tool.id} className="flex min-w-0 flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 flex-none rounded-full ${DOT_COLOR[tool.status]}`} />
+                    <span className="flex-1 truncate font-medium">{tool.subagent?.kind}</span>
+                    <span className="truncate text-fg-muted">
+                      {tool.subagent?.model ?? "inherits"}
+                    </span>
                   </div>
-                )}
-              </div>
-            ))}
+                  {tool.subagent?.description && (
+                    <div className="truncate pl-4 text-fg-subtle" title={tool.subagent.description}>
+                      {tool.subagent.description}
+                    </div>
+                  )}
+                  {actions.length > 0 && (
+                    <ul className="m-0 mt-0.5 flex list-none flex-col gap-px pl-4 font-[family-name:var(--font-mono)] text-[12px] text-fg-muted">
+                      {actions.slice(0, SHOWN_ACTIONS).map((a) => (
+                        <li key={a.id} className="flex min-w-0 gap-1.5">
+                          <span className="flex-none">{a.name}</span>
+                          <span className="min-w-0 truncate">{a.summary}</span>
+                        </li>
+                      ))}
+                      {actions.length > SHOWN_ACTIONS && (
+                        <li className="pl-0">+{actions.length - SHOWN_ACTIONS} more</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
