@@ -401,7 +401,7 @@ function TasksView({
               </button>
             </div>
             <Collapse open={open}>
-              <div className="py-1 pl-3.5">
+              <div className="pb-1 pl-3.5">
                 {tasks.length === 0 && projectFolders.length === 0 && (
                   <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">
                     No tasks yet
