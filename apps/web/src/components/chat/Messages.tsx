@@ -95,7 +95,7 @@ export default function Messages({
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
         {/* With directDomUpdates the virtualizer writes this container's height and each
             row's top itself, so neither is set here. */}
         <div ref={virtualizer.containerRef} style={{ position: "relative", width: "100%" }}>
