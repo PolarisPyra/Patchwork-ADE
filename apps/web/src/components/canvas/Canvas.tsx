@@ -3,6 +3,7 @@ import {
   ArrowSquareOutIcon,
   CheckIcon,
   CircleNotchIcon,
+  PlusIcon,
   CodeIcon,
   CopyIcon,
   XIcon,
@@ -299,7 +300,7 @@ export default function Canvas({
               </>
             ) : (
               <span className="text-fg-muted">
-                Unapplied changes · +{change.additions} −{change.deletions}
+                Unstaged changes · +{change.additions} −{change.deletions}
               </span>
             )}
           </div>
@@ -307,9 +308,9 @@ export default function Canvas({
             <button className="btn" onClick={reject} disabled={busy}>
               Reject
             </button>
-            <button className="btn btn-primary" onClick={apply} disabled={busy}>
-              <CheckIcon size={14} />
-              Apply changes
+            <button className="btn btn-success" onClick={apply} disabled={busy}>
+              <PlusIcon size={14} />
+              Stage file
             </button>
           </div>
         </footer>

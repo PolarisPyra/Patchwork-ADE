@@ -291,6 +291,9 @@ export const api = {
   reorderThreads: (ids: string[], folderId: string | null) =>
     invoke<void>("reorder_threads", { ids, folderId }),
   listFolders: () => invoke<Folder[]>("list_folders"),
+  /** The thread that was open when the app last closed. */
+  getLastThread: () => invoke<string | null>("get_last_thread"),
+  setLastThread: (id: string) => invoke<void>("set_last_thread", { id }),
   createFolder: (projectId: string, name: string) =>
     invoke<Folder>("create_folder", { projectId, name }),
   renameFolder: (id: string, name: string) => invoke<void>("rename_folder", { id, name }),

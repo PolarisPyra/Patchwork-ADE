@@ -111,6 +111,16 @@ fn remove_folder(server: Srv, id: String) -> Res<()> {
 }
 
 #[tauri::command]
+fn get_last_thread(server: Srv) -> Option<String> {
+    server.last_thread_id()
+}
+
+#[tauri::command]
+fn set_last_thread(server: Srv, id: String) -> Res<()> {
+    server.set_last_thread_id(&id)
+}
+
+#[tauri::command]
 fn create_thread(
     server: Srv,
     project_id: Option<String>,
@@ -274,6 +284,8 @@ pub fn run() {
             create_folder,
             rename_folder,
             remove_folder,
+            get_last_thread,
+            set_last_thread,
             create_thread,
             delete_thread,
             set_thread_model,

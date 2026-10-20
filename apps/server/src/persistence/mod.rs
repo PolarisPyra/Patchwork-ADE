@@ -191,6 +191,28 @@ impl Store {
         Ok(())
     }
 
+    /// A value from the `app_state` table, if one was stored.
+    pub fn state(&self, key: &str) -> Option<String> {
+        self.lock()
+            .conn
+            .query_row("SELECT value FROM app_state WHERE key = ?1", [key], |r| r.get(0))
+            .optional()
+            .ok()
+            .flatten()
+    }
+
+    pub fn set_state(&self, key: &str, value: &str) -> Res<()> {
+        self.lock()
+            .conn
+            .execute(
+                "INSERT INTO app_state (key, value) VALUES (?1, ?2)
+                 ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                params![key, value],
+            )
+            .map_err(err)?;
+        Ok(())
+    }
+
     pub fn folders(&self) -> Vec<Folder> {
         self.lock().folders.clone()
     }

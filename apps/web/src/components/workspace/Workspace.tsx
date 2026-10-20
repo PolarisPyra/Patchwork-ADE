@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -8,12 +10,11 @@ import {
 import { XIcon } from "@phosphor-icons/react";
 import { api, defaultAgentOf, type FileChange, type Message, type Settings } from "~/api";
 import type { UpdateSettings } from "~/app/App";
-import Canvas, { type CanvasTab } from "~/components/canvas/Canvas";
+import type { CanvasTab } from "~/components/canvas/Canvas";
 import { lastAccessMode } from "~/components/chat/AccessPicker";
 import Chat from "~/components/chat/Chat";
 import CommandPalette, { type PaletteItem } from "~/components/workspace/CommandPalette";
 import { openFolderAsProject, syncProjects } from "~/lib/projects";
-import SettingsDialog from "~/components/settings/SettingsDialog";
 import Sidebar, { ToolStripe, type SidebarView } from "~/components/sidebar/Sidebar";
 import StatusBar from "~/components/workspace/StatusBar";
 import Toolbar from "~/components/workspace/Toolbar";
@@ -46,6 +47,11 @@ const CANVAS_MAX_FRACTION = 0.7;
 
 // One shared empty list, so the chat's memoized rows see the same `changes` on every render.
 const NO_CHANGES: FileChange[] = [];
+
+// The canvas (with its syntax highlighter) and settings are only shown on demand, so
+// they load as separate chunks instead of making the first screen wait for them.
+const Canvas = lazy(() => import("~/components/canvas/Canvas"));
+const SettingsDialog = lazy(() => import("~/components/settings/SettingsDialog"));
 
 export default function Workspace({ settings, updateSettings, toggleTheme }: WorkspaceProps) {
   const {
@@ -284,6 +290,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             selectedId={selected?.id ?? null}
             changes={changes}
             changeFocus={changeFocus}
+            onClearChangeFocus={() => setChangeFocus(null)}
             onNewTask={newThreadIn}
             onNewChat={newChat}
             onSelectThread={selectThread}
@@ -335,15 +342,17 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
                 className="flex w-[max(420px,46%)] min-h-0 min-w-0 flex-none [&>*]:min-w-0 [&>*]:flex-1"
                 style={canvasWidth !== null ? { width: canvasWidth } : undefined}
               >
-                <Canvas
-                  key={openCanvas.seq}
-                  projectId={openCanvas.projectId}
-                  path={openCanvas.path}
-                  message={openCanvas.message}
-                  initialTab={openCanvas.tab}
-                  onClose={() => setCanvas(null)}
-                  onChangesUpdated={() => void refreshGit()}
-                />
+                <Suspense fallback={null}>
+                  <Canvas
+                    key={openCanvas.seq}
+                    projectId={openCanvas.projectId}
+                    path={openCanvas.path}
+                    message={openCanvas.message}
+                    initialTab={openCanvas.tab}
+                    onClose={() => setCanvas(null)}
+                    onChangesUpdated={() => void refreshGit()}
+                  />
+                </Suspense>
               </div>
             </>
           )}
@@ -375,12 +384,14 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       )}
       {paletteOpen && <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
       {settingsOpen && (
-        <SettingsDialog
-          settings={settings}
-          updateSettings={updateSettings}
-          onImported={() => void reload()}
-          onClose={() => setSettingsOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <SettingsDialog
+            settings={settings}
+            updateSettings={updateSettings}
+            onImported={() => void reload()}
+            onClose={() => setSettingsOpen(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -32,6 +32,9 @@ pub struct Server {
 }
 
 /// Trims a user-entered name; blank names are refused.
+/// `app_state` key for the thread the user had open last.
+const LAST_THREAD_KEY: &str = "last_thread_id";
+
 fn clean_name(name: &str) -> Res<String> {
     let name = name.trim();
     if name.is_empty() {
@@ -143,6 +146,15 @@ impl Server {
             self.folder(folder_id)?;
         }
         self.store.reorder_threads(ids, folder_id)
+    }
+
+    /// The thread that was open when the app last closed, if one was recorded.
+    pub fn last_thread_id(&self) -> Option<String> {
+        self.store.state(LAST_THREAD_KEY)
+    }
+
+    pub fn set_last_thread_id(&self, id: &str) -> Res<()> {
+        self.store.set_state(LAST_THREAD_KEY, id)
     }
 
     // ---- folders ---------------------------------------------------------

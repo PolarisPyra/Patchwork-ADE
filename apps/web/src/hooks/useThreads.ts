@@ -126,15 +126,23 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     turnDone.current = onTurnCompleted;
   });
 
-  // Load once; select the newest thread of the initial project (or chat).
+  // Remember the open thread, so the next launch returns to it. A failed write only
+  // means the next launch opens the newest task instead.
+  useEffect(() => {
+    if (selectedId) void api.setLastThread(selectedId).catch(() => undefined);
+  }, [selectedId]);
+
+  // Load once; reopen the thread last open if it still exists, else the newest thread
+  // of the initial project (or chat).
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.listThreads(), api.listFolders()]).then(
-      ([list, folderList]) => {
+    Promise.all([api.listThreads(), api.listFolders(), api.getLastThread()]).then(
+      ([list, folderList, last]) => {
         if (cancelled) return;
         setThreads(list);
         setFolders(folderList);
-        setSelectedId(list.find((t) => t.projectId === initialProject.current)?.id ?? null);
+        const fallback = list.find((t) => t.projectId === initialProject.current)?.id ?? null;
+        setSelectedId(list.find((t) => t.id === last)?.id ?? fallback);
       },
       () => {
         if (!cancelled) setThreads([]);

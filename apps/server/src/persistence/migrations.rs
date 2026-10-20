@@ -68,6 +68,8 @@ const MIGRATIONS: &[&str] = &[
     );
     ALTER TABLE threads ADD COLUMN folder_id TEXT;
     ",
+    // 8: small app state that is not settings, such as the thread last open.
+    "CREATE TABLE app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
 ];
 
 /// Brings the schema up to date. Returns the version the database was at before.

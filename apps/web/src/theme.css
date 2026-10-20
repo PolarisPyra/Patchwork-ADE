@@ -255,6 +255,14 @@
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
 }
+.btn-success {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--text-on-accent);
+}
+.btn-success:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
 .btn-ghost {
   background: transparent;
   border-color: transparent;

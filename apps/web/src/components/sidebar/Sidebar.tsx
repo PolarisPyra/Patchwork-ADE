@@ -1,9 +1,9 @@
 import { useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import {
-  ArrowCounterClockwiseIcon,
+  ArrowLeftIcon,
   ArrowsClockwiseIcon,
   CaretRightIcon,
-  CheckIcon,
+  ChatCircleIcon,
   ChatsIcon,
   CircleNotchIcon,
   FolderIcon,
@@ -113,6 +113,8 @@ interface SidebarProps {
   onOpenChange: (path: string) => void;
   /** Files of the reply the Changes view was opened from, if any. */
   changeFocus: string[] | null;
+  /** Shows all changes again, not just the reply's. */
+  onClearChangeFocus: () => void;
   /** Opens the command palette. */
   onOpenPalette: () => void;
 }
@@ -594,52 +596,26 @@ function BulkButton({ onClick, children }: { onClick: () => void; children: Reac
   );
 }
 
-/** One changed file: opens its diff, with Apply (stage) and Reject (revert) on hover. */
-function ChangeRow({
-  change,
-  onOpen,
-  onApply,
-  onReject,
-}: {
-  change: FileChange;
-  onOpen: () => void;
-  onApply: () => void;
-  onReject: () => void;
-}) {
+/** One changed file: opens its diff. */
+function ChangeRow({ change, onOpen }: { change: FileChange; onOpen: () => void }) {
   const name = baseName(change.path);
   return (
-    <div className="group flex min-h-[30px] items-center gap-1 rounded-[var(--radius-sm)] py-1 pr-2 pl-1.5 hover:bg-hover">
+    <div className="flex h-[30px] items-center rounded-[var(--radius-sm)] py-1 pr-2 pl-1.5 hover:bg-hover">
       <button
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 border-none bg-transparent p-0 text-fg text-left"
         title={change.path}
         onClick={onOpen}
       >
         <span className="min-w-0 flex-1 truncate">{name}</span>
-        <span className="flex flex-none items-center gap-2.5 tabular-nums">
-          <span className="text-success">+{change.additions}</span>
-          <span className="text-danger">−{change.deletions}</span>
-          <PencilSimpleIcon size={12} className="text-fg-muted" aria-label="Edited" />
+        {/* Fixed-width columns keep the counts and pencils lined up across rows. */}
+        <span className="flex flex-none items-center gap-1 text-[length:var(--fs-xs)] tabular-nums">
+          <span className="w-6 text-right text-success">+{change.additions}</span>
+          <span className="w-6 text-right text-danger">−{change.deletions}</span>
+          <span className="flex w-3 justify-center">
+            <PencilSimpleIcon size={12} className="text-fg-muted" aria-label="Edited" />
+          </span>
         </span>
       </button>
-      {/* Takes no room until hovered, so the counts sit at the right edge. */}
-      <span className="hidden flex-none group-focus-within:flex group-hover:flex">
-        <button
-          className="btn-icon h-5 w-5"
-          title="Apply"
-          aria-label={`Apply ${name}`}
-          onClick={onApply}
-        >
-          <CheckIcon size={14} />
-        </button>
-        <button
-          className="btn-icon h-5 w-5"
-          title="Reject"
-          aria-label={`Reject ${name}`}
-          onClick={onReject}
-        >
-          <ArrowCounterClockwiseIcon size={14} />
-        </button>
-      </span>
     </div>
   );
 }
@@ -651,6 +627,7 @@ function ChangesView({
   selectedId,
   changes,
   changeFocus,
+  onClearChangeFocus,
   onRefreshChanges,
   onOpenChange,
 }: SidebarProps) {
@@ -677,13 +654,6 @@ function ChangesView({
     }
   }
 
-  async function reject(path: string) {
-    if (!project) return;
-    const question = `Discard changes to ${baseName(path)}?`;
-    if (!(await confirm(question, { title: "Reject", kind: "warning" }))) return;
-    void act(() => api.revertFile(project.id, path));
-  }
-
   /** Stages every file in `files`, one after another. */
   function applyAll(files: FileChange[]) {
     if (!project) return;
@@ -705,13 +675,7 @@ function ChangesView({
   }
 
   const row = (c: FileChange) => (
-    <ChangeRow
-      key={c.path}
-      change={c}
-      onOpen={() => onOpenChange(c.path)}
-      onApply={() => project && void act(() => api.acceptFile(project.id, c.path))}
-      onReject={() => void reject(c.path)}
-    />
+    <ChangeRow key={c.path} change={c} onOpen={() => onOpenChange(c.path)} />
   );
 
   return (
@@ -730,7 +694,7 @@ function ChangesView({
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
         {changes.length > 0 && !fullAccess && (
           <div className="flex justify-end gap-1 px-1">
-            <BulkButton onClick={() => applyAll(changes)}>Apply all</BulkButton>
+            <BulkButton onClick={() => applyAll(changes)}>Stage all</BulkButton>
             <BulkButton onClick={() => void rejectAll(changes)}>Reject all</BulkButton>
           </div>
         )}
@@ -738,17 +702,23 @@ function ChangesView({
           <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No changes</div>
         )}
         {replyFiles.length > 0 && (
-          <div className="flex flex-col gap-px rounded-[var(--radius)] border border-accent bg-selected-muted p-1">
-            <div className="flex items-center justify-between gap-1 px-1.5 pt-0.5 pb-1">
-              <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.04em] text-accent-text uppercase">
-                From this reply
-              </span>
+          <div className="flex flex-col gap-px">
+            <div className="flex items-center gap-1.5 px-1.5 pt-1 text-[length:var(--fs-xs)] text-fg-subtle">
+              <ChatCircleIcon size={12} />
+              <span className="min-w-0 flex-1 truncate">From this reply</span>
               {pinned.length > 0 && !fullAccess && (
                 <span className="flex gap-1">
-                  <BulkButton onClick={() => applyAll(pinned)}>Apply</BulkButton>
+                  <BulkButton onClick={() => applyAll(pinned)}>Stage</BulkButton>
                   <BulkButton onClick={() => void rejectAll(pinned)}>Reject</BulkButton>
                 </span>
               )}
+              <button
+                className="ml-auto flex flex-none cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 py-0.5 text-[length:var(--fs-xs)] text-fg-subtle hover:bg-hover hover:text-fg"
+                onClick={onClearChangeFocus}
+              >
+                <ArrowLeftIcon size={12} />
+                Project
+              </button>
             </div>
             {replyFiles.map((path) => {
               const change = changes.find((c) => c.path === path);

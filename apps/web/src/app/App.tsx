@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { api, DEFAULT_SETTINGS, type Settings } from "~/api";
-import Onboarding from "~/components/onboarding/Onboarding";
 import Workspace from "~/components/workspace/Workspace";
+
+// Onboarding only runs on first launch, so it stays out of the main chunk.
+const Onboarding = lazy(() => import("~/components/onboarding/Onboarding"));
 
 export type UpdateSettings = (next: Settings | ((s: Settings) => Settings)) => Promise<void>;
 
@@ -51,11 +53,13 @@ export default function App() {
   return settings.onboarded ? (
     <Workspace settings={settings} updateSettings={updateSettings} toggleTheme={toggleTheme} />
   ) : (
-    <Onboarding
-      settings={settings}
-      updateSettings={updateSettings}
-      resolvedTheme={resolvedTheme}
-      toggleTheme={toggleTheme}
-    />
+    <Suspense fallback={null}>
+      <Onboarding
+        settings={settings}
+        updateSettings={updateSettings}
+        resolvedTheme={resolvedTheme}
+        toggleTheme={toggleTheme}
+      />
+    </Suspense>
   );
 }
