@@ -56,26 +56,32 @@ export default function Messages({
   const { messages } = thread;
   const parentRef = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(true);
+  // Read through a ref so the callbacks below keep one identity. getItemKey is a
+  // dependency of the virtualizer's measurement memo, so a new function per streamed
+  // token would rebuild every row's measurement. The virtualizer still sees new rows
+  // through count and its edge-key check.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => parentRef.current,
     // Close to the real height so the first measurement barely moves scrollTop.
-    estimateSize: useCallback(
-      (index: number) => {
-        const message = messages[index]!;
-        return message.role === "user"
-          ? Math.min(900, 60 + Math.ceil(message.text.length / 70) * 22)
-          : Math.min(900, 120 + Math.ceil(message.text.length / 90) * 22);
-      },
-      [messages],
-    ),
-    getItemKey: useCallback((index: number) => messages[index]!.id, [messages]),
+    estimateSize: useCallback((index: number) => {
+      const message = messagesRef.current[index]!;
+      return message.role === "user"
+        ? Math.min(900, 60 + Math.ceil(message.text.length / 70) * 22)
+        : Math.min(900, 120 + Math.ceil(message.text.length / 90) * 22);
+    }, []),
+    getItemKey: useCallback((index: number) => messagesRef.current[index]!.id, []),
     anchorTo: "end",
     followOnAppend: true,
     scrollEndThreshold: 80,
     overscan: 6,
     directDomUpdates: true,
+    // Rows are placed with `top` rather than translate3d, which makes WebKit give every
+    // row its own compositing layer; positions are written only when the range changes.
+    directDomUpdatesMode: "position",
     // Runs after the virtualizer reads each scroll event, so isAtEnd() sees the new position.
     onChange: (instance) => setAtEnd(instance.isAtEnd()),
   });
@@ -91,7 +97,7 @@ export default function Messages({
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
         {/* With directDomUpdates the virtualizer writes this container's height and each
-            row's translate3d itself, so neither is set here. */}
+            row's top itself, so neither is set here. */}
         <div ref={virtualizer.containerRef} style={{ position: "relative", width: "100%" }}>
           {virtualizer.getVirtualItems().map((item) => {
             const message = messages[item.index]!;
@@ -102,7 +108,7 @@ export default function Messages({
                 ref={virtualizer.measureElement}
                 data-index={item.index}
                 className="px-6"
-                style={{ position: "absolute", top: 0, left: 0, width: "100%" }}
+                style={{ position: "absolute", left: 0, width: "100%" }}
               >
                 <div
                   className={`mx-auto flex max-w-[820px] flex-col pb-5${item.index === 0 ? " pt-6" : ""}`}
