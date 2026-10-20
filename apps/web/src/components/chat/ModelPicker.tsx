@@ -301,7 +301,7 @@ function PickerPopup({
               role="option"
               aria-selected={kind === agent && item.id === model}
               data-model-row
-              className={`mb-0.5 flex min-h-11 min-w-0 cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1 ${highlight === index ? "bg-hover" : "aria-selected:bg-[color-mix(in_srgb,var(--text)_8%,transparent)]"}`}
+              className={`mb-0.5 flex min-h-11 min-w-0 cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1 ${highlight === index ? "bg-hover" : ""}`}
               onMouseMove={() => setHighlight(index)}
               onClick={() => choose(index)}
             >
