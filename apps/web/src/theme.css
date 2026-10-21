@@ -442,6 +442,43 @@
   }
 }
 
+/* The composer's border while a goal is active: two accent sweeps that turn around the box. The
+   padding-box layer keeps the editor fill, and the border-box layer shows through the border. */
+@property --goal-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.goal-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--bg-editor), var(--bg-editor)) padding-box,
+    conic-gradient(
+        from var(--goal-angle),
+        #4285f4 0deg,
+        #9b72cb 72deg,
+        #d96570 144deg,
+        #fbbc04 216deg,
+        #34a853 288deg,
+        #4285f4 360deg
+      )
+      border-box;
+  animation: goal-border-turn 4s linear infinite;
+}
+
+@keyframes goal-border-turn {
+  to {
+    --goal-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goal-border {
+    animation: none;
+  }
+}
+
 .selectable {
   -webkit-user-select: text;
   user-select: text;

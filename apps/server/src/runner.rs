@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -14,8 +14,9 @@ use std::time::Duration;
 use std::os::unix::process::CommandExt;
 
 use crate::Server;
+use crate::goal;
 use crate::orchestration;
-use crate::provider::{self, GoalUpdate, Parsed, TurnSpec};
+use crate::provider::{self, Parsed, TurnSpec};
 use crate::types::*;
 use crate::workspace;
 use serde_json::Value;
@@ -484,6 +485,40 @@ fn message_usage(requests: &[Request], message_id: &str) -> TokenUsage {
     total
 }
 
+/// Closes stdin, which lets the agent exit, unless it still owes an answer to a steering message.
+fn close_stdin_unless_steered(stdin: &Stdin, steers: &Steers) {
+    let mut stdin = stdin.lock().unwrap_or_else(PoisonError::into_inner);
+    if steers
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .is_empty()
+    {
+        stdin.take();
+    }
+}
+
+/// How long Codex has to start its next turn toward an active goal after one ends. It starts
+/// one within milliseconds, so a longer wait means the goal is not being pursued.
+const CODEX_GOAL_GRACE: Duration = Duration::from_secs(5);
+
+/// Ends the agent's input once its turn is over. While Codex pursues a goal, the input stays
+/// open for the grace window: a turn started inside it continues the run, and otherwise the
+/// input closes. Starting a turn advances `round`, which cancels a close still waiting.
+fn end_input(turn: &Turn, goal_run: bool, round: &Arc<AtomicU64>) {
+    if !goal_run {
+        close_stdin_unless_steered(&turn.stdin, &turn.steers);
+        return;
+    }
+    let armed = round.fetch_add(1, Ordering::SeqCst) + 1;
+    let (round, stdin, steers) = (round.clone(), turn.stdin.clone(), turn.steers.clone());
+    std::thread::spawn(move || {
+        std::thread::sleep(CODEX_GOAL_GRACE);
+        if round.load(Ordering::SeqCst) == armed {
+            close_stdin_unless_steered(&stdin, &steers);
+        }
+    });
+}
+
 /// Everything the stdout reader needs to persist and publish one turn's events.
 struct Turn {
     server: Arc<Server>,
@@ -526,15 +561,7 @@ impl Turn {
     /// Closes stdin, which lets the agent exit, unless it still owes an answer to a
     /// steering message.
     fn close_unless_steered(&self) {
-        let mut stdin = self.stdin.lock().unwrap_or_else(PoisonError::into_inner);
-        if self
-            .steers
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .is_empty()
-        {
-            stdin.take();
-        }
+        close_stdin_unless_steered(&self.stdin, &self.steers);
     }
 
     /// Streams a text delta to the frontend without saving it; the reader
@@ -604,31 +631,6 @@ fn assistant_message() -> Message {
     }
 }
 
-/// The thread's goal after the agent reports `update`.
-fn next_goal(current: Option<&Goal>, update: GoalUpdate) -> Option<Goal> {
-    match update {
-        GoalUpdate::Set { objective, checks } => Some(Goal {
-            // Restating the same goal keeps when it was set.
-            started_at: current
-                .filter(|g| g.objective == objective)
-                .map_or_else(now_ms, |g| g.started_at),
-            objective,
-            status: GoalStatus::Active,
-            checks,
-            tokens_used: None,
-            token_budget: None,
-            time_used_seconds: None,
-        }),
-        GoalUpdate::Checked => current.map(|g| Goal {
-            status: GoalStatus::Active,
-            checks: Some(g.checks.unwrap_or(0) + 1),
-            ..g.clone()
-        }),
-        GoalUpdate::Cleared => None,
-        GoalUpdate::Reported(goal) => Some(goal),
-    }
-}
-
 /// Reads the agent's stdout until it closes, then records the final status.
 fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHandle<String>) {
     let mut has_text = false;
@@ -653,6 +655,8 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
     let mut ended = false;
     // Codex reported this run's goal active, so it starts further turns toward it.
     let mut goal_run = false;
+    // Bumped whenever a turn starts, so a grace window that is still waiting does not close stdin.
+    let goal_round = Arc::new(AtomicU64::new(0));
     // Text streamed to the frontend but not yet stored; saving every delta
     // stalls the reader, so it is stored before the next event and at the end.
     let mut unsaved = String::new();
@@ -742,8 +746,8 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                     // Claude stays up while a subagent it sent to the background works, and
                     // takes messages meanwhile; stdin is closed once that subagent ends.
                     let background = running_tasks.values().any(Option::is_some);
-                    if !goal_run && !background {
-                        turn.close_unless_steered();
+                    if !background {
+                        end_input(&turn, goal_run, &goal_round);
                     }
                 }
                 Parsed::Steered => {
@@ -778,7 +782,7 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                     if turn.cancelled.load(Ordering::SeqCst) {
                         continue;
                     }
-                    let next = next_goal(goal.as_ref(), update);
+                    let next = goal::next_goal(goal.as_ref(), update);
                     if next != goal {
                         goal = next;
                         turn.save_text(&mut unsaved);
@@ -789,8 +793,8 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                         && goal
                             .as_ref()
                             .is_some_and(|g| g.status == GoalStatus::Active);
-                    if ended && !goal_run {
-                        turn.close_unless_steered();
+                    if ended {
+                        end_input(&turn, goal_run, &goal_round);
                     }
                 }
                 Parsed::SessionId(id) => {
@@ -869,12 +873,13 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                         });
                     }
                     let background = running_tasks.values().any(Option::is_some);
-                    if ended && !goal_run && !background {
-                        turn.close_unless_steered();
+                    if ended && !background {
+                        end_input(&turn, goal_run, &goal_round);
                     }
                 }
                 Parsed::TurnStarted(id) => {
                     ended = false;
+                    goal_round.fetch_add(1, Ordering::SeqCst);
                     *turn
                         .native_turn
                         .lock()

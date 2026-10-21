@@ -1,6 +1,7 @@
 //! Patchwork's backend. The desktop shell exposes these methods as Tauri
 //! commands and forwards agent events to the UI.
 
+mod goal;
 pub mod import;
 pub mod orchestration;
 pub mod persistence;
@@ -386,6 +387,7 @@ impl Server {
             goal: None,
             position: -(created_at as i64),
             folder_id: None,
+            archived_at: None,
         };
         self.store.insert_threads(vec![thread.clone()])?;
         Ok(thread)
@@ -397,6 +399,17 @@ impl Server {
         self.store.update_thread(id, |t| t.title = title)
     }
 
+    /// Moves a thread to the archive, or back to the task list. Archiving stops its running turn.
+    pub fn set_thread_archived(&self, id: &str, archived: bool) -> Res<()> {
+        self.store.thread(id).ok_or("Task not found")?;
+        if archived {
+            self.runner.cancel(id, None);
+        }
+        self.store
+            .update_thread(id, |t| t.archived_at = archived.then(now_ms))
+    }
+
+    /// Permanently deletes a thread and its messages.
     pub fn delete_thread(&self, id: &str) {
         self.runner.cancel(id, None);
         if self
@@ -618,46 +631,6 @@ impl Server {
     pub fn clear_thread(&self, thread_id: &str) -> Res<()> {
         self.cancel_turn(thread_id);
         self.store.clear_thread(thread_id)
-    }
-
-    /// Stops the turn working on the goal, if any, and clears the goal, in the agent's session
-    /// too: Claude restores an unmet goal whenever its session resumes, Codex keeps a stopped
-    /// goal paused, and Antigravity keeps a goal per conversation, so each would otherwise
-    /// pick it up again.
-    pub fn stop_goal(self: &Arc<Self>, thread_id: &str) -> Res<()> {
-        let Some(thread) = self.store.thread(thread_id) else {
-            return Ok(());
-        };
-        let status = thread.goal.map(|g| g.status);
-        // Only a goal still being pursued stops the turn it runs in. Clearing a finished goal
-        // must not cut off an unrelated reply that is streaming.
-        if status == Some(GoalStatus::Active) {
-            self.cancel_turn(thread_id);
-            // A `/goal` command runs as a turn of its own, so the stopped turn must end first.
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-            while self.runner.is_running(thread_id) && std::time::Instant::now() < deadline {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-        }
-        self.store.update_thread(thread_id, |t| t.goal = None)?;
-        self.emit(AgentEventEnvelope {
-            thread_id: thread_id.into(),
-            event: AgentEvent::GoalUpdated { goal: None },
-        });
-        // Claude has already dropped a goal its evaluator judged impossible (blocked).
-        let unfinished = status.is_some_and(|s| {
-            s != GoalStatus::Complete
-                && !(thread.agent == AgentKind::Claude && s == GoalStatus::Blocked)
-        });
-        if unfinished && thread.session_id.is_some() {
-            // Antigravity has no command to clear a goal; its docs say to ask the agent.
-            let stop = match thread.agent {
-                AgentKind::Gemini => "Stop the current goal.",
-                _ => "/goal clear",
-            };
-            self.send_message(thread_id.into(), stop.into(), vec![], false)?;
-        }
-        Ok(())
     }
 
     /// Answers a pending approval in the thread's running turn.

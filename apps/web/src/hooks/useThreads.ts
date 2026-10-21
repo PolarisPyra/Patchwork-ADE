@@ -165,8 +165,8 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     if (selectedId) void api.setLastThread(selectedId).catch(() => undefined);
   }, [selectedId]);
 
-  // Load once; reopen the thread last open if it still exists, else the newest thread
-  // of the initial project (or chat).
+  // Load once; reopen the thread last open if it still exists and is not archived, else the
+  // newest thread of the initial project (or chat).
   useEffect(() => {
     let cancelled = false;
     Promise.all([api.listThreads(), api.listFolders(), api.getLastThread()]).then(
@@ -174,8 +174,9 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
         if (cancelled) return;
         setThreads(list);
         setFolders(folderList);
-        const fallback = list.find((t) => t.projectId === initialProject.current)?.id ?? null;
-        setSelectedId(list.find((t) => t.id === last)?.id ?? fallback);
+        const live = list.filter((t) => t.archivedAt === null);
+        const fallback = live.find((t) => t.projectId === initialProject.current)?.id ?? null;
+        setSelectedId(live.find((t) => t.id === last)?.id ?? fallback);
       },
       () => {
         if (!cancelled) setThreads([]);
@@ -252,6 +253,15 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     await api.deleteThread(id);
     setThreads((prev) => prev.filter((t) => t.id !== id));
     setSelectedId((cur) => (cur === id ? null : cur));
+  }
+
+  /** Moves a thread to the archive, or back to the task list. Archiving the selected thread clears the selection. */
+  async function setThreadArchived(id: string, archived: boolean): Promise<void> {
+    await api.setThreadArchived(id, archived);
+    setThreads((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, archivedAt: archived ? Date.now() : null } : t)),
+    );
+    if (archived) setSelectedId((cur) => (cur === id ? null : cur));
   }
 
   /** Empties a chat: its messages and agent session are deleted, the chat itself stays. */
@@ -337,6 +347,7 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     select: setSelectedId,
     createThread,
     deleteThread,
+    setThreadArchived,
     renameThread,
     clearThread,
     createFolder,

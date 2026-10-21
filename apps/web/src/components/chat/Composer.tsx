@@ -37,6 +37,8 @@ interface ComposerProps {
   onRemoveAttachment: (index: number) => void;
   /** A drag is hovering over the chat; the composer shows where it will land. */
   dropping: boolean;
+  /** The thread's goal is active: its border turns instead of holding still. */
+  goalActive: boolean;
   /** The chat's earlier messages, oldest first, recalled with the arrow keys. */
   history: HistoryEntry[];
   /** Project files an @ mention can refer to, relative to the project root. */
@@ -135,6 +137,7 @@ export default function Composer({
   attachments,
   onRemoveAttachment,
   dropping,
+  goalActive,
   history,
   files,
 }: ComposerProps) {
@@ -361,9 +364,14 @@ export default function Composer({
     setQueueNext(false);
   }
 
+  const surface = dropping
+    ? "border border-dashed border-accent bg-editor"
+    : goalActive
+      ? "goal-border"
+      : "border border-border-strong bg-editor focus-within:border-accent";
   return (
     <div
-      className={`relative flex flex-col gap-2 rounded-[8px] border bg-editor pt-3.5 pr-3 pb-2.5 pl-3 focus-within:border-accent ${dropping ? "border-dashed border-accent" : "border-border-strong"}`}
+      className={`relative flex flex-col gap-2 rounded-[8px] pt-3.5 pr-3 pb-2.5 pl-3 ${surface}`}
     >
       {menuOpen && (
         <div className="absolute right-0 bottom-full left-0 mb-1.5 flex flex-col gap-px rounded-[var(--radius)] border border-border bg-panel p-1 shadow-[var(--shadow-popup)]">

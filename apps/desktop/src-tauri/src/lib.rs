@@ -185,6 +185,11 @@ fn delete_thread(server: Srv, id: String) {
 }
 
 #[tauri::command]
+fn set_thread_archived(server: Srv, id: String, archived: bool) -> Res<()> {
+    server.set_thread_archived(&id, archived)
+}
+
+#[tauri::command]
 fn set_thread_model(server: Srv, id: String, agent: AgentKind, model: Option<String>) -> Res<()> {
     server.set_thread_model(&id, agent, model)
 }
@@ -394,6 +399,7 @@ pub fn run() {
             set_collapsed,
             create_thread,
             delete_thread,
+            set_thread_archived,
             set_thread_model,
             set_thread_access_mode,
             set_thread_effort,

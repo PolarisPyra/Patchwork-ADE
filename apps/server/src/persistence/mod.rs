@@ -382,12 +382,12 @@ fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO threads
              (id, project_id, title, agent, model, session_id, created_at, access_mode, goal,
-              position, folder_id, effort)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+              position, folder_id, effort, archived_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
          ON CONFLICT (id) DO UPDATE SET project_id = excluded.project_id,
              title = excluded.title, agent = excluded.agent, model = excluded.model,
              session_id = excluded.session_id, access_mode = excluded.access_mode,
-             goal = excluded.goal, effort = excluded.effort",
+             goal = excluded.goal, effort = excluded.effort, archived_at = excluded.archived_at",
         params![
             t.id,
             t.project_id,
@@ -400,7 +400,8 @@ fn save_thread_row(tx: &Transaction, t: &Thread) -> rusqlite::Result<()> {
             t.goal.as_ref().map(json),
             t.position,
             t.folder_id,
-            t.effort
+            t.effort,
+            t.archived_at
         ],
     )?;
     Ok(())
@@ -481,7 +482,7 @@ fn load_folders(conn: &Connection) -> rusqlite::Result<Vec<Folder>> {
 fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
     let mut stmt = conn.prepare(
         "SELECT id, project_id, title, agent, model, session_id, created_at, access_mode, goal,
-                position, folder_id, effort
+                position, folder_id, effort, archived_at
          FROM threads ORDER BY position",
     )?;
     let mut threads: Vec<Thread> = stmt
@@ -502,6 +503,7 @@ fn load_threads(conn: &Connection) -> rusqlite::Result<Vec<Thread>> {
                 position: r.get(9)?,
                 folder_id: r.get(10)?,
                 effort: r.get(11)?,
+                archived_at: r.get(12)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -626,6 +628,7 @@ mod tests {
             position: 0,
             folder_id: None,
             effort: None,
+            archived_at: None,
         }
     }
 

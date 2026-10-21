@@ -78,6 +78,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE messages ADD COLUMN usage TEXT;",
     // 12: a message held in the queue when the app closed. The agent never read it.
     "ALTER TABLE messages ADD COLUMN queued INTEGER NOT NULL DEFAULT 0;",
+    // 13: when a thread was archived; NULL keeps it in the task list.
+    "ALTER TABLE threads ADD COLUMN archived_at INTEGER;",
 ];
 
 /// Brings the schema up to date. Returns the version the database was at before.

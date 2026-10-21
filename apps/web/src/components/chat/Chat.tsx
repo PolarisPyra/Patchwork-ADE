@@ -29,7 +29,7 @@ import { effortFor, lastEffort } from "~/components/chat/EffortPicker";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import ChoicePanel from "~/components/chat/ChoicePanel";
 import { parseChoices } from "~/components/chat/choices";
-import GoalBanner, { currentActivity } from "~/components/chat/GoalBanner";
+import GoalBanner from "~/components/chat/GoalBanner";
 import BackgroundTasks from "~/components/chat/BackgroundTasks";
 import QueuedMessages from "~/components/chat/QueuedMessages";
 import LineageCard from "~/components/chat/LineageCard";
@@ -111,9 +111,6 @@ export default function Chat({
   // Files and images dropped into the composer, kept per thread like drafts.
   const [pending, setPending] = useState<Record<string, Attachment[]>>({});
   const [dropping, setDropping] = useState(false);
-  // A finished goal the user dismissed. Hiding it changes nothing on the agent side.
-  const [dismissedGoal, setDismissedGoal] = useState<string | null>(null);
-  const goalKey = thread?.goal ? `${thread.id}:${thread.goal.startedAt}` : null;
   // Files the @ mention menu offers; they follow the project.
   const [files, setFiles] = useState<string[]>([]);
   const projectId = project?.id ?? null;
@@ -384,6 +381,13 @@ export default function Chat({
     api.stopGoal(thread.id).catch((e: unknown) => setError(errorText(e)));
   }
 
+  // Codex takes /goal resume; Claude and Antigravity have no such command, so a message carries
+  // the goal on.
+  function resumeGoal() {
+    if (!thread) return;
+    void dispatch(thread.agent === "codex" ? "/goal resume" : "Continue the goal.", [], false);
+  }
+
   function pickModel(nextAgent: AgentKind, nextModel: string | null) {
     if (!thread) {
       const nextEffort = nextAgent === agent ? newOpts.effort : lastEffort(nextAgent);
@@ -530,12 +534,12 @@ export default function Chat({
           onEdit={(message) => takeBack(message, true)}
           onRemove={(message) => takeBack(message, false)}
         />
-        {thread?.goal && goalKey !== dismissedGoal && (
+        {thread?.goal && (
           <GoalBanner
             goal={thread.goal}
-            activity={currentActivity(thread.messages)}
-            onStop={stopGoal}
-            onDismiss={() => setDismissedGoal(goalKey)}
+            working={working}
+            onResume={resumeGoal}
+            onClear={stopGoal}
           />
         )}
         <Suspense
@@ -548,6 +552,7 @@ export default function Chat({
             onChange={setDraft}
             onSubmit={submit}
             onStop={stop}
+            goalActive={thread?.goal?.status === "active"}
             working={working}
             error={error}
             agent={agent}

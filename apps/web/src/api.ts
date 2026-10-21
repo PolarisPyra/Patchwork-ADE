@@ -193,6 +193,8 @@ export interface Thread {
   goal: Goal | null;
   /** The folder this task is in; null for the project's top level. */
   folderId: string | null;
+  /** When the thread was archived; null while it is in the task list. */
+  archivedAt: number | null;
 }
 
 /** A folder inside a project; its tasks are the threads whose `folderId` is its id. */
@@ -384,6 +386,8 @@ export const api = {
     effort: string | null,
   ) => invoke<Thread>("create_thread", { projectId, agent, model, accessMode, effort }),
   deleteThread: (id: string) => invoke<void>("delete_thread", { id }),
+  setThreadArchived: (id: string, archived: boolean) =>
+    invoke<void>("set_thread_archived", { id, archived }),
   renameThread: (id: string, title: string) => invoke<void>("rename_thread", { id, title }),
   /** Sets agent + model; the agent can only change before the first message. */
   setThreadModel: (id: string, agent: AgentKind, model: string | null) =>

@@ -360,6 +360,9 @@ pub struct Thread {
     /// The folder this task is in; None for the project's top level.
     #[serde(default)]
     pub folder_id: Option<String>,
+    /// When the thread was archived; None while it is in the task list.
+    #[serde(default)]
+    pub archived_at: Option<u64>,
 }
 
 /// A folder inside a project. Its threads are those whose `folder_id` names it.

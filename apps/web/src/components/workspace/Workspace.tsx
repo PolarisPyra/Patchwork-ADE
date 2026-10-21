@@ -70,6 +70,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     select,
     createThread,
     deleteThread,
+    setThreadArchived,
     renameThread,
     clearThread,
     folders,
@@ -89,6 +90,9 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       (p) => p.id === (selected ? selected.projectId : settings.activeProjectId),
     ) ?? null;
   const projectId = project?.id ?? null;
+  // Archived chats and tasks leave the task list and the palette; the Archived view lists them.
+  const liveThreads = threads.filter((t) => t.archivedAt === null);
+  const archivedThreads = threads.filter((t) => t.archivedAt !== null);
   const defaultAgent = defaultAgentOf(settings);
   // Display order stays fixed; `settings.agents` order only marks the default.
   const connectedAgents = AGENT_KINDS.filter((k) => settings.agents.includes(k));
@@ -139,7 +143,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       await api.renameProject(id, name);
       await syncProjects(updateSettings);
     });
-  /** Asks before removing. The native dialog is async in Tauri; window.confirm returns before the user answers. */
+  /** Asks before removing projects or folders. The native dialog is async in Tauri; window.confirm returns before the user answers. */
   const confirmRemoval = (targets: Target[]): Promise<boolean> => {
     if (targets.length > 1) {
       return confirm(`Remove ${targets.length} items? Removing a project also removes its tasks.`, {
@@ -148,10 +152,6 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       });
     }
     const [target] = targets;
-    if (target.kind === "thread") {
-      const title = threads.find((t) => t.id === target.id)?.title ?? "";
-      return confirm(`Remove ${displayTitle(title)}?`, { title: "Remove", kind: "warning" });
-    }
     if (target.kind === "folder") {
       const name = folders.find((f) => f.id === target.id)?.name ?? "this folder";
       return confirm(`Remove ${name}? Its tasks move to the top of the project.`, {
@@ -162,7 +162,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     const name = settings.projects.find((p) => p.id === target.id)?.name ?? "this project";
     return confirm(`Remove ${name} and its tasks?`, { title: "Remove project", kind: "warning" });
   };
-  /** Asks once, then removes the targets. Folders and chats inside a removed project are left out, since the project takes them too. */
+  /** Archives the chats and tasks among the targets, and asks once before removing projects and folders. Folders and chats inside a removed project are left out, since the project takes them too. */
   const removeTargets = async (targets: Target[]) => {
     const projectIds = targets.filter((t) => t.kind === "project").map((t) => t.id);
     const idsOf = (kind: Target["kind"]) => targets.filter((t) => t.kind === kind).map((t) => t.id);
@@ -172,7 +172,11 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     const threadIds = idsOf("thread").filter(
       (id) => !projectIds.includes(threads.find((t) => t.id === id)?.projectId ?? ""),
     );
-    if (!(await confirmRemoval(targets))) return;
+    const removed: Target[] = [
+      ...projectIds.map((id): Target => ({ kind: "project", id })),
+      ...folderIds.map((id): Target => ({ kind: "folder", id })),
+    ];
+    if (removed.length > 0 && !(await confirmRemoval(removed))) return;
     setPicked([]);
     // Projects go first: the backend deletes their tasks, so the thread list is reloaded after them.
     attempt(async () => {
@@ -182,8 +186,24 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         await reload();
       }
       for (const id of folderIds) await removeFolder(id);
-      for (const id of threadIds) await deleteThread(id);
+      for (const id of threadIds) await setThreadArchived(id, true);
     });
+  };
+
+  /** Asks, then deletes an archived chat or task for good. */
+  const deleteArchived = async (id: string) => {
+    const title = threads.find((t) => t.id === id)?.title ?? "";
+    if (
+      !(await confirm(
+        `Delete ${displayTitle(title)} permanently? Its messages cannot be recovered.`,
+        {
+          title: "Delete",
+          kind: "warning",
+        },
+      ))
+    )
+      return;
+    attempt(() => deleteThread(id));
   };
 
   // Project order is saved with the settings; the backend keeps the list's order.
@@ -245,6 +265,16 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       await rememberProject(projectId);
     });
 
+  /** Ctrl+N: a task in the selected task's folder or project; a chat when a chat or nothing is selected. */
+  const newThreadHere = () => {
+    if (!selected?.projectId) return newChat();
+    if (selected.folderId === null) return newThreadIn(selected.projectId);
+    const folderTaskIds = liveThreads
+      .filter((t) => t.folderId === selected.folderId)
+      .map((t) => t.id);
+    return newThreadInFolder(selected.projectId, selected.folderId, folderTaskIds);
+  };
+
   const openCanvasAt = (path: string, message: Message | null, tab: CanvasTab) => {
     if (!projectId) return;
     setCanvas((prev) => ({ seq: (prev?.seq ?? 0) + 1, projectId, path, message, tab }));
@@ -266,8 +296,8 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     document.addEventListener("mouseup", onUp);
   }
 
-  // Ctrl+W and Delete remove the picked rows; with none picked, Ctrl+W removes the open thread.
-  // Global shortcuts. Re-registered each render so handlers see current state.
+  // Ctrl+W and Delete remove the picked rows, archiving any chats or tasks among them; with none
+  // picked, Ctrl+W removes the open thread. Global shortcuts. Re-registered each render so handlers see current state.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const mod = e.ctrlKey || e.metaKey;
@@ -281,6 +311,8 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         setPaletteOpen((o) => !o);
       } else if (mod && key === "t") {
         newThreadIn(projectId);
+      } else if (mod && key === "n") {
+        newThreadHere();
       } else if (mod && key === "w" && picked.length > 0) {
         void removeTargets(picked);
       } else if (mod && key === "w" && selected) {
@@ -345,7 +377,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
           },
         ]
       : []),
-    ...threads.map((t) => ({
+    ...liveThreads.map((t) => ({
       id: `task-${t.id}`,
       group: settings.projects.find((p) => p.id === t.projectId)?.name ?? "Chats",
       label: displayTitle(t.title),
@@ -384,7 +416,10 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             agents={connectedAgents.length > 0 ? connectedAgents : [defaultAgent]}
             project={project}
             projects={settings.projects}
-            threads={threads}
+            threads={liveThreads}
+            archivedThreads={archivedThreads}
+            onRestoreThread={(id) => attempt(() => setThreadArchived(id, false))}
+            onDeleteArchived={deleteArchived}
             selectedId={selected?.id ?? null}
             changes={changes}
             changeFocus={changeFocus}

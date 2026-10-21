@@ -9,6 +9,8 @@ import {
   type SetStateAction,
 } from "react";
 import {
+  ArchiveIcon,
+  ArrowCounterClockwiseIcon,
   ArrowLeftIcon,
   ArrowsClockwiseIcon,
   ArrowsInLineVerticalIcon,
@@ -44,7 +46,7 @@ import { useRowReorder, type RowDrag } from "~/hooks/useRowReorder";
 import { isWorking } from "~/hooks/useThreads";
 import { baseName, dirName, displayTitle, errorText, formatRelative } from "~/lib/util";
 
-export type SidebarView = "tasks" | "changes";
+export type SidebarView = "tasks" | "changes" | "archived";
 
 /** Drag groups: rows reorder only within their own group. */
 const CHATS_GROUP = "chats";
@@ -54,6 +56,7 @@ const TASKS_GROUP_PREFIX = "tasks:";
 const STRIPE: { view: SidebarView; label: string; Icon: Icon }[] = [
   { view: "tasks", label: "Tasks", Icon: ChatsIcon },
   { view: "changes", label: "Changes", Icon: GitDiffIcon },
+  { view: "archived", label: "Archived", Icon: ArchiveIcon },
 ];
 
 interface StripeProps {
@@ -68,7 +71,7 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
       {STRIPE.map(({ view: v, label, Icon }) => (
         <button
           key={v}
-          className={`grid h-7 w-7 cursor-pointer place-items-center rounded-[var(--radius)] border-none ${view === v ? "bg-selected text-fg" : "bg-transparent text-fg-muted hover:bg-hover hover:text-fg"}`}
+          className={`grid h-7 w-7 cursor-pointer place-items-center rounded-[var(--radius)] border-none p-0 ${view === v ? "bg-selected text-fg" : "bg-transparent text-fg-muted hover:bg-hover hover:text-fg"}`}
           title={label}
           aria-label={label}
           aria-pressed={view === v}
@@ -78,7 +81,7 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
         </button>
       ))}
       <button
-        className="mt-auto grid h-7 w-7 cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-transparent text-fg-muted hover:bg-hover hover:text-fg"
+        className="mt-auto grid h-7 w-7 cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-transparent p-0 text-fg-muted hover:bg-hover hover:text-fg"
         title="Settings"
         aria-label="Settings"
         onClick={onOpenSettings}
@@ -118,8 +121,13 @@ interface SidebarProps {
   /** Rows picked with Ctrl+click, kept by the parent so its shortcuts can remove them. */
   picked: Target[];
   setPicked: Dispatch<SetStateAction<Target[]>>;
-  /** Asks, then removes the targets. */
+  /** Archives chats and tasks; asks, then removes projects and folders. */
   onRemoveTargets: (targets: Target[]) => void;
+  /** Chats and tasks in the archive, in sidebar order. */
+  archivedThreads: Thread[];
+  onRestoreThread: (id: string) => void;
+  /** Asks, then deletes an archived chat or task for good. */
+  onDeleteArchived: (id: string) => void;
   /** Starts a task at the top of a folder; `threadIds` are the folder's tasks in order. */
   onNewTaskInFolder: (projectId: string, folderId: string, threadIds: string[]) => void;
   onOpenFolder: () => void;
@@ -152,7 +160,9 @@ export default function Sidebar(props: SidebarProps) {
         Search…
         <kbd className="kbd ml-auto">Ctrl K</kbd>
       </button>
-      {props.view === "tasks" ? <TasksView {...props} /> : <ChangesView {...props} />}
+      {props.view === "tasks" && <TasksView {...props} />}
+      {props.view === "changes" && <ChangesView {...props} />}
+      {props.view === "archived" && <ArchivedView {...props} />}
       <UsagePopover agents={props.agents} />
     </aside>
   );
@@ -251,17 +261,21 @@ function TasksView({
     if (!isPicked(target)) setPicked([]);
     setMenu({ x: e.clientX, y: e.clientY, targets });
   };
-  const menuItems = (targets: Target[]): MenuItem[] => [
-    ...(targets.length === 1
-      ? [{ label: "Rename", Icon: PencilSimpleIcon, onSelect: () => setRenaming(targets[0]) }]
-      : []),
-    {
-      label: targets.length > 1 ? `Remove ${targets.length} items` : "Remove",
-      Icon: TrashIcon,
-      danger: true,
-      onSelect: () => onRemoveTargets(targets),
-    },
-  ];
+  const menuItems = (targets: Target[]): MenuItem[] => {
+    const archiving = targets.every((t) => t.kind === "thread");
+    const count = targets.length > 1 ? ` ${targets.length} items` : "";
+    return [
+      ...(targets.length === 1
+        ? [{ label: "Rename", Icon: PencilSimpleIcon, onSelect: () => setRenaming(targets[0]) }]
+        : []),
+      {
+        label: archiving ? `Archive${count}` : `Remove${count}`,
+        Icon: archiving ? ArchiveIcon : TrashIcon,
+        danger: !archiving,
+        onSelect: () => onRemoveTargets(targets),
+      },
+    ];
+  };
   /** Saves a new name, unless it is blank or unchanged. */
   const commitRename = (target: Target, name: string, current: string) => {
     setRenaming(null);
@@ -275,7 +289,7 @@ function TasksView({
     // While rows are picked, the open thread is not shown as selected, so it reads as not being removed.
     selectedId: picked.length > 0 ? null : selectedId,
     onSelectThread,
-    onRemoveThread: (thread: Thread) => onRemoveTargets([{ kind: "thread", id: thread.id }]),
+    onArchiveThread: (thread: Thread) => onRemoveTargets([{ kind: "thread", id: thread.id }]),
     isPicked,
     onPick: pickRow,
     renaming,
@@ -566,7 +580,7 @@ function ThreadRow({
   thread,
   selectedId,
   onSelectThread,
-  onRemoveThread,
+  onArchiveThread,
   isPicked,
   onPick,
   renaming,
@@ -580,7 +594,7 @@ function ThreadRow({
   thread: Thread;
   selectedId: string | null;
   onSelectThread: (id: string) => void;
-  onRemoveThread: (thread: Thread) => void;
+  onArchiveThread: (thread: Thread) => void;
   isPicked: (target: Target) => boolean;
   onPick: (e: MouseEvent, target: Target) => boolean;
   renaming: Target | null;
@@ -631,14 +645,14 @@ function ThreadRow({
         </span>
         <button
           className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex hover:bg-border-strong"
-          title="Delete"
-          aria-label="Delete"
+          title="Archive"
+          aria-label="Archive"
           onClick={(e) => {
             e.stopPropagation();
-            onRemoveThread(thread);
+            onArchiveThread(thread);
           }}
         >
-          <TrashIcon size={16} />
+          <ArchiveIcon size={16} />
         </button>
       </div>
       <div className="flex min-h-5 min-w-0 items-center justify-end gap-1.5">
@@ -660,6 +674,71 @@ function ThreadRow({
           <ProviderLogos kind={thread.agent} size={16} />
         </span>
       </div>
+    </div>
+  );
+}
+
+/** Chats and tasks moved out of the task list. Restoring one puts it back where it was. */
+function ArchivedView({
+  archivedThreads,
+  selectedId,
+  onSelectThread,
+  onRestoreThread,
+  onDeleteArchived,
+}: SidebarProps) {
+  const [menu, setMenu] = useState<{ x: number; y: number; thread: Thread } | null>(null);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto overflow-x-hidden p-2 [scrollbar-gutter:stable] *:shrink-0">
+      <SectionLabel>Archived</SectionLabel>
+      {archivedThreads.length === 0 && (
+        <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">Nothing archived</div>
+      )}
+      {archivedThreads.map((t) => (
+        <div
+          key={t.id}
+          className={`group mx-1.5 mb-1.5 flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 py-1.5 text-fg ${t.id === selectedId ? "bg-selected font-medium" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"}`}
+          onClick={() => onSelectThread(t.id)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setMenu({ x: e.clientX, y: e.clientY, thread: t });
+          }}
+        >
+          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+            {displayTitle(t.title)}
+          </span>
+          <button
+            className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex hover:bg-border-strong"
+            title="Restore"
+            aria-label="Restore"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRestoreThread(t.id);
+            }}
+          >
+            <ArrowCounterClockwiseIcon size={16} />
+          </button>
+        </div>
+      ))}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={[
+            {
+              label: "Restore",
+              Icon: ArrowCounterClockwiseIcon,
+              onSelect: () => onRestoreThread(menu.thread.id),
+            },
+            {
+              label: "Delete permanently",
+              Icon: TrashIcon,
+              danger: true,
+              onSelect: () => onDeleteArchived(menu.thread.id),
+            },
+          ]}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }
