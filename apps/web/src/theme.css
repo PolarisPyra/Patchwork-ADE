@@ -541,6 +541,10 @@
   color: var(--text-subtle);
   pointer-events: none;
 }
+/* Only the composer that has focus shows its caret. */
+.composer-editor .ProseMirror:not(.ProseMirror-focused) {
+  caret-color: transparent;
+}
 .composer-editor ul[data-type="taskList"] {
   list-style: none;
   padding-left: 0;
