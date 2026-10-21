@@ -743,11 +743,11 @@ const SHORTCUT_PAGES: { title: string; shortcuts: { keys: string[]; action: stri
       { keys: ["Ctrl", "Click"], action: "Select or unselect a chart or task" },
       {
         keys: ["Delete"],
-        action: "Remove the selected charts or tasks, or the open one if none are selected",
+        action: "Remove the selected chats or tasks, or the open one if none are selected",
       },
       {
         keys: ["Ctrl", "W"],
-        action: "Remove the selected charts or tasks",
+        action: "Remove the selected chats or tasks, and the open one",
       },
     ],
   },

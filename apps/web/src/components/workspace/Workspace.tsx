@@ -363,8 +363,14 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         newThreadIn(projectId);
       } else if (mod && key === "n") {
         newThreadHere();
-      } else if (mod && key === "w" && picked.length > 0) {
-        void removePicked(picked);
+      } else if (mod && key === "w") {
+        // Ctrl+W acts on the picked rows and, in the task list, on the open chat even when it is not picked.
+        const open =
+          view === "tasks" &&
+          selected &&
+          !picked.some((p) => p.kind === "thread" && p.id === selected.id);
+        const targets = open ? [...picked, { kind: "thread" as const, id: selected.id }] : picked;
+        if (targets.length > 0) void removePicked(targets);
       } else if (e.key === "Delete" && !isTypingTarget(document.activeElement)) {
         // Delete acts on the picked rows; with none picked, it archives the open chat in the task list.
         if (picked.length > 0) void removePicked(picked);
