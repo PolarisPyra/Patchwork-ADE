@@ -747,7 +747,8 @@ const SHORTCUT_PAGES: { title: string; shortcuts: { keys: string[]; action: stri
       },
       {
         keys: ["Ctrl", "W"],
-        action: "Remove the selected chats or tasks, and the open one",
+        action:
+          "Remove the selected chats or tasks, and the open one when the compose box is not active",
       },
     ],
   },
