@@ -629,8 +629,8 @@ function ThreadRow({
           {displayTitle(thread.title)}
         </span>
       )}
-      {/* A fixed, left-aligned slot so the times line up. It shows the time, or a spinner or approval shield. */}
-      <span className="flex w-9 flex-none items-center">
+      {/* A fixed, right-aligned slot so the time sits next to the archive button. It shows the time, or a spinner or approval shield. */}
+      <span className="flex w-9 flex-none items-center justify-end">
         {needsApproval ? (
           <span title="Waiting for approval" className="inline-flex flex-none text-warning">
             <ShieldWarningIcon size={15} />
@@ -659,7 +659,7 @@ function ThreadRow({
         <ArchiveIcon size={16} />
       </button>
       <span
-        className="ml-1 inline-flex h-5 w-5 flex-none items-center justify-center"
+        className="inline-flex h-5 w-5 flex-none items-center justify-center"
         title={AGENT_LABELS[thread.agent]}
       >
         <ProviderLogos kind={thread.agent} size={16} />
