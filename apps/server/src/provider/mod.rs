@@ -3,7 +3,7 @@
 
 pub mod claude;
 pub mod codex;
-pub mod gemini;
+pub mod antigravity;
 pub mod model_manifest;
 
 use std::io::Read;
@@ -55,18 +55,15 @@ fn find_binary(name: &str) -> Option<PathBuf> {
 
 /// Resolves the agent CLI (searching PATH plus common install dirs, since GUI
 /// launches may not inherit the shell PATH) and returns a Command for it with
-/// the binary's directory prepended to PATH (codex and gemini need `node` beside it).
+/// the binary's directory prepended to PATH (codex needs `node` beside it).
 pub fn agent_command(kind: AgentKind) -> Result<Command, String> {
-    let (name, missing) = match kind {
-        AgentKind::Claude => ("claude", "Claude Code is not installed"),
-        AgentKind::Codex => ("codex", "Codex is not installed"),
-        AgentKind::Gemini => ("gemini", "Antigravity CLI is not installed"),
-    };
     let bin = match kind {
-        AgentKind::Gemini => gemini::antigravity_bin().or_else(|| find_binary(name)),
-        _ => find_binary(name),
-    }
-    .ok_or(missing)?;
+        AgentKind::Claude => find_binary("claude").ok_or("Claude Code is not installed")?,
+        AgentKind::Codex => find_binary("codex").ok_or("Codex is not installed")?,
+        AgentKind::Antigravity => {
+            antigravity::antigravity_bin().ok_or("Antigravity CLI is not installed")?
+        }
+    };
     let mut cmd = Command::new(&bin);
     if let Some(dir) = bin.parent() {
         let mut paths = vec![dir.to_path_buf()];
@@ -187,7 +184,7 @@ pub fn detect_agent(kind: AgentKind) -> AgentStatus {
     match kind {
         AgentKind::Claude => claude::auth(&mut status),
         AgentKind::Codex => codex::auth(&mut status),
-        AgentKind::Gemini => gemini::auth(&mut status),
+        AgentKind::Antigravity => antigravity::auth(&mut status),
     }
     status
 }
@@ -197,7 +194,7 @@ pub fn list_models(kind: AgentKind) -> Vec<ModelOption> {
     let (default_model, models) = match kind {
         AgentKind::Claude => (claude::configured_model(), claude::models()),
         AgentKind::Codex => (codex::configured_model(), codex::models()),
-        AgentKind::Gemini => (gemini::configured_model(), gemini::models()),
+        AgentKind::Antigravity => (None, antigravity::models()),
     };
     let mut out = vec![ModelOption {
         id: None,
@@ -280,7 +277,7 @@ fn prompt_text(text: &str, attachments: &[Attachment]) -> String {
 }
 
 /// The stdin line that adds a message to a turn that is already running, or None when
-/// the agent cannot take one now and the message waits for the turn to end. Gemini reads
+/// the agent cannot take one now and the message waits for the turn to end. Antigravity reads
 /// its whole prompt up front; Codex needs the turn's id, which it reports once started.
 pub fn steer_input(
     agent: AgentKind,
@@ -301,7 +298,7 @@ pub fn steer_input(
             &prompt_text(text, attachments),
             attachments,
         )),
-        AgentKind::Gemini => None,
+        AgentKind::Antigravity => None,
     }
 }
 
@@ -327,7 +324,7 @@ pub fn turn_args(agent: AgentKind, spec: &TurnSpec) -> Vec<String> {
     match agent {
         AgentKind::Claude => claude::turn_args(spec),
         AgentKind::Codex => codex::turn_args(),
-        AgentKind::Gemini => gemini::turn_args(spec),
+        AgentKind::Antigravity => antigravity::turn_args(spec),
     }
 }
 
@@ -337,7 +334,7 @@ pub fn turn_input(agent: AgentKind, spec: &TurnSpec) -> Vec<String> {
     match agent {
         AgentKind::Claude => vec![claude::user_message(&prompt(spec), spec.images)],
         AgentKind::Codex => codex::turn_input(spec),
-        AgentKind::Gemini => vec![],
+        AgentKind::Antigravity => vec![],
     }
 }
 
@@ -346,7 +343,7 @@ pub fn parse_line(agent: AgentKind, v: &Value, spec: &TurnSpec, message_id: &str
     match agent {
         AgentKind::Claude => claude::parse(v, spec.root, message_id),
         AgentKind::Codex => codex::parse(v, spec, message_id),
-        AgentKind::Gemini => gemini::parse(v, spec, message_id),
+        AgentKind::Antigravity => antigravity::parse(v, spec, message_id),
     }
 }
 
@@ -355,8 +352,8 @@ pub fn approval_reply(agent: AgentKind, reply: &Value, allow: bool) -> String {
     match agent {
         AgentKind::Claude => claude::approval_reply(reply, allow),
         AgentKind::Codex => codex::approval_reply(reply, allow),
-        // Gemini runs headless and never asks.
-        AgentKind::Gemini => String::new(),
+        // Antigravity runs headless and never asks.
+        AgentKind::Antigravity => String::new(),
     }
 }
 

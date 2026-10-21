@@ -64,7 +64,7 @@ impl Server {
         if unfinished && thread.session_id.is_some() {
             // Antigravity has no command to clear a goal; its docs say to ask the agent.
             let stop = match thread.agent {
-                AgentKind::Gemini => "Stop the current goal.",
+                AgentKind::Antigravity => "Stop the current goal.",
                 _ => "/goal clear",
             };
             self.send_message(thread_id.into(), stop.into(), vec![], false)?;

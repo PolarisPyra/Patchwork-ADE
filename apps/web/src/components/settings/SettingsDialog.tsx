@@ -428,7 +428,7 @@ function AgentPane({ settings, updateSettings }: PaneProps) {
               <div className="text-[length:var(--fs-sm)] text-fg-muted">{describeAgent(s)}</div>
             </div>
             <span className={`badge${s?.installed ? " badge-success" : ""}`}>{badge}</span>
-            {kind === "gemini" && !s?.installed && s !== undefined && (
+            {kind === "antigravity" && !s?.installed && s !== undefined && (
               <AntigravityInstall onInstalled={refresh} />
             )}
             <button

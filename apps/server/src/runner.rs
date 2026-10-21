@@ -634,7 +634,7 @@ fn assistant_message() -> Message {
 /// Reads the agent's stdout until it closes, then records the final status.
 fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: JoinHandle<String>) {
     let mut has_text = false;
-    // Gemini streams one text block as many deltas; other agents send whole blocks.
+    // Antigravity streams one text block as many deltas; other agents send whole blocks.
     let mut last_was_text = false;
     // Tool id → the message it was started in, which a steer may since have moved on from.
     let mut tool_owner: HashMap<String, String> = HashMap::new();
@@ -898,12 +898,12 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                         continue;
                     }
                     match &mut event {
-                        // Separate successive text blocks so they do not run together. Gemini
+                        // Separate successive text blocks so they do not run together. Antigravity
                         // and Claude stream a block as chunks, so chunks after the first stay
                         // together.
                         AgentEvent::TextDelta { text, .. } => {
                             let streams =
-                                matches!(turn.agent, AgentKind::Gemini | AgentKind::Claude);
+                                matches!(turn.agent, AgentKind::Antigravity | AgentKind::Claude);
                             let continues = streams && last_was_text;
                             if has_text && !continues {
                                 text.insert_str(0, "\n\n");
@@ -998,7 +998,7 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
             turn.session_id
                 .as_deref()
                 .map(|id| provider::claude::goal_outcome(id, &g.objective))
-        } else if turn.agent == AgentKind::Gemini && status == MessageStatus::Complete {
+        } else if turn.agent == AgentKind::Antigravity && status == MessageStatus::Complete {
             // Antigravity blocks stopping until its goal is verified, so a clean end meets it.
             Some(GoalStatus::Complete)
         } else {
@@ -1350,7 +1350,7 @@ mod tests {
             !parsed.iter().any(|p| matches!(p, Parsed::Error(_))),
             "{parsed:?}"
         );
-        if mode == AccessMode::Supervised && agent != AgentKind::Gemini {
+        if mode == AccessMode::Supervised && agent != AgentKind::Antigravity {
             assert!(parsed.iter().any(|p| matches!(p, Parsed::Approval { .. })));
         }
         let changed = changed_paths(&baseline, &workspace::git_changes(root_str).unwrap());
@@ -1385,8 +1385,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "runs the real Gemini CLI"]
-    fn live_gemini_turn() {
-        live_turn(AgentKind::Gemini, AccessMode::AutoAcceptEdits);
+    #[ignore = "runs the real Antigravity CLI"]
+    fn live_antigravity_turn() {
+        live_turn(AgentKind::Antigravity, AccessMode::AutoAcceptEdits);
     }
 }

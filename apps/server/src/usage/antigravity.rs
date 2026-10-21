@@ -9,7 +9,7 @@ use crate::types::*;
 pub fn usage(mut out: ProviderUsage) -> Result<ProviderUsage, String> {
     // The CLI prints one JSON object and then keeps running, so stop once that object is complete.
     let p = probe_until(
-        AgentKind::Gemini,
+        AgentKind::Antigravity,
         &["-p", "/usage", "--output-format", "json"],
         |stdout| serde_json::from_str::<Value>(stdout.trim()).is_ok(),
     )

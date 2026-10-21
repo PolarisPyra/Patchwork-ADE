@@ -13,7 +13,7 @@ use crate::time::parse_rfc3339_ms;
 use crate::types::{AgentKind, Role};
 
 pub fn sessions() -> Vec<Session> {
-    let Some(home) = provider::gemini::home() else {
+    let Some(home) = provider::antigravity::home() else {
         return vec![];
     };
     let roots = project_roots(&home);
@@ -100,7 +100,7 @@ fn push_record(messages: &mut Vec<SessionMessage>, record: &Value, fallback_at: 
 
 fn session(meta: &Value, cwd: &str, messages: Vec<SessionMessage>) -> Option<Session> {
     Some(Session {
-        agent: AgentKind::Gemini,
+        agent: AgentKind::Antigravity,
         session_id: meta["sessionId"].as_str()?.to_string(),
         cwd: cwd.to_string(),
         title: None,

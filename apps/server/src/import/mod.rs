@@ -4,7 +4,7 @@
 
 mod claude;
 mod codex;
-mod gemini;
+mod antigravity;
 mod t3;
 
 use std::path::Path;
@@ -43,7 +43,7 @@ pub fn sessions(source: ImportSource) -> Vec<Session> {
     let all = match source {
         ImportSource::Claude => claude::sessions(),
         ImportSource::Codex => codex::sessions(),
-        ImportSource::Gemini => gemini::sessions(),
+        ImportSource::Antigravity => antigravity::sessions(),
         ImportSource::T3 => t3::sessions(),
     };
     all.into_iter()

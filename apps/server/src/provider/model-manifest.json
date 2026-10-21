@@ -53,20 +53,6 @@
         "name": "Haiku 5.5"
       }
     ],
-    "gemini": [
-      {
-        "id": "gemini-3.1-pro-preview",
-        "name": "3.1 Pro (Preview)"
-      },
-      {
-        "id": "gemini-3.8-flash",
-        "name": "3.8 Flash"
-      },
-      {
-        "id": "gemini-3.5-flash-lite",
-        "name": "3.5 Flash Lite"
-      }
-    ],
     "antigravity": [
       {
         "id": "gemini-3.8-flash-high",

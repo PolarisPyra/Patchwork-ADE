@@ -39,7 +39,7 @@ pub fn start(config_dir: &Path) {
     });
 }
 
-/// The cached manifest's models for `provider` ("claude", "gemini").
+/// The cached manifest's models for `provider` ("claude", "antigravity").
 /// Empty until a fetch has succeeded.
 pub fn models(provider: &str) -> Vec<ModelOption> {
     CACHE
@@ -126,7 +126,7 @@ mod tests {
         "updatedAt": "2026-10-19T20:30:00Z",
         "providers": {
             "claude": [{ "id": "claude-opus-5-5", "name": "Opus 5.5" }],
-            "gemini": [{ "id": "gemini-3.8-flash", "name": "3.8 Flash" }]
+            "antigravity": [{ "id": "gemini-3.8-flash", "name": "3.8 Flash" }]
         }
     }"#;
 

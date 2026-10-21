@@ -14,7 +14,7 @@ interface Props {
 const PROVIDER_NAMES: Record<AgentKind, string> = {
   claude: "Claude",
   codex: "Codex",
-  gemini: "Antigravity",
+  antigravity: "Antigravity",
 };
 export const CHIP_CLASS =
   "inline-flex h-7 cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 py-0 text-[length:var(--fs-md)] font-medium text-fg-muted hover:bg-hover hover:text-fg [&_span]:max-w-[180px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap";
@@ -25,9 +25,9 @@ const LEGACY_FAVORITES: Record<string, string> = {
   "claude:opus": "claude:claude-opus-5-5",
   "claude:sonnet": "claude:claude-sonnet-5-5",
   "claude:haiku": "claude:claude-haiku-5-5",
-  "gemini:pro": "gemini:gemini-3.1-pro-preview",
-  "gemini:flash": "gemini:gemini-3.8-flash",
-  "gemini:flash-lite": "gemini:gemini-3.5-flash-lite",
+  "gemini:pro": "antigravity:gemini-3.1-pro-preview",
+  "gemini:flash": "antigravity:gemini-3.8-flash",
+  "gemini:flash-lite": "antigravity:gemini-3.5-flash-lite",
 };
 function readFavorites(): string[] {
   try {
@@ -35,7 +35,8 @@ function readFavorites(): string[] {
     if (!Array.isArray(value)) return [];
     const keys = value
       .filter((v): v is string => typeof v === "string")
-      .map((k) => LEGACY_FAVORITES[k] ?? k);
+      // Favorites saved under the agent's old "gemini" name move to "antigravity".
+      .map((k) => LEGACY_FAVORITES[k] ?? k.replace(/^gemini:/, "antigravity:"));
     return [...new Set(keys)];
   } catch {
     return [];

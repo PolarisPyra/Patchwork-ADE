@@ -618,7 +618,7 @@ mod tests {
             id: new_id(),
             project_id: None,
             title: "t".into(),
-            agent: AgentKind::Gemini,
+            agent: AgentKind::Antigravity,
             model: Some("pro".into()),
             session_id: Some("s".into()),
             access_mode: crate::types::AccessMode::Supervised,
@@ -698,7 +698,7 @@ mod tests {
         assert_eq!(loaded.title, "renamed");
         let texts: Vec<_> = loaded.messages.iter().map(|m| m.text.as_str()).collect();
         assert_eq!(texts, ["ab", "c"]);
-        assert_eq!(store.session_keys(), [(AgentKind::Gemini, "s".to_string())]);
+        assert_eq!(store.session_keys(), [(AgentKind::Antigravity, "s".to_string())]);
 
         store.delete_thread(&t.id).unwrap();
         let count: i64 = store

@@ -6,7 +6,7 @@
 
 pub mod claude;
 mod codex;
-mod gemini;
+mod antigravity;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, PoisonError};
@@ -58,7 +58,7 @@ fn fetch(kind: AgentKind) -> Result<ProviderUsage, Failure> {
     match kind {
         AgentKind::Claude => claude::usage(empty(kind)),
         AgentKind::Codex => codex::usage(empty(kind)).map_err(Failure::from),
-        AgentKind::Gemini => gemini::usage(empty(kind)).map_err(Failure::from),
+        AgentKind::Antigravity => antigravity::usage(empty(kind)).map_err(Failure::from),
     }
 }
 

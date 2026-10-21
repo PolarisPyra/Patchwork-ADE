@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type AgentKind = "claude" | "codex" | "gemini";
+export type AgentKind = "claude" | "codex" | "antigravity";
 export type Theme = "light" | "dark" | "system";
 export type Role = "user" | "assistant";
 export type MessageStatus = "streaming" | "complete" | "error" | "cancelled";
@@ -298,7 +298,7 @@ export function defaultAgentOf(settings: Settings): AgentKind {
 export const AGENT_LABELS: Record<AgentKind, string> = {
   claude: "Claude Code",
   codex: "Codex",
-  gemini: "Antigravity CLI",
+  antigravity: "Antigravity CLI",
 };
 
 export const SOURCE_LABELS: Record<ImportSource, string> = { ...AGENT_LABELS, t3: "T3 Code" };

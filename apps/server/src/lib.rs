@@ -512,9 +512,9 @@ impl Server {
             }
             let agent = self.store.thread(&thread_id).map(|t| t.agent);
             let arg = text.trim()["/goal".len()..].trim().to_lowercase();
-            if agent == Some(AgentKind::Gemini) {
-                if provider::gemini::antigravity_bin().is_none() {
-                    return Err("/goal needs the Antigravity CLI; the Gemini CLI has no /goal. Install it in Settings.".into());
+            if agent == Some(AgentKind::Antigravity) {
+                if provider::antigravity::antigravity_bin().is_none() {
+                    return Err("/goal needs the Antigravity CLI. Install it in Settings.".into());
                 }
                 // Antigravity's /goal only sets a goal, so any other word would become one.
                 let subcommands = [

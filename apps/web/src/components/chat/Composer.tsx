@@ -146,7 +146,7 @@ export default function Composer({
   // until the draft changes again.
   const [menuClosed, setMenuClosed] = useState(false);
   const [commandIndex, setCommandIndex] = useState(0);
-  const slash = agent !== "gemini" && /^\/\S*$/.test(value) ? value.toLowerCase() : null;
+  const slash = agent !== "antigravity" && /^\/\S*$/.test(value) ? value.toLowerCase() : null;
   const matches =
     slash === null
       ? []

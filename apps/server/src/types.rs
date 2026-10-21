@@ -10,11 +10,13 @@ use serde::{Deserialize, Serialize};
 pub enum AgentKind {
     Claude,
     Codex,
-    Gemini,
+    /// Saved as "gemini" before the rename; the alias keeps those threads and settings readable.
+    #[serde(alias = "gemini")]
+    Antigravity,
 }
 
 impl AgentKind {
-    pub const ALL: [AgentKind; 3] = [AgentKind::Claude, AgentKind::Codex, AgentKind::Gemini];
+    pub const ALL: [AgentKind; 3] = [AgentKind::Claude, AgentKind::Codex, AgentKind::Antigravity];
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -444,7 +446,8 @@ pub struct ProviderUsage {
 pub enum ImportSource {
     Claude,
     Codex,
-    Gemini,
+    #[serde(alias = "gemini")]
+    Antigravity,
     T3,
 }
 

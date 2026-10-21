@@ -1,13 +1,13 @@
 import type { ImportSource } from "~/api";
 import claudeIcon from "../../../../assets/claude-color.svg";
-import geminiIcon from "../../../../assets/gemini-color.svg";
+import antigravityIcon from "../../../../assets/gemini-color.svg";
 import openaiIcon from "../../../../assets/openai.svg";
 import t3Icon from "../../../../assets/t3.svg";
 
 const LOGOS: Record<ImportSource, string> = {
   claude: claudeIcon,
   codex: openaiIcon,
-  gemini: geminiIcon,
+  antigravity: antigravityIcon,
   t3: t3Icon,
 };
 
