@@ -403,7 +403,6 @@ function TasksView({
               {...drag.attrs}
               draggable={!editing}
               className={`group mt-1.5 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-left text-fg hover:bg-hover ${drag.edge} ${drag.dragging ? "opacity-50" : ""} ${isPicked(row) ? "ring-1 ring-inset ring-border-focus" : ""}`}
-              title={p.path}
               onClick={(e) => {
                 if (!pickRow(e, row)) toggle(p.id);
               }}
