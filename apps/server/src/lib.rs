@@ -2,6 +2,7 @@
 //! commands and forwards agent events to the UI.
 
 pub mod import;
+pub mod orchestration;
 pub mod persistence;
 pub mod provider;
 mod runner;
@@ -62,21 +63,38 @@ pub fn title_from(text: &str) -> String {
 
 /// Whether a thread has gone idle just before its prompt cache expires, with a context large
 /// enough to be worth compacting and nothing else pending.
+/// Entries in /etc/shells that aren't shells to run agents in: git's push-only shell, and
+/// systemd's placeholder for accounts without a shell.
+const NOT_AGENT_SHELLS: [&str; 2] = ["git-shell", "systemd-home-fallback-shell"];
+
 /// Shells from /etc/shells that are installed, for the shell choice in settings. Entries that
-/// resolve to the same binary (such as /bin/sh and /usr/bin/sh) are listed once.
-/// Windows has no such file, so nothing is offered there and agents use their default.
+/// resolve to the same binary (such as /bin/zsh and /usr/bin/zsh) are listed once, under the
+/// real path when /etc/shells has it. Windows has no such file, so agents use their default there.
 pub fn available_shells() -> Vec<String> {
-    let mut seen = std::collections::HashSet::new();
-    std::fs::read_to_string("/etc/shells")
+    let listed: Vec<(String, PathBuf)> = std::fs::read_to_string("/etc/shells")
         .unwrap_or_default()
         .lines()
         .map(str::trim)
         .filter(|line| line.starts_with('/') && Path::new(line).is_file())
         .filter(|line| {
-            let real = std::fs::canonicalize(line).unwrap_or_else(|_| PathBuf::from(line));
-            seen.insert(real)
+            let name = Path::new(line).file_name().and_then(|n| n.to_str());
+            !name.is_some_and(|n| NOT_AGENT_SHELLS.contains(&n))
         })
-        .map(str::to_string)
+        .map(|line| {
+            let real = std::fs::canonicalize(line).unwrap_or_else(|_| PathBuf::from(line));
+            (line.to_string(), real)
+        })
+        .collect();
+    listed
+        .iter()
+        .filter(|(path, real)| {
+            let kept = listed
+                .iter()
+                .find(|(p, r)| r == real && Path::new(p) == real.as_path())
+                .or_else(|| listed.iter().find(|(_, r)| r == real));
+            kept.is_some_and(|(p, _)| p == path)
+        })
+        .map(|(path, _)| path.clone())
         .collect()
 }
 

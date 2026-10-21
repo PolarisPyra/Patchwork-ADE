@@ -1,7 +1,9 @@
 import {
+  createContext,
   lazy,
   memo,
   Suspense,
+  useContext,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -48,6 +50,15 @@ import { formatClock } from "~/lib/util";
 const Markdown = lazy(() => import("~/components/chat/Markdown"));
 
 type OpenCanvas = (path: string, message: Message | null, tab: CanvasTab) => void;
+
+/** The shell the user chose for commands, or null to follow the system. */
+export const ShellContext = createContext<string | null>(null);
+
+/** Claude names every shell command "Bash"; show the shell the command runs in instead. */
+function toolLabel(name: string, shell: string | null): string {
+  if (name !== "Bash") return name;
+  return shell ? (shell.split("/").pop() ?? shell) : "shell";
+}
 
 interface MessagesProps {
   thread: Thread;
@@ -425,6 +436,7 @@ function PlanList({ steps }: { steps: PlanStep[] }) {
 
 function ToolActivity({ tools }: { tools: ToolCall[] }) {
   const [open, setOpen] = useState(false);
+  const shell = useContext(ShellContext);
   return (
     <div>
       <button
@@ -440,7 +452,7 @@ function ToolActivity({ tools }: { tools: ToolCall[] }) {
           {tools.map((tool) => (
             <li key={tool.id} className="flex min-w-0 items-center gap-2 [&>svg]:mt-0">
               <StepIcon status={tool.status} />
-              <span className="flex-none font-semibold">{tool.name}</span>
+              <span className="flex-none font-semibold">{toolLabel(tool.name, shell)}</span>
               <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-fg-muted">
                 {tool.summary}
               </span>
@@ -485,9 +497,10 @@ function useHeldTool(running: ToolCall | undefined): ToolCall | undefined {
 
 /** The call running now, its label shimmering until it ends. */
 function LiveTool({ tool }: { tool: ToolCall }) {
+  const shell = useContext(ShellContext);
   return (
     <div className="flex min-w-0 items-center gap-1.5 px-1 text-[length:var(--fs-sm)]">
-      <span className="tool-shine flex-none">Running {tool.name}</span>
+      <span className="tool-shine flex-none">Running {toolLabel(tool.name, shell)}</span>
       {tool.summary && (
         <span className="min-w-0 truncate font-[family-name:var(--font-mono)] text-[12px] text-fg-subtle">
           {tool.summary}
@@ -528,6 +541,7 @@ function SubagentGroup({
   agent: AgentKind;
 }) {
   const [open, setOpen] = useState(false);
+  const shell = useContext(ShellContext);
   const working = subagents.filter(isActive).length;
   const failed = subagents.filter((t) => t.status === "error").length;
   const now = useNow(working > 0);
@@ -582,7 +596,7 @@ function SubagentGroup({
                 <span className="min-w-0 flex-none truncate font-medium">{titleOf(t)}</span>
                 {current ? (
                   <span className="tool-shine min-w-0 truncate text-[length:var(--fs-sm)]">
-                    Running {current.name}
+                    Running {toolLabel(current.name, shell)}
                   </span>
                 ) : (
                   <span className="min-w-0 truncate text-[length:var(--fs-sm)] text-fg-muted">

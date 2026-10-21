@@ -14,6 +14,7 @@ use std::time::Duration;
 use std::os::unix::process::CommandExt;
 
 use crate::Server;
+use crate::orchestration;
 use crate::provider::{self, GoalUpdate, Parsed, TurnSpec};
 use crate::types::*;
 use crate::workspace;
@@ -129,7 +130,10 @@ impl Runner {
         // Agents often edit files through the shell, so changes are also found by
         // comparing git state before and after the turn.
         let baseline = workspace::git_changes(&root).unwrap_or_default();
-        let args = provider::turn_args(agent, &spec);
+        let mut args = provider::turn_args(agent, &spec);
+        if agent == AgentKind::Claude {
+            args.extend(orchestration::claude::launch_args(&server.store.settings()));
+        }
         let input = provider::turn_input(agent, &spec);
         let mut cmd = provider::agent_command(agent)?;
         if let Some(shell) = server.store.settings().shell {

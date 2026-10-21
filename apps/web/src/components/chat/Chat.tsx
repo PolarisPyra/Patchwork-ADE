@@ -31,7 +31,7 @@ import { parseChoices } from "~/components/chat/choices";
 import GoalBanner, { currentActivity } from "~/components/chat/GoalBanner";
 import LineageCard from "~/components/chat/LineageCard";
 import type { HistoryEntry } from "~/components/chat/Composer";
-import Messages from "~/components/chat/Messages";
+import Messages, { ShellContext } from "~/components/chat/Messages";
 import PendingApprovalBanner from "~/components/chat/PendingApprovalBanner";
 import ResumePrompt from "~/components/chat/ResumePrompt";
 import { isWorking, type NewThreadOptions } from "~/hooks/useThreads";
@@ -58,6 +58,8 @@ interface ChatProps {
   /** Connected agents offered in the composer's agent picker. */
   agents: AgentKind[];
   tokens: TokenSettings;
+  /** The shell the user chose for commands, or null to follow the system. */
+  shell: string | null;
   onUpdateTokens: (patch: Partial<TokenSettings>) => void;
   onOpenFolder: () => void;
   onOpenCanvas: (path: string, message: Message | null, tab: CanvasTab) => void;
@@ -83,6 +85,7 @@ export default function Chat({
   defaultAgent,
   agents,
   tokens,
+  shell,
   onUpdateTokens,
   onOpenFolder,
   onOpenCanvas,
@@ -417,16 +420,18 @@ export default function Chat({
       )}
       <div className={`flex min-h-0 flex-col ${isNew ? "flex-none overflow-y-auto" : "flex-1"}`}>
         {!isNew ? (
-          <Messages
-            key={thread.id}
-            thread={thread}
-            changes={changes}
-            busy={working}
-            onOpenCanvas={project ? openCanvas : undefined}
-            onShowChanges={showChanges}
-            onRetry={retry}
-            tokens={tokens}
-          />
+          <ShellContext.Provider value={shell}>
+            <Messages
+              key={thread.id}
+              thread={thread}
+              changes={changes}
+              busy={working}
+              onOpenCanvas={project ? openCanvas : undefined}
+              onShowChanges={showChanges}
+              onRetry={retry}
+              tokens={tokens}
+            />
+          </ShellContext.Provider>
         ) : (
           <div className="flex h-auto flex-col items-center justify-center gap-4 p-6 text-center">
             <ProviderLogos kind={agent} size={40} />
