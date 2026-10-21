@@ -151,6 +151,29 @@ export interface Target {
 
 const sameTarget = (a: Target, b: Target) => a.kind === b.kind && a.id === b.id;
 
+/** Ctrl+A picks the given rows, unless a text field has focus, where it selects the text. */
+function useSelectAll(targets: Target[], setPicked: (targets: Target[]) => void) {
+  useEffect(() => {
+    function onKey(e: globalThis.KeyboardEvent) {
+      const el = document.activeElement;
+      // The composer takes focus when a chat opens; an empty one has no text to select, so rows win.
+      const emptyComposer =
+        el instanceof HTMLElement && !!el.closest(".composer-editor") && !el.textContent?.trim();
+      const typing =
+        el instanceof HTMLElement &&
+        (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) &&
+        !emptyComposer;
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "a" || typing) return;
+      e.preventDefault();
+      // Leaves the composer, so Delete reaches the picked rows.
+      if (el instanceof HTMLElement && emptyComposer) el.blur();
+      setPicked(targets);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [targets, setPicked]);
+}
+
 export default function Sidebar(props: SidebarProps) {
   return (
     <aside className="flex min-h-0 w-[300px] flex-none flex-col border-r border-border bg-panel text-[length:var(--fs-md)] [--fs-xs:13px] [--fs-sm:14px] [--fs-md:15px]">
@@ -311,6 +334,22 @@ function TasksView({
     });
     setRenaming({ kind: "folder", id: folder.id });
   };
+
+  // Ctrl+A picks the chats and tasks on screen: those in collapsed projects or folders are hidden.
+  const visible = [
+    ...chats,
+    ...projects
+      .filter((p) => !collapsed.has(p.id))
+      .flatMap((p) =>
+        threads.filter(
+          (t) =>
+            t.projectId === p.id && (t.folderId === null || !collapsed.has(`folder:${t.folderId}`)),
+        ),
+      ),
+  ]
+    .filter((t) => !leavingIds.has(t.id))
+    .map((t): Target => ({ kind: "thread", id: t.id }));
+  useSelectAll(visible, setPicked);
 
   if (!loaded) return null;
 
@@ -681,8 +720,29 @@ function ArchivedView({
   onSelectThread,
   onRestoreThread,
   onDeleteArchived,
+  picked,
+  setPicked,
 }: SidebarProps) {
   const [menu, setMenu] = useState<{ x: number; y: number; thread: Thread } | null>(null);
+  const targetOf = (id: string): Target => ({ kind: "thread", id });
+  const isPicked = (id: string) => picked.some((p) => sameTarget(p, targetOf(id)));
+  // Ctrl+click picks a thread for deleting together; a plain click clears the picks and opens it.
+  const pick = (e: MouseEvent, id: string) => {
+    if (!e.ctrlKey) {
+      setPicked([]);
+      onSelectThread(id);
+      return;
+    }
+    setPicked((prev) =>
+      prev.some((p) => sameTarget(p, targetOf(id)))
+        ? prev.filter((p) => !sameTarget(p, targetOf(id)))
+        : [...prev, targetOf(id)],
+    );
+  };
+  useSelectAll(
+    archivedThreads.map((t) => targetOf(t.id)),
+    setPicked,
+  );
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto overflow-x-hidden p-2 [scrollbar-gutter:stable] *:shrink-0">
       <SectionLabel>Archived</SectionLabel>
@@ -692,8 +752,8 @@ function ArchivedView({
       {archivedThreads.map((t) => (
         <div
           key={t.id}
-          className={`group mx-1.5 mb-1.5 flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 py-1.5 text-fg ${t.id === selectedId ? "bg-selected font-medium" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"}`}
-          onClick={() => onSelectThread(t.id)}
+          className={`group mx-1.5 mb-1.5 flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 py-1.5 text-fg ${t.id === selectedId ? "bg-selected font-medium" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${isPicked(t.id) ? "ring-1 ring-inset ring-border-focus" : ""}`}
+          onClick={(e) => pick(e, t.id)}
           onContextMenu={(e) => {
             e.preventDefault();
             setMenu({ x: e.clientX, y: e.clientY, thread: t });

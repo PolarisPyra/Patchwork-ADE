@@ -100,10 +100,10 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
   const connectedAgents = AGENT_KINDS.filter((k) => settings.agents.includes(k));
 
   const [view, setView] = useState<SidebarView | null>("tasks");
-  // Rows picked in the task list for removing together; Ctrl+W and Delete act on them.
+  // Rows picked for removing together, in the view they were picked in; Ctrl+W and Delete act on them.
   const [picked, setPicked] = useState<Target[]>([]);
   useEffect(() => {
-    if (view !== "tasks") setPicked([]);
+    setPicked([]);
   }, [view]);
   // Chats and tasks being archived: their rows stay mounted, collapsing, until the archive lands.
   const [leavingIds, setLeavingIds] = useState<ReadonlySet<string>>(new Set());
@@ -232,6 +232,29 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     attempt(() => deleteThread(id));
   };
 
+  /** Asks once, then deletes the picked archived chats or tasks for good. */
+  const deleteArchivedMany = async (ids: string[]) => {
+    if (ids.length === 1) return deleteArchived(ids[0]);
+    if (
+      !(await confirm(
+        `Delete ${ids.length} items permanently? Their messages cannot be recovered.`,
+        {
+          title: "Delete",
+          kind: "warning",
+        },
+      ))
+    )
+      return;
+    setPicked([]);
+    attempt(async () => {
+      for (const id of ids) await deleteThread(id);
+    });
+  };
+
+  /** Ctrl+W and Delete act on picked rows: in the archive they delete them, elsewhere they remove them. */
+  const removePicked = (targets: Target[]) =>
+    view === "archived" ? deleteArchivedMany(targets.map((t) => t.id)) : removeTargets(targets);
+
   // Project order is saved with the settings; the backend keeps the list's order.
   const reorderProjects = (ids: string[]) =>
     attempt(() =>
@@ -332,6 +355,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         if (paletteOpen) setPaletteOpen(false);
         else if (settingsOpen) setSettingsOpen(false);
         else if (openCanvas) setCanvas(null);
+        else if (picked.length > 0) setPicked([]);
         else return;
       } else if (mod && key === "k") {
         setPaletteOpen((o) => !o);
@@ -340,7 +364,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       } else if (mod && key === "n") {
         newThreadHere();
       } else if (mod && key === "w" && picked.length > 0) {
-        void removeTargets(picked);
+        void removePicked(picked);
       } else if (mod && key === "w" && selected) {
         void removeTargets([{ kind: "thread", id: selected.id }]);
       } else if (
@@ -348,7 +372,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         picked.length > 0 &&
         !isTypingTarget(document.activeElement)
       ) {
-        void removeTargets(picked);
+        void removePicked(picked);
       } else if (mod && e.key === ",") {
         setSettingsOpen(true);
       } else if (e.key === "Tab" && !e.shiftKey && !isTypingTarget(document.activeElement)) {
