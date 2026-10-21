@@ -730,27 +730,30 @@ const SHORTCUT_PAGES: { title: string; shortcuts: { keys: string[]; action: stri
       },
       { keys: ["Ctrl", ","], action: "Open settings" },
       { keys: ["Tab"], action: "Jump to the composer, outside a text field" },
-      { keys: ["Esc"], action: "Close search, settings or a canvas; otherwise clear the picks" },
+      {
+        keys: ["Esc"],
+        action: "Close search, settings or a canvas; otherwise clear the selection",
+      },
     ],
   },
   {
     title: "Sidebar",
     shortcuts: [
-      { keys: ["Ctrl", "A"], action: "Pick every chat and task on screen" },
-      { keys: ["Ctrl", "Click"], action: "Pick or unpick a chat or task" },
-      { keys: ["Delete"], action: "Remove the picked rows" },
+      { keys: ["Ctrl", "A"], action: "Select every chart or task on screen" },
+      { keys: ["Ctrl", "Click"], action: "Select or unselect a chart or task" },
+      { keys: ["Delete"], action: "Remove the selected charts or tasks" },
       {
         keys: ["Ctrl", "W"],
-        action: "Remove the picked rows, or the open chat if none are picked",
+        action: "Remove the selected charts or tasks",
       },
     ],
   },
   {
     title: "Archive",
     shortcuts: [
-      { keys: ["Ctrl", "A"], action: "Pick every archived chat" },
-      { keys: ["Ctrl", "Click"], action: "Pick or unpick an archived chat" },
-      { keys: ["Delete"], action: "Delete the picked chats for good" },
+      { keys: ["Ctrl", "A"], action: "Select every archived chat" },
+      { keys: ["Ctrl", "Click"], action: "Select or unselect an archived chat" },
+      { keys: ["Delete"], action: "Delete the selected chats for good" },
     ],
   },
   {

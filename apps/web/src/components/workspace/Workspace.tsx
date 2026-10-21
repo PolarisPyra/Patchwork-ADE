@@ -345,8 +345,8 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     document.addEventListener("mouseup", onUp);
   }
 
-  // Ctrl+W and Delete remove the picked rows, archiving any chats or tasks among them; with none
-  // picked, Ctrl+W removes the open thread. Global shortcuts. Re-registered each render so handlers see current state.
+  // Ctrl+W and Delete act on the picked rows only; with none picked they do nothing. Global
+  // shortcuts. Re-registered each render so handlers see current state.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const mod = e.ctrlKey || e.metaKey;
@@ -365,8 +365,6 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         newThreadHere();
       } else if (mod && key === "w" && picked.length > 0) {
         void removePicked(picked);
-      } else if (mod && key === "w" && selected) {
-        void removeTargets([{ kind: "thread", id: selected.id }]);
       } else if (
         e.key === "Delete" &&
         picked.length > 0 &&
