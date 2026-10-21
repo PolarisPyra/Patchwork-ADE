@@ -372,8 +372,8 @@ function AgentLabel({
   workedMs: number | null;
 }) {
   return (
-    <header className="flex items-center gap-2">
-      <span className="text-[length:var(--fs-xs)] font-semibold tracking-[0.05em] text-fg-muted uppercase">
+    <header className="flex min-w-0 items-center gap-2">
+      <span className="flex-none text-[length:var(--fs-xs)] font-semibold tracking-[0.05em] text-fg-muted uppercase">
         {AGENT_LABELS[agent]}
       </span>
       <StatusBadge status={status} workedMs={workedMs} />
@@ -400,10 +400,12 @@ function StatusBadge({ status, workedMs }: { status: MessageStatus; workedMs: nu
       );
     case "complete":
       return (
-        <span className="badge badge-accent">
-          <CheckIcon size={12} />
-          Task complete
-          {workedMs !== null && ` · Worked for ${fullElapsed(workedMs)}`}
+        <span className="badge badge-accent min-w-0">
+          <CheckIcon size={12} className="flex-none" />
+          <span className="truncate">
+            Task complete
+            {workedMs !== null && ` · Worked for ${fullElapsed(workedMs)}`}
+          </span>
         </span>
       );
     case "error":
@@ -631,9 +633,9 @@ function ChangeSummary({
   const additions = found.reduce((sum, c) => sum + c.additions, 0);
   const deletions = found.reduce((sum, c) => sum + c.deletions, 0);
   return (
-    <div className="flex items-center gap-3 rounded-[var(--radius)] border border-border bg-panel px-3 py-2 text-[length:var(--fs-sm)]">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--radius)] border border-border bg-panel px-3 py-2 text-[length:var(--fs-sm)]">
       <GitDiffIcon size={14} className="flex-none text-fg-muted" />
-      <span>
+      <span className="whitespace-nowrap">
         {paths.length} {paths.length === 1 ? "file" : "files"} changed
       </span>
       {found.length > 0 && (
@@ -643,7 +645,7 @@ function ChangeSummary({
         </>
       )}
       <span className="flex-1" />
-      <button className="btn" onClick={onShow}>
+      <button className="btn flex-none" onClick={onShow}>
         Show changes
       </button>
     </div>

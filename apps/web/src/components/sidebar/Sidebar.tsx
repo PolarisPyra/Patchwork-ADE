@@ -151,7 +151,7 @@ const sameTarget = (a: Target, b: Target) => a.kind === b.kind && a.id === b.id;
 
 export default function Sidebar(props: SidebarProps) {
   return (
-    <aside className="flex min-h-0 w-[264px] flex-none flex-col border-r border-border bg-panel text-[length:var(--fs-md)] [--fs-xs:13px] [--fs-sm:14px] [--fs-md:15px]">
+    <aside className="flex min-h-0 w-[300px] flex-none flex-col border-r border-border bg-panel text-[length:var(--fs-md)] [--fs-xs:13px] [--fs-sm:14px] [--fs-md:15px]">
       <button
         className="mx-2 mt-3 mb-0.5 flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border border-border bg-input px-2 text-[length:var(--fs-sm)] text-fg-muted hover:border-border-strong hover:text-fg"
         onClick={props.onOpenPalette}
@@ -389,7 +389,6 @@ function TasksView({
             thread={t}
             {...rowProps}
             nested={folderId !== null}
-            roomy
             drag={reorder.row(
               group,
               t.id,
@@ -403,7 +402,7 @@ function TasksView({
             <div
               {...drag.attrs}
               draggable={!editing}
-              className={`group mt-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-left text-fg hover:bg-hover ${drag.edge} ${drag.dragging ? "opacity-50" : ""} ${isPicked(row) ? "ring-1 ring-inset ring-border-focus" : ""}`}
+              className={`group mt-1.5 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-left text-fg hover:bg-hover ${drag.edge} ${drag.dragging ? "opacity-50" : ""} ${isPicked(row) ? "ring-1 ring-inset ring-border-focus" : ""}`}
               title={p.path}
               onClick={(e) => {
                 if (!pickRow(e, row)) toggle(p.id);
@@ -589,7 +588,6 @@ function ThreadRow({
   onCancelRename,
   drag,
   nested = false,
-  roomy = false,
 }: {
   thread: Thread;
   selectedId: string | null;
@@ -603,8 +601,6 @@ function ThreadRow({
   onCancelRename: () => void;
   drag: RowDrag;
   nested?: boolean;
-  /** Project tasks get more vertical room than chats. */
-  roomy?: boolean;
 }) {
   const target: Target = { kind: "thread", id: thread.id };
   const editing = renaming?.kind === "thread" && renaming.id === thread.id;
@@ -616,64 +612,60 @@ function ThreadRow({
     <div
       {...drag.attrs}
       draggable={!editing}
-      className={`group flex cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none ${roomy ? (nested ? "mb-1.5" : "my-2") : "mb-1.5"} ${nested ? "ml-6 mr-1.5" : "mx-1.5"} px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${picked ? "ring-1 ring-inset ring-border-focus" : ""} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
+      className={`group flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none ${nested ? "mb-1" : "my-0.5"} ${nested ? "ml-6 mr-1.5" : "mx-1.5"} px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${picked ? "ring-1 ring-inset ring-border-focus" : ""} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
       onClick={(e) => {
         if (!onPick(e, target)) onSelectThread(thread.id);
       }}
       onContextMenu={(e) => onContextMenu(e, { kind: "thread", id: thread.id })}
     >
-      <div className="flex min-h-5 min-w-0 items-center gap-1.5">
-        {editing ? (
-          <InlineName
-            initial={thread.title}
-            onCommit={(name) =>
-              onCommitRename({ kind: "thread", id: thread.id }, name, thread.title)
-            }
-            onCancel={onCancelRename}
-          />
-        ) : (
-          <span
-            className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${selected ? "font-medium text-fg" : ""}`}
-          >
-            {displayTitle(thread.title)}
-          </span>
-        )}
+      {editing ? (
+        <InlineName
+          initial={thread.title}
+          onCommit={(name) => onCommitRename({ kind: "thread", id: thread.id }, name, thread.title)}
+          onCancel={onCancelRename}
+        />
+      ) : (
         <span
-          className={`flex-none text-[length:var(--fs-xs)] group-hover:hidden ${selected ? "text-fg-muted" : "text-fg-subtle"}`}
+          className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${selected ? "font-medium text-fg" : ""}`}
         >
-          {formatRelative(last?.createdAt ?? thread.createdAt)}
+          {displayTitle(thread.title)}
         </span>
-        <button
-          className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex hover:bg-border-strong"
-          title="Archive"
-          aria-label="Archive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onArchiveThread(thread);
-          }}
-        >
-          <ArchiveIcon size={16} />
-        </button>
-      </div>
-      <div className="flex min-h-5 min-w-0 items-center justify-end gap-1.5">
+      )}
+      {/* A fixed, left-aligned slot so the times line up. It shows the time, or a spinner or approval shield. */}
+      <span className="flex w-9 flex-none items-center">
         {needsApproval ? (
           <span title="Waiting for approval" className="inline-flex flex-none text-warning">
-            <ShieldWarningIcon size={17} />
+            <ShieldWarningIcon size={15} />
+          </span>
+        ) : isWorking(thread) ? (
+          <span title="Working" className="inline-flex flex-none">
+            <CircleNotchIcon size={15} className="spin text-accent-text" />
           </span>
         ) : (
-          isWorking(thread) && (
-            <span title="Working" className="inline-flex flex-none">
-              <CircleNotchIcon size={17} className="spin text-accent-text" />
-            </span>
-          )
+          <span
+            className={`text-[length:var(--fs-xs)] ${selected ? "text-fg-muted" : "text-fg-subtle"}`}
+          >
+            {formatRelative(last?.createdAt ?? thread.createdAt)}
+          </span>
         )}
-        <span
-          className="inline-flex h-5 w-5 flex-none items-center justify-center"
-          title={AGENT_LABELS[thread.agent]}
-        >
-          <ProviderLogos kind={thread.agent} size={16} />
-        </span>
-      </div>
+      </span>
+      <button
+        className="btn-icon h-5 w-5 flex-none hover:bg-border-strong"
+        title="Archive"
+        aria-label="Archive"
+        onClick={(e) => {
+          e.stopPropagation();
+          onArchiveThread(thread);
+        }}
+      >
+        <ArchiveIcon size={16} />
+      </button>
+      <span
+        className="inline-flex h-5 w-5 flex-none items-center justify-center"
+        title={AGENT_LABELS[thread.agent]}
+      >
+        <ProviderLogos kind={thread.agent} size={16} />
+      </span>
     </div>
   );
 }

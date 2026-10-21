@@ -422,7 +422,7 @@ export default function Composer({
         </div>
       )}
       <EditorContent editor={editor} className="composer-editor min-w-0" />
-      <div className="flex items-center gap-1.5">
+      <div className="@container flex flex-wrap items-center gap-1.5">
         <ModelPicker
           agent={agent}
           model={model}
@@ -433,7 +433,10 @@ export default function Composer({
         <EffortPicker agent={agent} effort={effort} onPick={onPickEffort} />
         <AccessPicker mode={accessMode} onPick={onPickAccess} />
         <span className="flex-1" />
-        <FormatBar editor={editor} />
+        {/* Hidden when the composer is too narrow for the pickers and the formatting buttons together. */}
+        <div className="hidden @[640px]:block">
+          <FormatBar editor={editor} />
+        </div>
         {working && (
           <button
             className="grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-selected-muted text-fg enabled:hover:bg-accent-hover"
