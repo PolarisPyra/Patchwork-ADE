@@ -20,13 +20,48 @@ interface FormatButtonSpec {
 }
 
 const BUTTONS: FormatButtonSpec[] = [
-  { label: "Bold", name: "bold", Icon: TextBIcon, toggle: (e) => e.chain().focus().toggleBold().run() },
-  { label: "Italic", name: "italic", Icon: TextItalicIcon, toggle: (e) => e.chain().focus().toggleItalic().run() },
-  { label: "Strikethrough", name: "strike", Icon: TextStrikethroughIcon, toggle: (e) => e.chain().focus().toggleStrike().run() },
-  { label: "Inline code", name: "code", Icon: CodeIcon, toggle: (e) => e.chain().focus().toggleCode().run() },
-  { label: "Code block", name: "codeBlock", Icon: CodeBlockIcon, toggle: (e) => e.chain().focus().toggleCodeBlock().run() },
-  { label: "Bullet list", name: "bulletList", Icon: ListBulletsIcon, toggle: (e) => e.chain().focus().toggleBulletList().run() },
-  { label: "Numbered list", name: "orderedList", Icon: ListNumbersIcon, toggle: (e) => e.chain().focus().toggleOrderedList().run() },
+  {
+    label: "Bold",
+    name: "bold",
+    Icon: TextBIcon,
+    toggle: (e) => e.chain().focus().toggleBold().run(),
+  },
+  {
+    label: "Italic",
+    name: "italic",
+    Icon: TextItalicIcon,
+    toggle: (e) => e.chain().focus().toggleItalic().run(),
+  },
+  {
+    label: "Strikethrough",
+    name: "strike",
+    Icon: TextStrikethroughIcon,
+    toggle: (e) => e.chain().focus().toggleStrike().run(),
+  },
+  {
+    label: "Inline code",
+    name: "code",
+    Icon: CodeIcon,
+    toggle: (e) => e.chain().focus().toggleCode().run(),
+  },
+  {
+    label: "Code block",
+    name: "codeBlock",
+    Icon: CodeBlockIcon,
+    toggle: (e) => e.chain().focus().toggleCodeBlock().run(),
+  },
+  {
+    label: "Bullet list",
+    name: "bulletList",
+    Icon: ListBulletsIcon,
+    toggle: (e) => e.chain().focus().toggleBulletList().run(),
+  },
+  {
+    label: "Numbered list",
+    name: "orderedList",
+    Icon: ListNumbersIcon,
+    toggle: (e) => e.chain().focus().toggleOrderedList().run(),
+  },
 ];
 
 function FormatButton({ editor, spec }: { editor: Editor | null; spec: FormatButtonSpec }) {

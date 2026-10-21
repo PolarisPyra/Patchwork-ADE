@@ -270,6 +270,16 @@ export default function Composer({
     if (editor.isFocused) editor.commands.focus("end");
   }, [editor, value]);
 
+  // The Stop button holds focus once clicked, and it leaves the page when the turn or goal ends,
+  // which drops focus to the body. Focus the editor then, unless the user moved elsewhere.
+  const wasWorking = useRef(working);
+  useEffect(() => {
+    if (wasWorking.current && !working && editor && document.activeElement === document.body) {
+      editor.commands.focus("end");
+    }
+    wasWorking.current = working;
+  }, [editor, working]);
+
   const recalled = useRef<Recalled | null>(null);
 
   function complete(name: string) {

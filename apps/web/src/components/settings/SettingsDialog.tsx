@@ -153,15 +153,7 @@ function AppearancePane({ settings, updateSettings }: PaneProps) {
 const TOKEN_LEVELS = [100_000, 150_000, 200_000, 300_000];
 
 /** One setting: its name and what it does, with the control on the right. */
-function TokenRow({
-  title,
-  desc,
-  children,
-}: {
-  title: string;
-  desc: string;
-  children: ReactNode;
-}) {
+function TokenRow({ title, desc, children }: { title: string; desc: string; children: ReactNode }) {
   return (
     <div className="flex items-center gap-3 border-b border-border py-2.5">
       <div className="min-w-0 flex-1">
@@ -257,7 +249,13 @@ function DefaultModel({
     >
       <option value="">CLI default</option>
       {models.flatMap((m) =>
-        m.id ? [<option key={m.id} value={m.id}>{m.label}</option>] : [],
+        m.id
+          ? [
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>,
+            ]
+          : [],
       )}
     </select>
   );

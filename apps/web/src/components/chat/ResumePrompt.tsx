@@ -16,8 +16,8 @@ export default function ResumePrompt({ idleMs, context, onAnswer }: ResumePrompt
   return (
     <div className="mb-1.5 flex flex-col gap-2 rounded-[var(--radius)] border border-border-strong bg-panel p-2.5 text-[length:var(--fs-sm)]">
       <p className="m-0">
-        This session has been idle for {compactElapsed(idleMs)} and uses{" "}
-        {formatTokens(context)} tokens. Compact before continuing?
+        This session has been idle for {compactElapsed(idleMs)} and uses {formatTokens(context)}{" "}
+        tokens. Compact before continuing?
       </p>
       <div className="flex items-center justify-between gap-1.5">
         <label className="flex cursor-pointer items-center gap-1.5 text-fg-muted">

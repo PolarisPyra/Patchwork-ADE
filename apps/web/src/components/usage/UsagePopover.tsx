@@ -126,10 +126,7 @@ export default function UsagePopover({ agents }: { agents: AgentKind[] }) {
               aria-label="Refresh"
               onClick={() => load(true)}
             >
-              <ArrowsClockwiseIcon
-                size={14}
-                className={pending.length > 0 ? "spin" : undefined}
-              />
+              <ArrowsClockwiseIcon size={14} className={pending.length > 0 ? "spin" : undefined} />
             </button>
           </div>
           {agents.length === 0 && (
