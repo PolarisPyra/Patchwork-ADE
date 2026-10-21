@@ -1,7 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=Patchwork
-Exec=patchwork
+Exec=@EXEC@
 Icon=patchwork
 StartupWMClass=patchwork
-NoDisplay=true
+Categories=Development;
+Terminal=false
