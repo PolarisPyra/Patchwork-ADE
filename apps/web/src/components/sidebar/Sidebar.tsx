@@ -101,6 +101,8 @@ interface SidebarProps {
   projects: Project[];
   /** Every thread; chats without a project and each project's tasks are grouped here. */
   threads: Thread[];
+  /** Chats and tasks collapsing out of the list, on their way to the archive. */
+  leavingIds: ReadonlySet<string>;
   selectedId: string | null;
   changes: FileChange[];
   /** Starts a new task in the given project. */
@@ -192,6 +194,7 @@ function SectionLabel({ children, action }: { children: ReactNode; action?: Reac
 function TasksView({
   projects,
   threads,
+  leavingIds,
   folders,
   selectedId,
   onNewTask,
@@ -327,12 +330,13 @@ function TasksView({
         <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">No chats yet</div>
       )}
       {chats.map((t) => (
-        <ThreadRow
-          key={t.id}
-          thread={t}
-          {...rowProps}
-          drag={reorder.row(CHATS_GROUP, t.id, chatIds, null)}
-        />
+        <Collapse key={t.id} open={!leavingIds.has(t.id)}>
+          <ThreadRow
+            thread={t}
+            {...rowProps}
+            drag={reorder.row(CHATS_GROUP, t.id, chatIds, null)}
+          />
+        </Collapse>
       ))}
       {menu && (
         <ContextMenu
@@ -384,18 +388,19 @@ function TasksView({
         const group = `${TASKS_GROUP_PREFIX}${p.id}`;
         const topLevel = tasks.filter((t) => t.folderId === null);
         const taskRow = (t: Thread, folderId: string | null, list: Thread[]) => (
-          <ThreadRow
-            key={t.id}
-            thread={t}
-            {...rowProps}
-            nested={folderId !== null}
-            drag={reorder.row(
-              group,
-              t.id,
-              list.map((x) => x.id),
-              folderId,
-            )}
-          />
+          <Collapse key={t.id} open={!leavingIds.has(t.id)}>
+            <ThreadRow
+              thread={t}
+              {...rowProps}
+              nested={folderId !== null}
+              drag={reorder.row(
+                group,
+                t.id,
+                list.map((x) => x.id),
+                folderId,
+              )}
+            />
+          </Collapse>
         );
         return (
           <div key={p.id}>
@@ -604,13 +609,14 @@ function ThreadRow({
   const editing = renaming?.kind === "thread" && renaming.id === thread.id;
   const selected = thread.id === selectedId;
   const picked = isPicked(target);
+  const goalActive = thread.goal?.status === "active";
   const last = thread.messages[thread.messages.length - 1];
   const needsApproval = last?.approvals.some((a) => a.status === "pending") ?? false;
   return (
     <div
       {...drag.attrs}
       draggable={!editing}
-      className={`group flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none ${nested ? "mb-1" : "my-0.5"} ${nested ? "ml-6 mr-1.5" : "mx-1.5"} px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${picked ? "ring-1 ring-inset ring-border-focus" : ""} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
+      className={`group flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none ${nested ? "mb-1" : "my-0.5"} ${nested ? "ml-6 mr-1.5" : "mx-1.5"} px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${picked ? "ring-1 ring-inset ring-border-focus" : ""} ${goalActive ? "goal-ring" : ""} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
       onClick={(e) => {
         if (!onPick(e, target)) onSelectThread(thread.id);
       }}

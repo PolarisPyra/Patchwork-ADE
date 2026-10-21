@@ -46,6 +46,8 @@ interface GitState {
 
 const CANVAS_MIN_PX = 340;
 const CANVAS_MAX_FRACTION = 0.7;
+// How long an archived row takes to collapse out of the list. Matches the sidebar's Collapse.
+const ARCHIVE_COLLAPSE_MS = 200;
 
 // One shared empty list, so the chat's memoized rows see the same `changes` on every render.
 const NO_CHANGES: FileChange[] = [];
@@ -103,6 +105,17 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
   useEffect(() => {
     if (view !== "tasks") setPicked([]);
   }, [view]);
+  // Chats and tasks being archived: their rows stay mounted, collapsing, until the archive lands.
+  const [leavingIds, setLeavingIds] = useState<ReadonlySet<string>>(new Set());
+  // Forgets a row once its chat is no longer live, so restoring it later opens at full height.
+  useEffect(() => {
+    setLeavingIds((prev) => {
+      const next = new Set(
+        [...prev].filter((id) => threads.some((t) => t.id === id && t.archivedAt === null)),
+      );
+      return next.size === prev.size ? prev : next;
+    });
+  }, [threads]);
   // Files of the reply whose "Show changes" was clicked; pinned at the top of the Changes view.
   const [changeFocus, setChangeFocus] = useState<string[] | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -186,8 +199,21 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         await reload();
       }
       for (const id of folderIds) await removeFolder(id);
-      for (const id of threadIds) await setThreadArchived(id, true);
+      await archiveThreads(threadIds);
     });
+  };
+
+  /** Collapses the chats' and tasks' rows out of the list, then archives them, so the rows below glide up instead of jumping. */
+  const archiveThreads = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    setLeavingIds((prev) => new Set([...prev, ...ids]));
+    try {
+      await new Promise((resolve) => setTimeout(resolve, ARCHIVE_COLLAPSE_MS));
+      for (const id of ids) await setThreadArchived(id, true);
+    } catch (e) {
+      setLeavingIds((prev) => new Set([...prev].filter((id) => !ids.includes(id))));
+      throw e;
+    }
   };
 
   /** Asks, then deletes an archived chat or task for good. */
@@ -417,6 +443,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             project={project}
             projects={settings.projects}
             threads={liveThreads}
+            leavingIds={leavingIds}
             archivedThreads={archivedThreads}
             onRestoreThread={(id) => attempt(() => setThreadArchived(id, false))}
             onDeleteArchived={deleteArchived}

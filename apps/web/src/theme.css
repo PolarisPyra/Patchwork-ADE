@@ -473,8 +473,56 @@
   }
 }
 
+/* The same sweep around a sidebar row whose goal is active, so a running goal shows from any
+   other tab. The ::after layer is masked down to its 1px border. The row's fill drifts slowly
+   between the selected blue and a lighter tint. The ring's stops match .goal-border. */
+.goal-ring {
+  position: relative;
+  background-image: linear-gradient(
+    135deg,
+    var(--bg-selected) 0%,
+    color-mix(in srgb, var(--bg-selected), white 10%) 50%,
+    var(--bg-selected) 100%
+  );
+  background-size: 200% 100%;
+  animation: goal-row-drift 8s ease-in-out infinite alternate;
+}
+
+@keyframes goal-row-drift {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 100% 0;
+  }
+}
+
+.goal-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--goal-angle),
+    #4285f4 0deg,
+    #9b72cb 72deg,
+    #d96570 144deg,
+    #fbbc04 216deg,
+    #34a853 288deg,
+    #4285f4 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: goal-border-turn 4s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .goal-border {
+  .goal-border,
+  .goal-ring,
+  .goal-ring::after {
     animation: none;
   }
 }
