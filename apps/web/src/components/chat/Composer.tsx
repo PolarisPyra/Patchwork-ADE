@@ -367,6 +367,11 @@ export default function Composer({
         return true;
       }
     }
+    // Escape leaves the composer, so the page's keys work again.
+    if (event.key === "Escape") {
+      editor.commands.blur();
+      return true;
+    }
     // Enter sends, unless the draft is over the limit; Shift+Enter continues a list, or starts a
     // new line (the editor's default) elsewhere.
     if (event.key === "Enter" && !event.shiftKey) {

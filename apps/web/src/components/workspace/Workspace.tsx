@@ -365,12 +365,11 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         newThreadHere();
       } else if (mod && key === "w" && picked.length > 0) {
         void removePicked(picked);
-      } else if (
-        e.key === "Delete" &&
-        picked.length > 0 &&
-        !isTypingTarget(document.activeElement)
-      ) {
-        void removePicked(picked);
+      } else if (e.key === "Delete" && !isTypingTarget(document.activeElement)) {
+        // Delete acts on the picked rows; with none picked, it archives the open chat in the task list.
+        if (picked.length > 0) void removePicked(picked);
+        else if (view === "tasks" && selected)
+          void removeTargets([{ kind: "thread", id: selected.id }]);
       } else if (mod && e.key === ",") {
         setSettingsOpen(true);
       } else if (e.key === "Tab" && !e.shiftKey && !isTypingTarget(document.activeElement)) {
