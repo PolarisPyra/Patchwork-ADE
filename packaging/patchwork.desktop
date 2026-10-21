@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Patchwork
+Exec=patchwork
+Icon=patchwork
+StartupWMClass=patchwork
+NoDisplay=true
