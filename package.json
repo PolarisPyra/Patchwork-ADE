@@ -8,7 +8,6 @@
     "dev:web": "pnpm --filter patchwork-web dev",
     "build": "pnpm --filter patchwork-desktop build",
     "appimage": "pnpm --filter patchwork-desktop tauri build --bundles appimage && mv -f \"$(ls -t target/release/bundle/appimage/Patchwork_*_amd64.AppImage | head -n 1)\" target/release/bundle/appimage/Patchwork_amd64.AppImage",
-    "install:appimage": "install -Dm755 target/release/bundle/appimage/Patchwork_amd64.AppImage \"$HOME/Applications/Patchwork-dev.AppImage\" && install -Dm644 apps/desktop/src-tauri/icons/icon.png \"$HOME/.local/share/icons/hicolor/512x512/apps/patchwork.png\" && sed \"s|@EXEC@|$HOME/Applications/Patchwork-dev.AppImage|\" packaging/patchwork.desktop > \"$HOME/.local/share/applications/patchwork.desktop\"",
     "typecheck": "pnpm --filter patchwork-web typecheck",
     "test": "cargo test --workspace",
     "tauri": "pnpm --filter patchwork-desktop tauri",
