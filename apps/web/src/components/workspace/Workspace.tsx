@@ -17,7 +17,7 @@ import { lastEffort } from "~/components/chat/EffortPicker";
 import Chat from "~/components/chat/Chat";
 import CommandPalette, { type PaletteItem } from "~/components/workspace/CommandPalette";
 import { openFolderAsProject, syncProjects } from "~/lib/projects";
-import Sidebar, { ToolStripe, type SidebarView } from "~/components/sidebar/Sidebar";
+import Sidebar, { ToolStripe, type SidebarView, type Target } from "~/components/sidebar/Sidebar";
 import StatusBar from "~/components/workspace/StatusBar";
 import Toolbar from "~/components/workspace/Toolbar";
 import { isWorking, useThreads } from "~/hooks/useThreads";
@@ -94,6 +94,11 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
   const connectedAgents = AGENT_KINDS.filter((k) => settings.agents.includes(k));
 
   const [view, setView] = useState<SidebarView | null>("tasks");
+  // Rows picked in the task list for removing together; Ctrl+W and Delete act on them.
+  const [picked, setPicked] = useState<Target[]>([]);
+  useEffect(() => {
+    if (view !== "tasks") setPicked([]);
+  }, [view]);
   // Files of the reply whose "Show changes" was clicked; pinned at the top of the Changes view.
   const [changeFocus, setChangeFocus] = useState<string[] | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -134,13 +139,52 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
       await api.renameProject(id, name);
       await syncProjects(updateSettings);
     });
-  // The backend also deletes the project's tasks, so the thread list is reloaded.
-  const removeProjectNow = (id: string) =>
+  /** Asks before removing. The native dialog is async in Tauri; window.confirm returns before the user answers. */
+  const confirmRemoval = (targets: Target[]): Promise<boolean> => {
+    if (targets.length > 1) {
+      return confirm(`Remove ${targets.length} items? Removing a project also removes its tasks.`, {
+        title: "Remove",
+        kind: "warning",
+      });
+    }
+    const [target] = targets;
+    if (target.kind === "thread") {
+      const title = threads.find((t) => t.id === target.id)?.title ?? "";
+      return confirm(`Remove ${displayTitle(title)}?`, { title: "Remove", kind: "warning" });
+    }
+    if (target.kind === "folder") {
+      const name = folders.find((f) => f.id === target.id)?.name ?? "this folder";
+      return confirm(`Remove ${name}? Its tasks move to the top of the project.`, {
+        title: "Remove folder",
+        kind: "warning",
+      });
+    }
+    const name = settings.projects.find((p) => p.id === target.id)?.name ?? "this project";
+    return confirm(`Remove ${name} and its tasks?`, { title: "Remove project", kind: "warning" });
+  };
+  /** Asks once, then removes the targets. Folders and chats inside a removed project are left out, since the project takes them too. */
+  const removeTargets = async (targets: Target[]) => {
+    const projectIds = targets.filter((t) => t.kind === "project").map((t) => t.id);
+    const idsOf = (kind: Target["kind"]) => targets.filter((t) => t.kind === kind).map((t) => t.id);
+    const folderIds = idsOf("folder").filter(
+      (id) => !projectIds.includes(folders.find((f) => f.id === id)?.projectId ?? ""),
+    );
+    const threadIds = idsOf("thread").filter(
+      (id) => !projectIds.includes(threads.find((t) => t.id === id)?.projectId ?? ""),
+    );
+    if (!(await confirmRemoval(targets))) return;
+    setPicked([]);
+    // Projects go first: the backend deletes their tasks, so the thread list is reloaded after them.
     attempt(async () => {
-      await api.removeProject(id);
-      await syncProjects(updateSettings);
-      await reload();
+      if (projectIds.length > 0) {
+        for (const id of projectIds) await api.removeProject(id);
+        await syncProjects(updateSettings);
+        await reload();
+      }
+      for (const id of folderIds) await removeFolder(id);
+      for (const id of threadIds) await deleteThread(id);
     });
+  };
 
   // Project order is saved with the settings; the backend keeps the list's order.
   const reorderProjects = (ids: string[]) =>
@@ -222,16 +266,7 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     document.addEventListener("mouseup", onUp);
   }
 
-  /** Asks first, then removes the selected thread, the same as the sidebar's Remove item. */
-  const removeSelected = () => {
-    if (!selected) return;
-    const { id, title } = selected;
-    attempt(async () => {
-      if (await confirm(`Remove ${displayTitle(title)}?`, { title: "Remove", kind: "warning" }))
-        await deleteThread(id);
-    });
-  };
-
+  // Ctrl+W and Delete remove the picked rows; with none picked, Ctrl+W removes the open thread.
   // Global shortcuts. Re-registered each render so handlers see current state.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -246,8 +281,16 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         setPaletteOpen((o) => !o);
       } else if (mod && key === "t") {
         newThreadIn(projectId);
+      } else if (mod && key === "w" && picked.length > 0) {
+        void removeTargets(picked);
       } else if (mod && key === "w" && selected) {
-        removeSelected();
+        void removeTargets([{ kind: "thread", id: selected.id }]);
+      } else if (
+        e.key === "Delete" &&
+        picked.length > 0 &&
+        !isTypingTarget(document.activeElement)
+      ) {
+        void removeTargets(picked);
       } else if (mod && e.key === ",") {
         setSettingsOpen(true);
       } else if (e.key === "Tab" && !e.shiftKey && !isTypingTarget(document.activeElement)) {
@@ -349,16 +392,16 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
             onNewTask={newThreadIn}
             onNewChat={newChat}
             onSelectThread={selectThread}
-            onDeleteThread={(id) => attempt(() => deleteThread(id))}
             onRenameThread={(id, title) => attempt(() => renameThread(id, title))}
             onRenameProject={renameProjectTo}
-            onRemoveProject={removeProjectNow}
+            picked={picked}
+            setPicked={setPicked}
+            onRemoveTargets={removeTargets}
             onReorderProjects={reorderProjects}
             onReorderThreads={reorderThreadsTo}
             folders={folders}
             onNewFolder={newFolder}
             onRenameFolder={(id, name) => attempt(() => renameFolder(id, name))}
-            onRemoveFolder={(id) => attempt(() => removeFolder(id))}
             onNewTaskInFolder={newThreadInFolder}
             onOpenFolder={openFolder}
             onRefreshChanges={() => attempt(refreshGit)}

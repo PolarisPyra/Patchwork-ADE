@@ -2,9 +2,11 @@ import {
   useEffect,
   useRef,
   useState,
+  type Dispatch,
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import {
   ArrowLeftIcon,
@@ -103,10 +105,8 @@ interface SidebarProps {
   /** Starts a chat without a project. */
   onNewChat: () => void;
   onSelectThread: (id: string) => void;
-  onDeleteThread: (id: string) => void;
   onRenameThread: (id: string, title: string) => void;
   onRenameProject: (id: string, name: string) => void;
-  onRemoveProject: (id: string) => void;
   /** Project ids in their new order. */
   onReorderProjects: (ids: string[]) => void;
   /** Thread ids of one list (chats, a project's top level, or a folder) in their new order. */
@@ -115,7 +115,11 @@ interface SidebarProps {
   /** Creates a folder in a project; null if that failed. */
   onNewFolder: (projectId: string) => Promise<Folder | null>;
   onRenameFolder: (id: string, name: string) => void;
-  onRemoveFolder: (id: string) => void;
+  /** Rows picked with Ctrl+click, kept by the parent so its shortcuts can remove them. */
+  picked: Target[];
+  setPicked: Dispatch<SetStateAction<Target[]>>;
+  /** Asks, then removes the targets. */
+  onRemoveTargets: (targets: Target[]) => void;
   /** Starts a task at the top of a folder; `threadIds` are the folder's tasks in order. */
   onNewTaskInFolder: (projectId: string, folderId: string, threadIds: string[]) => void;
   onOpenFolder: () => void;
@@ -130,10 +134,12 @@ interface SidebarProps {
 }
 
 /** A row a context menu acts on: a project, a folder, or a task or chat. */
-interface Target {
+export interface Target {
   kind: "project" | "folder" | "thread";
   id: string;
 }
+
+const sameTarget = (a: Target, b: Target) => a.kind === b.kind && a.id === b.id;
 
 export default function Sidebar(props: SidebarProps) {
   return (
@@ -181,15 +187,15 @@ function TasksView({
   onNewTask,
   onNewChat,
   onSelectThread,
-  onDeleteThread,
   onRenameThread,
   onRenameProject,
-  onRemoveProject,
+  picked,
+  setPicked,
+  onRemoveTargets,
   onReorderProjects,
   onReorderThreads,
   onNewFolder,
   onRenameFolder,
-  onRemoveFolder,
   onNewTaskInFolder,
   onOpenFolder,
 }: SidebarProps) {
@@ -208,8 +214,9 @@ function TasksView({
   useEffect(() => {
     if (loaded) void api.setCollapsed([...collapsed]);
   }, [collapsed, loaded]);
-  const [menu, setMenu] = useState<{ x: number; y: number; target: Target } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; targets: Target[] } | null>(null);
   const [renaming, setRenaming] = useState<Target | null>(null);
+  const isPicked = (target: Target) => picked.some((p) => sameTarget(p, target));
   const reorder = useRowReorder((group, ids, folderId) =>
     group === PROJECTS_GROUP ? onReorderProjects(ids) : onReorderThreads(ids, folderId),
   );
@@ -224,49 +231,35 @@ function TasksView({
   const chats = threads.filter((t) => t.projectId === null);
   const chatIds = chats.map((t) => t.id);
 
+  /** Ctrl+click adds or drops a row from the picked rows and returns true. A plain click clears them and returns false, so the row acts as usual. */
+  const pickRow = (e: MouseEvent, target: Target) => {
+    if (!e.ctrlKey) {
+      setPicked([]);
+      return false;
+    }
+    setPicked((prev) =>
+      prev.some((p) => sameTarget(p, target))
+        ? prev.filter((p) => !sameTarget(p, target))
+        : [...prev, target],
+    );
+    return true;
+  };
   const openMenu = (e: MouseEvent, target: Target) => {
     e.preventDefault();
-    setMenu({ x: e.clientX, y: e.clientY, target });
+    // A right-click on a picked row acts on all picked rows; on any other row, on that row alone.
+    const targets = isPicked(target) ? picked : [target];
+    if (!isPicked(target)) setPicked([]);
+    setMenu({ x: e.clientX, y: e.clientY, targets });
   };
-  // The native dialog is async in Tauri; window.confirm returns before the user answers.
-  const removeThread = async (thread: Thread) => {
-    const question = `Remove ${displayTitle(thread.title)}?`;
-    if (await confirm(question, { title: "Remove", kind: "warning" })) onDeleteThread(thread.id);
-  };
-  const menuItems = (target: Target): MenuItem[] => [
-    { label: "Rename", Icon: PencilSimpleIcon, onSelect: () => setRenaming(target) },
+  const menuItems = (targets: Target[]): MenuItem[] => [
+    ...(targets.length === 1
+      ? [{ label: "Rename", Icon: PencilSimpleIcon, onSelect: () => setRenaming(targets[0]) }]
+      : []),
     {
-      label: "Remove",
+      label: targets.length > 1 ? `Remove ${targets.length} items` : "Remove",
       Icon: TrashIcon,
       danger: true,
-      onSelect: async () => {
-        if (target.kind === "thread") {
-          const thread = threads.find((t) => t.id === target.id);
-          if (thread) await removeThread(thread);
-          return;
-        }
-        if (target.kind === "folder") {
-          const name = folders.find((f) => f.id === target.id)?.name ?? "this folder";
-          if (
-            await confirm(`Remove ${name}? Its tasks move to the top of the project.`, {
-              title: "Remove folder",
-              kind: "warning",
-            })
-          ) {
-            onRemoveFolder(target.id);
-          }
-          return;
-        }
-        const name = projects.find((p) => p.id === target.id)?.name ?? "this project";
-        if (
-          await confirm(`Remove ${name} and its tasks?`, {
-            title: "Remove project",
-            kind: "warning",
-          })
-        ) {
-          onRemoveProject(target.id);
-        }
-      },
+      onSelect: () => onRemoveTargets(targets),
     },
   ];
   /** Saves a new name, unless it is blank or unchanged. */
@@ -279,9 +272,12 @@ function TasksView({
     else onRenameProject(target.id, trimmed);
   };
   const rowProps = {
-    selectedId,
+    // While rows are picked, the open thread is not shown as selected, so it reads as not being removed.
+    selectedId: picked.length > 0 ? null : selectedId,
     onSelectThread,
-    onRemoveThread: removeThread,
+    onRemoveThread: (thread: Thread) => onRemoveTargets([{ kind: "thread", id: thread.id }]),
+    isPicked,
+    onPick: pickRow,
     renaming,
     onContextMenu: openMenu,
     onCommitRename: commitRename,
@@ -328,7 +324,7 @@ function TasksView({
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          items={menuItems(menu.target)}
+          items={menuItems(menu.targets)}
           onClose={() => setMenu(null)}
         />
       )}
@@ -368,6 +364,7 @@ function TasksView({
           projects.map((x) => x.id),
           null,
         );
+        const row: Target = { kind: "project", id: p.id };
         const tasks = threads.filter((t) => t.projectId === p.id);
         const projectFolders = folders.filter((f) => f.projectId === p.id);
         const group = `${TASKS_GROUP_PREFIX}${p.id}`;
@@ -392,9 +389,11 @@ function TasksView({
             <div
               {...drag.attrs}
               draggable={!editing}
-              className={`group mt-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-left text-fg hover:bg-hover ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
+              className={`group mt-1 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-left text-fg hover:bg-hover ${drag.edge} ${drag.dragging ? "opacity-50" : ""} ${isPicked(row) ? "ring-1 ring-inset ring-border-focus" : ""}`}
               title={p.path}
-              onClick={() => toggle(p.id)}
+              onClick={(e) => {
+                if (!pickRow(e, row)) toggle(p.id);
+              }}
               onContextMenu={(e) => openMenu(e, { kind: "project", id: p.id })}
             >
               <span className="inline-flex w-4 flex-none justify-center">
@@ -450,6 +449,7 @@ function TasksView({
                   const inside = tasks.filter((t) => t.folderId === f.id);
                   const folderOpen = !collapsed.has(key);
                   const folderEditing = renaming?.kind === "folder" && renaming.id === f.id;
+                  const folderRow: Target = { kind: "folder", id: f.id };
                   const start = reorder.start(
                     group,
                     inside[0]?.id,
@@ -466,8 +466,10 @@ function TasksView({
                     <div key={f.id}>
                       <div
                         {...target.attrs}
-                        className={`group flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 py-1 text-fg hover:bg-hover ${target.edge}`}
-                        onClick={() => toggle(key)}
+                        className={`group flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 py-1 text-fg hover:bg-hover ${target.edge} ${isPicked(folderRow) ? "ring-1 ring-inset ring-border-focus" : ""}`}
+                        onClick={(e) => {
+                          if (!pickRow(e, folderRow)) toggle(key);
+                        }}
                         onContextMenu={(e) => openMenu(e, { kind: "folder", id: f.id })}
                       >
                         <span className="inline-flex w-4 flex-none justify-center">
@@ -565,6 +567,8 @@ function ThreadRow({
   selectedId,
   onSelectThread,
   onRemoveThread,
+  isPicked,
+  onPick,
   renaming,
   onContextMenu,
   onCommitRename,
@@ -577,6 +581,8 @@ function ThreadRow({
   selectedId: string | null;
   onSelectThread: (id: string) => void;
   onRemoveThread: (thread: Thread) => void;
+  isPicked: (target: Target) => boolean;
+  onPick: (e: MouseEvent, target: Target) => boolean;
   renaming: Target | null;
   onContextMenu: (e: MouseEvent, target: Target) => void;
   onCommitRename: (target: Target, name: string, current: string) => void;
@@ -586,16 +592,20 @@ function ThreadRow({
   /** Project tasks get more vertical room than chats. */
   roomy?: boolean;
 }) {
+  const target: Target = { kind: "thread", id: thread.id };
   const editing = renaming?.kind === "thread" && renaming.id === thread.id;
   const selected = thread.id === selectedId;
+  const picked = isPicked(target);
   const last = thread.messages[thread.messages.length - 1];
   const needsApproval = last?.approvals.some((a) => a.status === "pending") ?? false;
   return (
     <div
       {...drag.attrs}
       draggable={!editing}
-      className={`group flex cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none ${roomy ? (nested ? "mb-1.5" : "my-2") : "mb-1.5"} ${nested ? "ml-6 mr-1.5" : "mx-1.5"} px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
-      onClick={() => onSelectThread(thread.id)}
+      className={`group flex cursor-pointer flex-col items-stretch gap-1 rounded-[var(--radius-sm)] border-none ${roomy ? (nested ? "mb-1.5" : "my-2") : "mb-1.5"} ${nested ? "ml-6 mr-1.5" : "mx-1.5"} px-2.5 py-1.5 text-left text-fg ${selected ? "bg-selected" : "bg-[color-mix(in_srgb,var(--bg-hover)_40%,transparent)] hover:bg-hover"} ${picked ? "ring-1 ring-inset ring-border-focus" : ""} ${drag.edge} ${drag.dragging ? "opacity-50" : ""}`}
+      onClick={(e) => {
+        if (!onPick(e, target)) onSelectThread(thread.id);
+      }}
       onContextMenu={(e) => onContextMenu(e, { kind: "thread", id: thread.id })}
     >
       <div className="flex min-h-5 min-w-0 items-center gap-1.5">
