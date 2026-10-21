@@ -446,7 +446,7 @@ function TasksView({
             <div
               {...drag.attrs}
               draggable={!editing}
-              className={`group mt-1.5 flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 text-left text-fg hover:bg-hover ${drag.edge} ${drag.dragging ? "opacity-50" : ""} ${isPicked(row) ? "ring-1 ring-inset ring-border-focus" : ""}`}
+              className={`group mt-1.5 flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border-none bg-transparent px-2.5 text-left text-fg hover:bg-hover ${drag.edge} ${drag.dragging ? "opacity-50" : ""} ${isPicked(row) ? "ring-1 ring-inset ring-border-focus" : ""}`}
               onClick={(e) => {
                 if (!pickRow(e, row)) toggle(p.id);
               }}
@@ -494,7 +494,7 @@ function TasksView({
               </button>
             </div>
             <Collapse open={open}>
-              <div className="flex flex-col gap-px pb-1">
+              <div className="flex flex-col gap-px pt-1 pb-1">
                 {tasks.length === 0 && projectFolders.length === 0 && (
                   <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">
                     No tasks yet
@@ -522,7 +522,7 @@ function TasksView({
                     <div key={f.id}>
                       <div
                         {...target.attrs}
-                        className={`group flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 py-1 text-fg hover:bg-hover ${target.edge} ${isPicked(folderRow) ? "ring-1 ring-inset ring-border-focus" : ""}`}
+                        className={`group ml-4 flex min-h-8 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-1.5 py-1 text-fg hover:bg-hover ${target.edge} ${isPicked(folderRow) ? "ring-1 ring-inset ring-border-focus" : ""}`}
                         onClick={(e) => {
                           if (!pickRow(e, folderRow)) toggle(key);
                         }}
