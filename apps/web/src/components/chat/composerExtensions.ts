@@ -35,14 +35,16 @@ export const GoalCommand = Node.create({
     ];
   },
   renderMarkdown: () => "/goal",
-  // Typing "/goal " by hand gives the same chip as choosing it from the menu.
+  // Typing "/goal " at the start of the draft gives the same chip as choosing it from the menu.
+  // The agent only reads a goal there, so a "/goal " later in the draft stays plain text.
   addInputRules() {
     const type = this.type;
     return [
       new InputRule({
-        find: /(?:^|\s)\/goal\s$/,
+        find: /\/goal\s$/,
         handler: ({ state, range }) => {
-          state.tr.replaceWith(range.to - 6, range.to, [type.create(), state.schema.text(" ")]);
+          if (range.from !== 1) return;
+          state.tr.replaceWith(range.from, range.to, [type.create(), state.schema.text(" ")]);
         },
       }),
     ];
