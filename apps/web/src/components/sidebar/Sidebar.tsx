@@ -9,6 +9,7 @@ import {
 import {
   ArrowLeftIcon,
   ArrowsClockwiseIcon,
+  ArrowsInLineVerticalIcon,
   CaretRightIcon,
   ChatCircleIcon,
   ChatsIcon,
@@ -71,7 +72,7 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
           aria-pressed={view === v}
           onClick={() => onSelect(v)}
         >
-          <Icon size={18} />
+          <Icon size={20} />
         </button>
       ))}
       <button
@@ -80,7 +81,7 @@ export function ToolStripe({ view, onSelect, onOpenSettings }: StripeProps) {
         aria-label="Settings"
         onClick={onOpenSettings}
       >
-        <GearSixIcon size={18} />
+        <GearSixIcon size={20} />
       </button>
     </nav>
   );
@@ -136,12 +137,12 @@ interface Target {
 
 export default function Sidebar(props: SidebarProps) {
   return (
-    <aside className="flex min-h-0 w-[264px] flex-none flex-col border-r border-border bg-panel text-[length:var(--fs-md)] [--fs-xs:12px] [--fs-sm:13px] [--fs-md:14px]">
+    <aside className="flex min-h-0 w-[264px] flex-none flex-col border-r border-border bg-panel text-[length:var(--fs-md)] [--fs-xs:13px] [--fs-sm:14px] [--fs-md:15px]">
       <button
         className="mx-2 mt-3 mb-0.5 flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border border-border bg-input px-2 text-[length:var(--fs-sm)] text-fg-muted hover:border-border-strong hover:text-fg"
         onClick={props.onOpenPalette}
       >
-        <MagnifyingGlassIcon size={16} />
+        <MagnifyingGlassIcon size={18} />
         Search…
         <kbd className="kbd ml-auto">Ctrl K</kbd>
       </button>
@@ -218,6 +219,8 @@ function TasksView({
       if (!next.delete(id)) next.add(id);
       return next;
     });
+  const collapseAll = () =>
+    setCollapsed((prev) => new Set([...prev, ...projects.map((p) => p.id)]));
   const chats = threads.filter((t) => t.projectId === null);
   const chatIds = chats.map((t) => t.id);
 
@@ -304,7 +307,7 @@ function TasksView({
       <SectionLabel
         action={
           <button className="btn-icon" title="New chat" aria-label="New chat" onClick={onNewChat}>
-            <PlusIcon size={16} />
+            <PlusIcon size={18} />
           </button>
         }
       >
@@ -332,14 +335,23 @@ function TasksView({
 
       <SectionLabel
         action={
-          <button
-            className="btn-icon"
-            title="Open folder…"
-            aria-label="Open folder"
-            onClick={onOpenFolder}
-          >
-            <FolderPlusIcon size={16} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              className="flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 normal-case tracking-normal text-fg-muted hover:text-fg"
+              onClick={collapseAll}
+            >
+              <ArrowsInLineVerticalIcon size={15} />
+              Collapse all
+            </button>
+            <button
+              className="btn-icon"
+              title="Open folder…"
+              aria-label="Open folder"
+              onClick={onOpenFolder}
+            >
+              <FolderPlusIcon size={18} />
+            </button>
+          </div>
         }
       >
         Projects
@@ -387,11 +399,11 @@ function TasksView({
             >
               <span className="inline-flex w-4 flex-none justify-center">
                 <CaretRightIcon
-                  size={15}
+                  size={17}
                   className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`}
                 />
               </span>
-              <FolderIcon size={15} className="text-fg-subtle" />
+              <FolderIcon size={17} className="text-fg-subtle" />
               {editing ? (
                 <InlineName
                   initial={p.name}
@@ -412,7 +424,7 @@ function TasksView({
                   void addFolder(p.id);
                 }}
               >
-                <FolderPlusIcon size={15} />
+                <FolderPlusIcon size={17} />
               </button>
               <button
                 className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex"
@@ -423,7 +435,7 @@ function TasksView({
                   onNewTask(p.id);
                 }}
               >
-                <PlusIcon size={15} />
+                <PlusIcon size={17} />
               </button>
             </div>
             <Collapse open={open}>
@@ -460,11 +472,11 @@ function TasksView({
                       >
                         <span className="inline-flex w-4 flex-none justify-center">
                           <CaretRightIcon
-                            size={13}
+                            size={15}
                             className={`transition-transform duration-200 ${folderOpen ? "rotate-90" : ""}`}
                           />
                         </span>
-                        <FolderIcon size={14} className="text-fg-muted" />
+                        <FolderIcon size={16} className="text-fg-muted" />
                         {folderEditing ? (
                           <InlineName
                             initial={f.name}
@@ -491,7 +503,7 @@ function TasksView({
                             );
                           }}
                         >
-                          <PlusIcon size={15} />
+                          <PlusIcon size={17} />
                         </button>
                       </div>
                       <Collapse open={folderOpen}>
@@ -616,18 +628,18 @@ function ThreadRow({
             onRemoveThread(thread);
           }}
         >
-          <TrashIcon size={14} />
+          <TrashIcon size={16} />
         </button>
       </div>
       <div className="flex min-h-5 min-w-0 items-center justify-end gap-1.5">
         {needsApproval ? (
           <span title="Waiting for approval" className="inline-flex flex-none text-warning">
-            <ShieldWarningIcon size={15} />
+            <ShieldWarningIcon size={17} />
           </span>
         ) : (
           isWorking(thread) && (
             <span title="Working" className="inline-flex flex-none">
-              <CircleNotchIcon size={15} className="spin text-accent-text" />
+              <CircleNotchIcon size={17} className="spin text-accent-text" />
             </span>
           )
         )}
@@ -635,7 +647,7 @@ function ThreadRow({
           className="inline-flex h-5 w-5 flex-none items-center justify-center"
           title={AGENT_LABELS[thread.agent]}
         >
-          <ProviderLogos kind={thread.agent} size={14} />
+          <ProviderLogos kind={thread.agent} size={16} />
         </span>
       </div>
     </div>
@@ -672,7 +684,7 @@ function ChangeRow({ change, onOpen }: { change: FileChange; onOpen: () => void 
             <span className="text-danger">−{change.deletions}</span>
           </span>
           <span className="flex w-3 justify-center">
-            <GitDiffIcon size={12} className="text-fg-muted" aria-label="Changed" />
+            <GitDiffIcon size={14} className="text-fg-muted" aria-label="Changed" />
           </span>
         </span>
       </button>
@@ -748,7 +760,7 @@ function ChangesView({
           aria-label="Refresh"
           onClick={onRefreshChanges}
         >
-          <ArrowsClockwiseIcon size={16} />
+          <ArrowsClockwiseIcon size={18} />
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
@@ -764,7 +776,7 @@ function ChangesView({
         {replyFiles.length > 0 && (
           <div className="flex flex-col gap-px">
             <div className="flex items-center gap-1.5 px-1.5 pt-1 text-[length:var(--fs-xs)] text-fg-subtle">
-              <ChatCircleIcon size={12} />
+              <ChatCircleIcon size={14} />
               <span className="min-w-0 flex-1 truncate">From this reply</span>
               {pinned.length > 0 && !fullAccess && (
                 <span className="flex gap-1">
@@ -776,7 +788,7 @@ function ChangesView({
                 className="ml-auto flex flex-none cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border-none bg-transparent px-1.5 py-0.5 text-[length:var(--fs-xs)] text-fg-subtle hover:bg-hover hover:text-fg"
                 onClick={onClearChangeFocus}
               >
-                <ArrowLeftIcon size={12} />
+                <ArrowLeftIcon size={14} />
                 Project
               </button>
             </div>
@@ -792,7 +804,7 @@ function ChangesView({
                   onClick={() => onOpenChange(path)}
                 >
                   <span className="min-w-0 flex-1 truncate">{baseName(path)}</span>
-                  <PencilSimpleIcon size={12} className="flex-none text-fg-muted" />
+                  <PencilSimpleIcon size={14} className="flex-none text-fg-muted" />
                 </button>
               );
             })}
@@ -803,7 +815,7 @@ function ChangesView({
           .map(([dir, files]) => (
             <div key={dir} className="flex flex-col gap-px">
               <div className="flex items-center gap-1.5 px-1.5 pt-1 text-[length:var(--fs-xs)] text-fg-subtle">
-                <FolderIcon size={12} />
+                <FolderIcon size={14} />
                 <span className="min-w-0 truncate">{dir || "Project root"}</span>
               </div>
               {files.map(row)}

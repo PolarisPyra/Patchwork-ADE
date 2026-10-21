@@ -49,6 +49,13 @@ const CANVAS_MAX_FRACTION = 0.7;
 // One shared empty list, so the chat's memoized rows see the same `changes` on every render.
 const NO_CHANGES: FileChange[] = [];
 
+function isTypingTarget(el: Element | null): boolean {
+  return (
+    el instanceof HTMLElement &&
+    (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+  );
+}
+
 // The canvas (with its syntax highlighter) and settings are only shown on demand, so
 // they load as separate chunks instead of making the first screen wait for them.
 const Canvas = lazy(() => import("~/components/canvas/Canvas"));
@@ -230,6 +237,9 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         newThreadIn(projectId);
       } else if (mod && e.key === ",") {
         setSettingsOpen(true);
+      } else if (e.key === "Tab" && !e.shiftKey && !isTypingTarget(document.activeElement)) {
+        // Tab outside a text field jumps to the composer; inside one it keeps normal tabbing.
+        document.querySelector<HTMLElement>(".composer-editor .ProseMirror")?.focus();
       } else {
         return;
       }

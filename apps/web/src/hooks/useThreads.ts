@@ -4,6 +4,7 @@ import {
   onAgentEvent,
   type AccessMode,
   type AgentEvent,
+  type AgentEventEnvelope,
   type AgentKind,
   type Attachment,
   type Folder,
@@ -175,17 +176,31 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     [],
   );
 
-  // Subscribe once for the app's lifetime; events for unknown threads are ignored.
+  // Subscribe once for the app's lifetime; events for unknown threads are ignored. Text arrives
+  // token by token, faster than the screen refreshes, so events are applied once per frame.
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    void onAgentEvent(({ threadId, event }) => {
+    let queue: AgentEventEnvelope[] = [];
+    let frame = 0;
+    const flush = () => {
+      const batch = queue;
+      queue = [];
+      frame = 0;
       setThreads((prev) =>
-        prev.some((t) => t.id === threadId)
-          ? prev.map((t) => (t.id === threadId ? applyAgentEvent(t, event) : t))
-          : prev,
+        batch.reduce(
+          (threads, { threadId, event }) =>
+            threads.some((t) => t.id === threadId)
+              ? threads.map((t) => (t.id === threadId ? applyAgentEvent(t, event) : t))
+              : threads,
+          prev,
+        ),
       );
-      if (event.type === "turnCompleted") turnDone.current();
+      if (batch.some(({ event }) => event.type === "turnCompleted")) turnDone.current();
+    };
+    void onAgentEvent((envelope) => {
+      queue.push(envelope);
+      frame ||= requestAnimationFrame(flush);
     }).then((u) => {
       if (disposed) u();
       else unlisten = u;
@@ -193,6 +208,7 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     return () => {
       disposed = true;
       unlisten?.();
+      cancelAnimationFrame(frame);
     };
   }, []);
 

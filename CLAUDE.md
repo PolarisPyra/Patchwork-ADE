@@ -7,6 +7,7 @@
 - **Dev instance:** the only app instance that is ever started or restarted. Run it only with `pnpm tauri dev`. Never run `pnpm dev` on its own, `target/debug/patchwork`, or other build outputs directly.
 - The user keeps their own `pnpm tauri dev` session open and views changes there. Vite hot-reloads UI edits, and Rust changes rebuild on save, so a restart is rarely needed. If one is needed, restart only that `pnpm tauri dev` session and say so.
 - Do not start the dev app or take screenshots of it unless the user asks.
+- **Previewing the app:** when the user asks to run, preview, or check the app, start it from `~/Projects/PatchworkADE` with `pnpm tauri dev`, and never open or run the AppImage instead. If a `pnpm tauri dev` session is already running, use that one rather than starting a second, since both need port 1420.
 
 ## Editing alongside the dev session
 
