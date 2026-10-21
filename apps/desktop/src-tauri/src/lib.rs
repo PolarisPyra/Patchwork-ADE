@@ -220,6 +220,11 @@ fn attachment_for_path(path: String) -> Res<Attachment> {
     Attachment::from_path(&path)
 }
 
+#[tauri::command]
+fn save_pasted_image(server: Srv, mime_type: String, data: String) -> Res<Attachment> {
+    server.save_pasted_image(&mime_type, &data)
+}
+
 /// Lets the webview load an image for its thumbnail. The asset scope is not kept across restarts,
 /// so this runs again whenever a thumbnail is shown.
 #[tauri::command]
@@ -405,6 +410,7 @@ pub fn run() {
             set_thread_effort,
             send_message,
             attachment_for_path,
+            save_pasted_image,
             allow_preview,
             cancel_turn,
             stop_goal,

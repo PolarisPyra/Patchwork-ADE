@@ -661,7 +661,7 @@ function ThreadRow({
         <ArchiveIcon size={16} />
       </button>
       <span
-        className="inline-flex h-5 w-5 flex-none items-center justify-center"
+        className="ml-1 inline-flex h-5 w-5 flex-none items-center justify-center"
         title={AGENT_LABELS[thread.agent]}
       >
         <ProviderLogos kind={thread.agent} size={16} />

@@ -402,6 +402,9 @@ export const api = {
     invoke<Message>("send_message", { threadId, text, attachments, queue }),
   /** Classifies a dropped path as a file, folder, or image. */
   attachmentForPath: (path: string) => invoke<Attachment>("attachment_for_path", { path }),
+  /** Saves a pasted image; `data` is the file's bytes, base64-encoded. */
+  savePastedImage: (mimeType: string, data: string) =>
+    invoke<Attachment>("save_pasted_image", { mimeType, data }),
   /** Lets the webview show an attached image as a thumbnail. */
   allowPreview: (path: string) => invoke<void>("allow_preview", { path }),
   cancelTurn: (threadId: string) => invoke<void>("cancel_turn", { threadId }),

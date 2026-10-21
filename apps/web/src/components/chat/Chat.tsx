@@ -83,6 +83,16 @@ interface ChatProps {
   onClearThread: (threadId: string) => Promise<void>;
 }
 
+/** The file's bytes, base64-encoded, for sending to the backend. */
+function base64Of(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] ?? "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 // The editor (Tiptap) is large and the chat can show before it loads, so it loads on its own.
 const Composer = lazy(() => import("~/components/chat/Composer"));
 
@@ -229,6 +239,35 @@ export default function Chat({
       cancelled = true;
       unlisten?.();
     };
+  }, []);
+
+  // Images pasted into the chat are saved to files and attached like dropped ones. The
+  // event stops here, so the composer does not also try to paste them as text.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    async function attachPasted(images: File[]) {
+      const sentKey = keyRef.current;
+      try {
+        const found = await Promise.all(
+          images.map(async (image) => api.savePastedImage(image.type, await base64Of(image))),
+        );
+        setPending((prev) => ({ ...prev, [sentKey]: [...(prev[sentKey] ?? []), ...found] }));
+      } catch (e) {
+        setError(errorText(e));
+      }
+    }
+    function onPaste(event: ClipboardEvent) {
+      const images = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+        file.type.startsWith("image/"),
+      );
+      if (images.length === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void attachPasted(images);
+    }
+    el.addEventListener("paste", onPaste, true);
+    return () => el.removeEventListener("paste", onPaste, true);
   }, []);
 
   async function dispatch(

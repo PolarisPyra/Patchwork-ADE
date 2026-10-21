@@ -30,6 +30,8 @@ pub struct Server {
     runner: Runner,
     /// Parent of the scratch folders that project-less chats run in.
     chats_dir: PathBuf,
+    /// Images pasted into a chat, saved as files so they attach like dropped ones.
+    pasted_dir: PathBuf,
     /// Where Patchwork installs agent CLIs (`clis` under the config folder).
     clis_dir: PathBuf,
     sink: EventSink,
@@ -161,6 +163,7 @@ impl Server {
             usage: usage::UsageCache::default(),
             runner: Runner::default(),
             chats_dir: data_dir.join("chats"),
+            pasted_dir: data_dir.join("pasted"),
             clis_dir,
             sink,
         }))
@@ -213,6 +216,28 @@ impl Server {
     /// Scratch working directory for a chat that has no project.
     pub fn chat_dir(&self, thread_id: &str) -> PathBuf {
         self.chats_dir.join(thread_id)
+    }
+
+    /// Saves an image pasted from the clipboard (base64 `data`) as a file, and returns it as an
+    /// attachment like a dropped image.
+    pub fn save_pasted_image(&self, mime_type: &str, data: &str) -> Res<Attachment> {
+        use base64::Engine;
+        let ext = match mime_type {
+            "image/png" => "png",
+            "image/jpeg" => "jpg",
+            "image/gif" => "gif",
+            "image/webp" => "webp",
+            _ => return Err(format!("Can't attach a {mime_type} image")),
+        };
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .map_err(|e| format!("Pasted image is not valid base64: {e}"))?;
+        std::fs::create_dir_all(&self.pasted_dir).map_err(|e| e.to_string())?;
+        let path = self.pasted_dir.join(format!("{}.{ext}", new_id()));
+        std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        let mut attachment = Attachment::from_path(&path.to_string_lossy())?;
+        attachment.name = format!("Pasted image.{ext}");
+        Ok(attachment)
     }
 
     pub fn project_root(&self, project_id: &str) -> Res<String> {
