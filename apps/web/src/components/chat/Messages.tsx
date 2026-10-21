@@ -92,10 +92,15 @@ export default function Messages({
   const working = messages.some((m) => m.role === "assistant" && m.status === "streaming");
   const rows: (Message | null)[] = working ? [...messages, null] : messages;
 
-  useEffect(() => listRef.current?.getState().listen("isAtEnd", setAtEnd), []);
+  // The same threshold the list uses to keep following the end, so the button only shows when the
+  // list will not follow on its own.
+  useEffect(
+    () => listRef.current?.getState().listen("isWithinMaintainScrollAtEndThreshold", setAtEnd),
+    [],
+  );
 
-  // Start at the latest message and jump to it again after each send. Agent output
-  // is not followed while streaming; the reader scrolls on their own.
+  // Start at the latest message and jump to it again after each send. While a reply streams, the
+  // list keeps following the end as long as the reader is at the bottom.
   const lastUserMessageId = [...messages].reverse().find((m) => m.role === "user")?.id;
   const lastSent = useRef(lastUserMessageId);
   useLayoutEffect(() => {

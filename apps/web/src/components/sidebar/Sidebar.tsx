@@ -355,7 +355,7 @@ function TasksView({
 
   // Rows keep their full height and the list scrolls, rather than squeezing rows to fit.
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto overflow-x-hidden p-2 [scrollbar-gutter:stable] *:shrink-0">
+    <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-scroll overflow-x-hidden p-2 *:shrink-0">
       <SectionLabel
         action={
           <button className="btn-icon" title="New chat" aria-label="New chat" onClick={onNewChat}>
@@ -744,7 +744,7 @@ function ArchivedView({
     setPicked,
   );
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto overflow-x-hidden p-2 [scrollbar-gutter:stable] *:shrink-0">
+    <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-scroll overflow-x-hidden p-2 *:shrink-0">
       <SectionLabel>Archived</SectionLabel>
       {archivedThreads.length === 0 && (
         <div className="px-3 py-2 text-[length:var(--fs-sm)] text-fg-muted">Nothing archived</div>
@@ -908,7 +908,7 @@ function ChangesView({
           <ArrowsClockwiseIcon size={18} />
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-scroll p-2">
         {changes.length > 0 && !fullAccess && (
           <div className="flex justify-end gap-1 px-1">
             <BulkButton onClick={() => applyAll(changes)}>Stage all</BulkButton>
