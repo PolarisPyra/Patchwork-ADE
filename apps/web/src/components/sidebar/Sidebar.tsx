@@ -507,7 +507,6 @@ function TasksView({
                         )}
                         <button
                           className="btn-icon hidden h-5 w-5 flex-none group-hover:inline-flex"
-                          title={`New task in ${f.name}`}
                           aria-label={`New task in ${f.name}`}
                           onClick={(e) => {
                             e.stopPropagation();
