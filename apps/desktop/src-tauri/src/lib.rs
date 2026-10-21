@@ -38,6 +38,11 @@ fn save_settings(server: Srv, settings: Settings) -> Res<()> {
 }
 
 #[tauri::command]
+fn list_shells() -> Vec<String> {
+    patchwork_server::available_shells()
+}
+
+#[tauri::command]
 fn list_models(kind: AgentKind) -> Vec<ModelOption> {
     provider::list_models(kind)
 }
@@ -359,6 +364,7 @@ pub fn run() {
             get_settings,
             save_settings,
             detect_agent,
+            list_shells,
             list_models,
             get_usage,
             add_project,

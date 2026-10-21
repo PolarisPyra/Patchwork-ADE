@@ -62,6 +62,24 @@ pub fn title_from(text: &str) -> String {
 
 /// Whether a thread has gone idle just before its prompt cache expires, with a context large
 /// enough to be worth compacting and nothing else pending.
+/// Shells from /etc/shells that are installed, for the shell choice in settings. Entries that
+/// resolve to the same binary (such as /bin/sh and /usr/bin/sh) are listed once.
+/// Windows has no such file, so nothing is offered there and agents use their default.
+pub fn available_shells() -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    std::fs::read_to_string("/etc/shells")
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with('/') && Path::new(line).is_file())
+        .filter(|line| {
+            let real = std::fs::canonicalize(line).unwrap_or_else(|_| PathBuf::from(line));
+            seen.insert(real)
+        })
+        .map(str::to_string)
+        .collect()
+}
+
 fn idle_compaction_due(thread: &Thread, now: u64, tokens: &TokenSettings) -> bool {
     if thread.agent != AgentKind::Claude
         || thread

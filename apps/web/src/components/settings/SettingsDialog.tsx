@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
+  CaretDownIcon,
   DownloadSimpleIcon,
   FolderSimpleIcon,
   GaugeIcon,
@@ -9,6 +10,7 @@ import {
   PaletteIcon,
   PlugIcon,
   RobotIcon,
+  TerminalIcon,
   TerminalWindowIcon,
   TrashIcon,
   XIcon,
@@ -34,8 +36,11 @@ import type { UpdateSettings } from "~/app/App";
 import { syncProjects } from "~/lib/projects";
 import { formatTokens } from "~/lib/tokens";
 import { AGENT_KINDS, describeAgent, errorText } from "~/lib/util";
+import { CHIP_CLASS } from "~/components/chat/ModelPicker";
+import Dropdown from "~/components/workspace/Dropdown";
 
-type Section = "appearance" | "agent" | "tokens" | "imports" | "integrations" | "projects";
+type Section =
+  "appearance" | "agent" | "tokens" | "imports" | "integrations" | "environment" | "projects";
 
 const SECTIONS: { id: Section; label: string; Icon: Icon }[] = [
   { id: "appearance", label: "Appearance", Icon: PaletteIcon },
@@ -43,6 +48,7 @@ const SECTIONS: { id: Section; label: string; Icon: Icon }[] = [
   { id: "tokens", label: "AI Tokenomics", Icon: GaugeIcon },
   { id: "imports", label: "Imports", Icon: DownloadSimpleIcon },
   { id: "integrations", label: "Integrations", Icon: PlugIcon },
+  { id: "environment", label: "Environment", Icon: TerminalIcon },
   { id: "projects", label: "Projects", Icon: FolderSimpleIcon },
 ];
 
@@ -104,6 +110,7 @@ export default function SettingsDialog({
             {section === "tokens" && <TokensPane {...paneProps} />}
             {section === "imports" && <ImportsPane {...paneProps} onImported={onImported} />}
             {section === "integrations" && <IntegrationsPane {...paneProps} />}
+            {section === "environment" && <EnvironmentPane {...paneProps} />}
             {section === "projects" && <ProjectsPane {...paneProps} />}
           </div>
         </div>
@@ -539,6 +546,66 @@ function ImportsPane({
           </div>
         );
       })}
+      {error && <div className="text-[length:var(--fs-sm)] text-danger">{error}</div>}
+    </>
+  );
+}
+
+const basename = (path: string) => path.split("/").pop() ?? path;
+
+/** How the agents' shell is chosen. Shells come from /etc/shells; a saved shell that is no
+ * longer listed stays in the menu so the choice is still visible. */
+function EnvironmentPane({ settings, updateSettings }: PaneProps) {
+  const [shells, setShells] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.listShells().then(setShells, (e) => setError(errorText(e)));
+  }, []);
+
+  const shell = settings.shell ?? "";
+  const options = shell && !shells.includes(shell) ? [shell, ...shells] : shells;
+  const choose = (path: string | null) => void updateSettings((s) => ({ ...s, shell: path }));
+  return (
+    <>
+      <TokenRow title="Shell" desc="The shell agents run commands in">
+        <Dropdown
+          alignEnd
+          trigger={({ open, toggle }) => (
+            <button
+              className={CHIP_CLASS}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              aria-label={`Shell: ${shell ? basename(shell) : "System default"}`}
+              title={shell || "Follows the SHELL environment variable"}
+              onClick={toggle}
+            >
+              <span>{shell ? basename(shell) : "System default"}</span>
+              <CaretDownIcon size={14} />
+            </button>
+          )}
+        >
+          {(close) => (
+            <div className="max-h-[240px] overflow-y-auto">
+              {[null, ...options].map((path) => (
+                <button
+                  key={path ?? "default"}
+                  role="menuitemradio"
+                  aria-checked={path === (shell || null)}
+                  title={path ?? undefined}
+                  className={`flex w-full min-w-[160px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border-none bg-transparent px-2 py-[5px] text-left whitespace-nowrap text-fg hover:bg-hover ${path === (shell || null) ? "bg-selected-muted" : ""}`}
+                  onClick={() => {
+                    close();
+                    choose(path);
+                  }}
+                >
+                  {path ? basename(path) : "System default"}
+                </button>
+              ))}
+            </div>
+          )}
+        </Dropdown>
+      </TokenRow>
       {error && <div className="text-[length:var(--fs-sm)] text-danger">{error}</div>}
     </>
   );

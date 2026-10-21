@@ -57,6 +57,8 @@ pub struct Settings {
     pub projects: Vec<Project>,
     pub active_project_id: Option<String>,
     pub tokens: TokenSettings,
+    /// Shell that agents run commands in. None follows the SHELL environment variable.
+    pub shell: Option<String>,
 }
 
 /// Settings that trade a little convenience for fewer tokens spent.

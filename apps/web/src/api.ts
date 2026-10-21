@@ -32,6 +32,8 @@ export interface Settings {
   projects: Project[];
   activeProjectId: string | null;
   tokens: TokenSettings;
+  /** Shell that agents run commands in; null follows the SHELL environment variable. */
+  shell: string | null;
 }
 
 /** Settings that trade a little convenience for fewer tokens spent. */
@@ -260,6 +262,7 @@ export const DEFAULT_SETTINGS: Settings = {
   integrations: { github: false, terminal: false, figma: false, browser: false },
   projects: [],
   activeProjectId: null,
+  shell: null,
   tokens: {
     showUsage: true,
     warnAbove: 150_000,
@@ -314,6 +317,8 @@ export const api = {
   },
   /** Models for an agent, starting with "Default" (the CLI's own choice). */
   listModels: (kind: AgentKind) => invoke<ModelOption[]>("list_models", { kind }),
+  /** Installed login shells, as paths from /etc/shells. */
+  listShells: () => invoke<string[]>("list_shells"),
   /** Subscription usage limits. Cached by the backend; `refresh` asks for new
    * numbers, which it still throttles to avoid provider rate limits. */
   getUsage: (kind: AgentKind, refresh = false) =>

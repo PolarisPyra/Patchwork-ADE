@@ -132,6 +132,9 @@ impl Runner {
         let args = provider::turn_args(agent, &spec);
         let input = provider::turn_input(agent, &spec);
         let mut cmd = provider::agent_command(agent)?;
+        if let Some(shell) = server.store.settings().shell {
+            cmd.env("SHELL", shell);
+        }
         cmd.args(&args)
             .current_dir(&root)
             .stdin(if input.is_empty() {
