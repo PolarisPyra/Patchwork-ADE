@@ -587,6 +587,7 @@ export default function Chat({
           }
         >
           <Composer
+            key={key}
             value={draft}
             onChange={setDraft}
             onSubmit={submit}

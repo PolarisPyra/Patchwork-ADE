@@ -270,6 +270,15 @@ export default function Composer({
     if (editor.isFocused) editor.commands.focus("end");
   }, [editor, value]);
 
+  // Opening a chat puts the caret in the composer, unless the user is typing in another field.
+  useEffect(() => {
+    const active = document.activeElement;
+    const typing =
+      active instanceof HTMLElement &&
+      (active.isContentEditable || active.matches("input, textarea, select"));
+    if (editor && !typing) editor.commands.focus("end");
+  }, [editor]);
+
   // The Stop button holds focus once clicked, and it leaves the page when the turn or goal ends,
   // which drops focus to the body. Focus the editor then, unless the user moved elsewhere.
   const wasWorking = useRef(working);
