@@ -33,6 +33,7 @@
 ## Tests
 
 - Never write tests. Do not add unit, integration, or frontend tests, test files, test runners, test dependencies, or test scripts, even when a change would benefit from one.
+- Exception: Playwright is allowed, only as the UI-check tool under `scripts/qa/` and its `qa:*` root scripts, for measuring and screenshotting the running dev session. Those scripts must not assert or run as tests. Do not add `*.test.*` files, a test runner, a `test` script, or any Playwright spec file.
 
 ## Committing
 
@@ -52,3 +53,10 @@
 
 - The app shows the options as numbered keys above the compose box and adds "Submit my own response" itself, so do not list that option in the array.
 - Do not also write the options as a plain list.
+
+## UI checks
+
+- For alignment, layout, spacing, or other UI and UX issues, measure and screenshot the running app before changing code, and again after the change. Use the in-repo harness in `scripts/qa/` (see its README): `pnpm qa:stripe` measures the tool stripe, and `pnpm qa:shot <out.png> [selector]` saves a screenshot. Add new checks under `scripts/qa/checks/`.
+- The harness connects to the user's running `pnpm tauri dev` session at localhost:1420. Never start the app to run it. If the server is not up, tell the user to start it.
+- This rule is the standing permission for those screenshots and measurements, which the "do not take screenshots unless asked" rule above would otherwise block.
+- Playwright is a root devDependency, so adding or upgrading it changes `package.json` and `pnpm-lock.yaml`. Say so when you do it.
