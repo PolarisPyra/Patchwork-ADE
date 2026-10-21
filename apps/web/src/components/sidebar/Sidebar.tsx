@@ -414,7 +414,7 @@ function TasksView({
                   className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`}
                 />
               </span>
-              <FolderIcon size={17} className="text-fg-subtle" />
+              <FolderIcon size={17} className="text-fg-muted" />
               {editing ? (
                 <InlineName
                   initial={p.name}
@@ -490,7 +490,7 @@ function TasksView({
                             className={`transition-transform duration-200 ${folderOpen ? "rotate-90" : ""}`}
                           />
                         </span>
-                        <FolderIcon size={16} className="text-fg-muted" />
+                        <FolderIcon size={16} className="text-fg-subtle" />
                         {folderEditing ? (
                           <InlineName
                             initial={f.name}
