@@ -70,7 +70,7 @@ jobs:
           done
 
       - name: Build AppImage
-        run: pnpm --filter patchwork-desktop tauri build --bundles appimage
+        run: pnpm appimage
 
       - name: Find AppImage
         id: find
