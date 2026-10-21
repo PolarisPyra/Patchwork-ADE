@@ -80,6 +80,13 @@ export interface ToolCall {
   endedAt: number | null;
 }
 
+/** A shell command the agent started in the background, still running. */
+export interface BackgroundTask {
+  /** The tool call that started it; stops it. */
+  toolId: string;
+  description: string;
+}
+
 /** A subagent an agent started, e.g. with Claude Code's Task tool. */
 export interface SubAgent {
   kind: string;
@@ -121,6 +128,10 @@ export interface Message {
   attachments: Attachment[];
   /** Sent while a turn was running, steering it. */
   steer: boolean;
+  /** Sent while a turn was running and still waiting for it to end; then it starts the next turn. */
+  queued: boolean;
+  /** Background shell commands still running after the reply ended. */
+  background: BackgroundTask[];
   /** The agent's reasoning while it works; not stored, so empty after a reload. */
   thinking: string;
   /** When the reply finished (ms since epoch); null while it runs. */
@@ -243,6 +254,10 @@ export type AgentEvent =
   | { type: "fileTouched"; messageId: string; path: string }
   | { type: "approvalRequested"; messageId: string; approval: Approval }
   | { type: "approvalResolved"; messageId: string; approvalId: string; allowed: boolean }
+  | { type: "messageQueued"; messageId: string; queued: boolean }
+  | { type: "messageRemoved"; messageId: string }
+  | { type: "backgroundTaskStarted"; messageId: string; task: BackgroundTask }
+  | { type: "backgroundTaskEnded"; messageId: string; toolId: string }
   | {
       type: "turnCompleted";
       messageId: string;
@@ -379,8 +394,8 @@ export const api = {
   setThreadEffort: (id: string, effort: string | null) =>
     invoke<void>("set_thread_effort", { id, effort }),
   /** Returns the stored user message; assistant output streams via onAgentEvent. */
-  sendMessage: (threadId: string, text: string, attachments: Attachment[]) =>
-    invoke<Message>("send_message", { threadId, text, attachments }),
+  sendMessage: (threadId: string, text: string, attachments: Attachment[], queue: boolean) =>
+    invoke<Message>("send_message", { threadId, text, attachments, queue }),
   /** Classifies a dropped path as a file, folder, or image. */
   attachmentForPath: (path: string) => invoke<Attachment>("attachment_for_path", { path }),
   /** Lets the webview show an attached image as a thumbnail. */
@@ -389,6 +404,9 @@ export const api = {
   /** Stops one running subagent (Claude only). */
   stopSubagent: (threadId: string, toolId: string) =>
     invoke<void>("stop_subagent", { threadId, toolId }),
+  /** Takes back a message queued behind the running turn, so it can be edited. */
+  removeQueued: (threadId: string, messageId: string) =>
+    invoke<void>("remove_queued", { threadId, messageId }),
   /** Cancels the running turn, if any, and clears the goal. */
   stopGoal: (threadId: string) => invoke<void>("stop_goal", { threadId }),
   respondApproval: (threadId: string, approvalId: string, allow: boolean) =>

@@ -7,6 +7,8 @@ interface ChoicePanelProps {
   onPick: (option: string) => void;
   /** Hides the panel and moves the focus to the composer to write an answer. */
   onOwn: () => void;
+  /** Hides the panel without an answer, on Escape. */
+  onDismiss: () => void;
   /** Keys act on the panel only while the draft is empty, so digits and Enter still work in a draft. */
   draftEmpty: boolean;
 }
@@ -15,7 +17,13 @@ interface ChoicePanelProps {
  * Numbered options above the composer. A number key or the arrows highlight an option; Enter
  * sends the highlighted one. The last row writes an answer instead of sending.
  */
-export default function ChoicePanel({ options, onPick, onOwn, draftEmpty }: ChoicePanelProps) {
+export default function ChoicePanel({
+  options,
+  onPick,
+  onOwn,
+  onDismiss,
+  draftEmpty,
+}: ChoicePanelProps) {
   // Rows are the options, then "Submit my own response" at index options.length.
   const own = options.length;
   const [active, setActive] = useState<number | null>(null);
@@ -29,6 +37,13 @@ export default function ChoicePanel({ options, onPick, onOwn, draftEmpty }: Choi
       // A field the user is typing in keeps its keys.
       const target = e.target as HTMLElement | null;
       if (target?.matches?.("input, textarea, select")) return;
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onDismiss();
+        return;
+      }
 
       const current = activeRef.current;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -61,7 +76,7 @@ export default function ChoicePanel({ options, onPick, onOwn, draftEmpty }: Choi
     // Capture phase, so the editor does not also act on these keys (history, send).
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [draftEmpty, options, onPick, onOwn, own]);
+  }, [draftEmpty, options, onPick, onOwn, onDismiss, own]);
 
   const rowClass = (highlighted: boolean) =>
     `flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] border-none px-2.5 py-1.5 text-left text-[length:var(--fs-md)] text-fg ${highlighted ? "bg-selected" : "bg-transparent hover:bg-hover"}`;
@@ -88,7 +103,7 @@ export default function ChoicePanel({ options, onPick, onOwn, draftEmpty }: Choi
         role="option"
         aria-selected={active === own}
         className={rowClass(active === own)}
-        onClick={() => setActive(own)}
+        onClick={onOwn}
       >
         <kbd className="kbd flex-none">{own + 1}</kbd>
         <span className="min-w-0 flex-1 truncate text-fg-muted">Submit my own response</span>

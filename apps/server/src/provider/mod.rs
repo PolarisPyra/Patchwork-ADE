@@ -370,6 +370,11 @@ pub enum Parsed {
         tool_id: String,
         task_id: String,
     },
+    /// A shell command the agent started itself, in the background; it runs past its tool call.
+    BackgroundTask {
+        tool_id: String,
+        description: String,
+    },
     /// That subagent ended, which for one sent to the background is after its tool call.
     TaskEnded {
         tool_id: String,

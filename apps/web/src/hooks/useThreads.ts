@@ -100,6 +100,26 @@ export function applyAgentEvent(thread: Thread, event: AgentEvent): Thread {
         approvals: m.approvals.map((a) => (a.id === approvalId ? { ...a, status } : a)),
       }));
     }
+    case "messageQueued": {
+      const { messageId, queued } = event;
+      return updateMessage(thread, messageId, (m) => ({ ...m, queued }));
+    }
+    case "messageRemoved":
+      return { ...thread, messages: thread.messages.filter((m) => m.id !== event.messageId) };
+    case "backgroundTaskStarted": {
+      const { messageId, task } = event;
+      return updateMessage(thread, messageId, (m) => ({
+        ...m,
+        background: [...m.background, task],
+      }));
+    }
+    case "backgroundTaskEnded": {
+      const { messageId, toolId } = event;
+      return updateMessage(thread, messageId, (m) => ({
+        ...m,
+        background: m.background.filter((t) => t.toolId !== toolId),
+      }));
+    }
     case "turnCompleted": {
       const { messageId, status, error } = event;
       // Nothing can still be running once the turn has ended (mirrors runner.rs).
@@ -291,9 +311,10 @@ export function useThreads(initialProjectId: string | null, onTurnCompleted: () 
     attachments: Attachment[],
     draft: NewThreadOptions,
     projectId: string | null,
+    queue: boolean,
   ): Promise<void> {
     const thread = selected ?? (await createThread(projectId, draft));
-    const message = await api.sendMessage(thread.id, text, attachments);
+    const message = await api.sendMessage(thread.id, text, attachments, queue);
     setThreads((prev) =>
       prev.map((t) =>
         t.id !== thread.id

@@ -142,6 +142,8 @@ fn user_message(text: &str, attachments: Vec<Attachment>) -> Message {
         approvals: vec![],
         attachments,
         steer: false,
+        queued: false,
+        background: Vec::new(),
         thinking: String::new(),
         finished_at: None,
         usage: None,
@@ -486,6 +488,7 @@ impl Server {
         thread_id: String,
         text: String,
         attachments: Vec<Attachment>,
+        queue: bool,
     ) -> Res<Message> {
         let images = provider::load_images(&attachments)?;
         if provider::is_goal_command(&text) {
@@ -515,6 +518,7 @@ impl Server {
                 ));
             }
         }
+        // Checked before the message is stored, so a refused message leaves no trace.
         let mut msg = user_message(&text, attachments.clone());
         // Stored before the agent sees it, so its answer is stored after it.
         let m = msg.clone();
@@ -528,13 +532,23 @@ impl Server {
         })?;
         // While a turn runs, the message steers it, or waits for it to end when the
         // agent cannot take it now.
-        match self.runner.steer(
-            &thread_id,
-            session_id.as_deref(),
-            &text,
-            &attachments,
-            &images,
-        ) {
+        let delivery = if queue
+            && self
+                .runner
+                .enqueue(&thread_id, &msg.id, &text, &attachments, &images)
+        {
+            Delivery::Queued
+        } else {
+            self.runner.steer(
+                &thread_id,
+                &msg.id,
+                session_id.as_deref(),
+                &text,
+                &attachments,
+                &images,
+            )
+        };
+        match delivery {
             Delivery::Steered => {
                 msg.steer = true;
                 self.store.update_thread(&thread_id, |t| {
@@ -543,7 +557,16 @@ impl Server {
                     }
                 })?;
             }
-            Delivery::Queued => {}
+            Delivery::Queued => {
+                // Read under the store's lock: a turn that ends meanwhile has already taken the
+                // message from its queue, and then its own unflagging comes after this write.
+                self.store.update_thread(&thread_id, |t| {
+                    if let Some(m) = t.messages.iter_mut().find(|m| m.id == msg.id) {
+                        m.queued = self.runner.is_queued(&thread_id, &m.id);
+                        msg.queued = m.queued;
+                    }
+                })?;
+            }
             Delivery::NotRunning => {
                 self.runner
                     .start_turn(self, thread_id, text, attachments, images)?
@@ -559,7 +582,31 @@ impl Server {
             let active = t.goal.is_some_and(|g| g.status == GoalStatus::Active);
             provider::goal_pause(t.agent, t.session_id.as_deref()?).filter(|_| active)
         });
-        self.runner.cancel(thread_id, pause);
+        for message_id in self.runner.cancel(thread_id, pause) {
+            runner::publish(
+                self,
+                thread_id,
+                AgentEvent::MessageQueued {
+                    message_id,
+                    queued: false,
+                },
+            );
+        }
+    }
+
+    /// Takes back a message sent mid-turn that has not started yet, so it can be edited.
+    pub fn remove_queued(&self, thread_id: &str, message_id: &str) -> Res<()> {
+        if !self.runner.withdraw(thread_id, message_id) {
+            return Err("That message has already been sent".into());
+        }
+        runner::publish(
+            self,
+            thread_id,
+            AgentEvent::MessageRemoved {
+                message_id: message_id.into(),
+            },
+        );
+        Ok(())
     }
 
     pub fn stop_subagent(&self, thread_id: &str, tool_id: &str) -> Res<()> {
@@ -608,7 +655,7 @@ impl Server {
                 AgentKind::Gemini => "Stop the current goal.",
                 _ => "/goal clear",
             };
-            self.send_message(thread_id.into(), stop.into(), vec![])?;
+            self.send_message(thread_id.into(), stop.into(), vec![], false)?;
         }
         Ok(())
     }

@@ -277,6 +277,16 @@ pub fn parse(v: &Value, root: &str, message_id: &str) -> Vec<Parsed> {
                     tool_id: tool_id.into(),
                     task_id: task_id.into(),
                 });
+                // A command the agent backgrounded itself, not one inside a subagent.
+                if v["task_type"] == "local_bash"
+                    && v["is_backgrounded"] == true
+                    && v["owned_by_subagent"] != true
+                {
+                    out.push(Parsed::BackgroundTask {
+                        tool_id: tool_id.into(),
+                        description: v["description"].as_str().unwrap_or_default().into(),
+                    });
+                }
             }
         }
         Some("rate_limit_event") => {

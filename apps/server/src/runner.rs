@@ -2,7 +2,7 @@
 //! output into `AgentEvent`s. Each turn is one child process; its stdin stays
 //! open while the turn runs so approvals can be answered.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,6 +31,8 @@ type Pending = Arc<Mutex<HashMap<String, (String, Value)>>>;
 
 /// A message sent during a turn, kept until the agent answers it or the turn ends.
 struct FollowUp {
+    /// The user message this is, so the thread can show it as queued or drop it.
+    message_id: String,
     text: String,
     attachments: Vec<Attachment>,
     images: Vec<provider::Image>,
@@ -73,6 +75,9 @@ struct RunningTurn {
 #[derive(Default)]
 pub struct Runner {
     turns: Mutex<HashMap<String, RunningTurn>>,
+    /// Messages this process has handed to a turn, whether steered or queued. Written under the
+    /// `turns` lock, so a withdrawal sees it in the same order as the queue it checks.
+    handed_over: Mutex<HashSet<String>>,
 }
 
 impl Runner {
@@ -218,6 +223,7 @@ impl Runner {
     pub fn steer(
         &self,
         thread_id: &str,
+        message_id: &str,
         session_id: Option<&str>,
         text: &str,
         attachments: &[Attachment],
@@ -228,10 +234,15 @@ impl Runner {
             return Delivery::NotRunning;
         };
         let follow_up = FollowUp {
+            message_id: message_id.into(),
             text: text.into(),
             attachments: attachments.to_vec(),
             images: images.to_vec(),
         };
+        self.handed_over
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(message_id.into());
         // A stopped turn takes nothing more; the message starts the next turn.
         if turn.cancelled.load(Ordering::SeqCst) {
             turn.queue
@@ -272,6 +283,67 @@ impl Runner {
         Delivery::Queued
     }
 
+    /// Holds a message for the next turn of the one running in `thread_id`, even when the agent
+    /// could take it now. False when no turn is running there.
+    pub fn enqueue(
+        &self,
+        thread_id: &str,
+        message_id: &str,
+        text: &str,
+        attachments: &[Attachment],
+        images: &[provider::Image],
+    ) -> bool {
+        let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(turn) = turns.get(thread_id) else {
+            return false;
+        };
+        self.handed_over
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(message_id.into());
+        turn.queue
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(FollowUp {
+                message_id: message_id.into(),
+                text: text.into(),
+                attachments: attachments.to_vec(),
+                images: images.to_vec(),
+            });
+        true
+    }
+
+    /// Whether the message is waiting in the queue of the turn running in `thread_id`.
+    pub fn is_queued(&self, thread_id: &str, message_id: &str) -> bool {
+        let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+        turns.get(thread_id).is_some_and(|turn| {
+            turn.queue
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .iter()
+                .any(|f| f.message_id == message_id)
+        })
+    }
+
+    /// Takes a queued message back so it is not sent. False if the agent has already been handed
+    /// it. A message this process never handed over was queued before a restart, so nothing
+    /// holds it and it counts as taken back.
+    pub fn withdraw(&self, thread_id: &str, message_id: &str) -> bool {
+        let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(turn) = turns.get(thread_id) {
+            let mut queue = turn.queue.lock().unwrap_or_else(PoisonError::into_inner);
+            if let Some(index) = queue.iter().position(|f| f.message_id == message_id) {
+                queue.remove(index);
+                return true;
+            }
+        }
+        !self
+            .handed_over
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(message_id)
+    }
+
     /// Stops one subagent of the running turn, leaving the rest of the turn going.
     pub fn stop_subagent(&self, thread_id: &str, tool_id: &str) -> Result<(), String> {
         let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
@@ -294,14 +366,18 @@ impl Runner {
 
     /// Stops the turn and drops the messages waiting for it. `last_line` is written
     /// to the agent first, with a moment to act on it.
-    pub fn cancel(&self, thread_id: &str, last_line: Option<String>) {
+    pub fn cancel(&self, thread_id: &str, last_line: Option<String>) -> Vec<String> {
         let turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut dropped = Vec::new();
         if let Some(turn) = turns.get(thread_id) {
             turn.cancelled.store(true, Ordering::SeqCst);
-            turn.queue
+            dropped = turn
+                .queue
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
-                .clear();
+                .drain(..)
+                .map(|f| f.message_id)
+                .collect();
             let pid = turn.pid;
             if last_line.is_some_and(|line| write_line(&turn.stdin, &line)) {
                 std::thread::spawn(move || {
@@ -312,6 +388,7 @@ impl Runner {
                 workspace::signal_process_group(pid, libc::SIGTERM);
             }
         }
+        dropped
     }
 
     /// Sends the user's answer to a pending approval and records it.
@@ -519,6 +596,8 @@ fn assistant_message() -> Message {
         approvals: vec![],
         attachments: vec![],
         steer: false,
+        queued: false,
+        background: Vec::new(),
         thinking: String::new(),
         finished_at: None,
         usage: None,
@@ -560,6 +639,8 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
     // Subagents still running, and whether the call of one sent to the background, which
     // returns at once, failed; it is reported finished when the subagent ends.
     let mut running_tasks: HashMap<String, Option<bool>> = HashMap::new();
+    // Background shell commands the agent started itself: tool call id → the message they are shown in.
+    let mut shell_tasks: HashMap<String, String> = HashMap::new();
     // Every message of the turn: the first reply, then one per steering message taken.
     let mut segments = vec![turn.message_id.clone()];
     let mut stream_error: Option<String> = None;
@@ -728,6 +809,19 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                         .unwrap_or_else(PoisonError::into_inner)
                         .insert(tool_id, task_id);
                 }
+                Parsed::BackgroundTask {
+                    tool_id,
+                    description,
+                } => {
+                    shell_tasks.insert(tool_id.clone(), turn.message_id.clone());
+                    turn.publish(AgentEvent::BackgroundTaskStarted {
+                        message_id: turn.message_id.clone(),
+                        task: BackgroundTask {
+                            tool_id,
+                            description,
+                        },
+                    });
+                }
                 Parsed::Usage(windows) => turn.server.usage.record(turn.agent, windows),
                 Parsed::RequestUsage {
                     request_id,
@@ -758,6 +852,12 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
                     });
                 }
                 Parsed::TaskEnded { tool_id, failed } => {
+                    if let Some(message_id) = shell_tasks.remove(&tool_id) {
+                        turn.publish(AgentEvent::BackgroundTaskEnded {
+                            message_id,
+                            tool_id: tool_id.clone(),
+                        });
+                    }
                     if let Some(Some(call_failed)) = running_tasks.remove(&tool_id)
                         && let Some(owner) = tool_owner.get(&tool_id)
                     {
@@ -841,6 +941,13 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
     }
     // The stream has closed, whether the turn finished, failed, or was cancelled.
     turn.save_text(&mut unsaved);
+    // The agent process is gone, and the background commands it started with it.
+    for (tool_id, message_id) in shell_tasks.drain() {
+        turn.publish(AgentEvent::BackgroundTaskEnded {
+            message_id,
+            tool_id,
+        });
+    }
 
     let exit = child.wait().ok();
     let tail = stderr_tail.join().unwrap_or_default();
@@ -941,6 +1048,17 @@ fn drive(mut turn: Turn, mut child: Child, stdout: ChildStdout, stderr_tail: Joi
         error,
     });
 
+    // Waiting messages are sent now, so they leave the queue before the next turn starts.
+    for f in &waiting {
+        publish(
+            &turn.server,
+            &turn.thread_id,
+            AgentEvent::MessageQueued {
+                message_id: f.message_id.clone(),
+                queued: false,
+            },
+        );
+    }
     if !waiting.is_empty() {
         let text = waiting
             .iter()
@@ -1025,6 +1143,10 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
             thread.goal = goal.clone();
             return;
         }
+        AgentEvent::MessageRemoved { message_id } => {
+            thread.messages.retain(|m| m.id != *message_id);
+            return;
+        }
         AgentEvent::TextDelta { message_id, .. }
         | AgentEvent::Thinking { message_id, .. }
         | AgentEvent::ToolStarted { message_id, .. }
@@ -1034,6 +1156,9 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
         | AgentEvent::ApprovalRequested { message_id, .. }
         | AgentEvent::ApprovalResolved { message_id, .. }
         | AgentEvent::Usage { message_id, .. }
+        | AgentEvent::MessageQueued { message_id, .. }
+        | AgentEvent::BackgroundTaskStarted { message_id, .. }
+        | AgentEvent::BackgroundTaskEnded { message_id, .. }
         | AgentEvent::TurnCompleted { message_id, .. } => message_id,
     };
     let Some(msg) = thread.messages.iter_mut().find(|m| m.id == *message_id) else {
@@ -1057,6 +1182,11 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
         }
         AgentEvent::PlanUpdated { steps, .. } => msg.plan = steps.clone(),
         AgentEvent::Usage { usage, .. } => msg.usage = Some(*usage),
+        AgentEvent::MessageQueued { queued, .. } => msg.queued = *queued,
+        AgentEvent::BackgroundTaskStarted { task, .. } => msg.background.push(task.clone()),
+        AgentEvent::BackgroundTaskEnded { tool_id, .. } => {
+            msg.background.retain(|t| t.tool_id != *tool_id);
+        }
         AgentEvent::FileTouched { path, .. } => {
             if !msg.files.contains(path) {
                 msg.files.push(path.clone());
@@ -1110,7 +1240,9 @@ fn apply(thread: &mut Thread, event: &AgentEvent) {
                 step.status = StepStatus::Pending;
             }
         }
-        AgentEvent::MessageStarted { .. } | AgentEvent::GoalUpdated { .. } => {}
+        AgentEvent::MessageStarted { .. }
+        | AgentEvent::GoalUpdated { .. }
+        | AgentEvent::MessageRemoved { .. } => {}
     }
 }
 

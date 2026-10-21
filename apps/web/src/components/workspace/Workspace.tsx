@@ -8,6 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { XIcon } from "@phosphor-icons/react";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { api, defaultAgentOf, type FileChange, type Message, type Settings } from "~/api";
 import type { UpdateSettings } from "~/app/App";
 import type { CanvasTab } from "~/components/canvas/Canvas";
@@ -221,6 +222,16 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
     document.addEventListener("mouseup", onUp);
   }
 
+  /** Asks first, then removes the selected thread, the same as the sidebar's Remove item. */
+  const removeSelected = () => {
+    if (!selected) return;
+    const { id, title } = selected;
+    attempt(async () => {
+      if (await confirm(`Remove ${displayTitle(title)}?`, { title: "Remove", kind: "warning" }))
+        await deleteThread(id);
+    });
+  };
+
   // Global shortcuts. Re-registered each render so handlers see current state.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -235,6 +246,8 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
         setPaletteOpen((o) => !o);
       } else if (mod && key === "t") {
         newThreadIn(projectId);
+      } else if (mod && key === "w" && selected) {
+        removeSelected();
       } else if (mod && e.key === ",") {
         setSettingsOpen(true);
       } else if (e.key === "Tab" && !e.shiftKey && !isTypingTarget(document.activeElement)) {
@@ -373,7 +386,9 @@ export default function Workspace({ settings, updateSettings, toggleTheme }: Wor
                 setChangeFocus(paths);
                 setView("changes");
               }}
-              onSend={(text, attachments, draft) => send(text, attachments, draft, projectId)}
+              onSend={(text, attachments, draft, queue) =>
+                send(text, attachments, draft, projectId, queue)
+              }
               onNewChat={() => newThreadIn(projectId)}
               onClearThread={(id) => clearThread(id).catch((e: unknown) => setError(errorText(e)))}
               onCancel={(id) => api.cancelTurn(id)}

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -81,7 +82,8 @@ export default function Messages({
   onRetry,
   tokens,
 }: MessagesProps) {
-  const { messages } = thread;
+  // Queued messages wait above the composer until the turn ends, so they are not shown here.
+  const messages = useMemo(() => thread.messages.filter((m) => !m.queued), [thread.messages]);
   const listRef = useRef<LegendListRef>(null);
   const [atEnd, setAtEnd] = useState(true);
 
@@ -136,7 +138,8 @@ export default function Messages({
             );
           }
           const previous = messages[index - 1];
-          const usage = item.role === "assistant" && item.status !== "streaming" && tokens.showUsage;
+          const usage =
+            item.role === "assistant" && item.status !== "streaming" && tokens.showUsage;
           return (
             <div className="px-6">
               <div
@@ -313,7 +316,9 @@ function UsageLine({ usage, warnAbove }: { usage: TokenUsage; warnAbove: number 
     >
       <span className="inline-flex items-center gap-1">
         {large && <WarningIcon size={13} />}
-        {large ? `Context over ${formatTokens(warnAbove)}` : `Context ${formatTokens(usage.context)}`}
+        {large
+          ? `Context over ${formatTokens(warnAbove)}`
+          : `Context ${formatTokens(usage.context)}`}
       </span>
       <span>Cache read {formatTokens(usage.cacheRead)} tokens</span>
       <span>Cache write {formatTokens(usage.cacheWrite)} tokens</span>

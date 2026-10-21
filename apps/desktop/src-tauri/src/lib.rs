@@ -205,8 +205,9 @@ fn send_message(
     thread_id: String,
     text: String,
     attachments: Vec<Attachment>,
+    queue: bool,
 ) -> Res<Message> {
-    server.send_message(thread_id, text, attachments)
+    server.send_message(thread_id, text, attachments, queue)
 }
 
 #[tauri::command]
@@ -231,6 +232,11 @@ fn cancel_turn(server: Srv, thread_id: String) {
 #[tauri::command]
 fn stop_subagent(server: Srv, thread_id: String, tool_id: String) -> Res<()> {
     server.stop_subagent(&thread_id, &tool_id)
+}
+
+#[tauri::command]
+fn remove_queued(server: Srv, thread_id: String, message_id: String) -> Res<()> {
+    server.remove_queued(&thread_id, &message_id)
 }
 
 #[tauri::command]
@@ -397,6 +403,7 @@ pub fn run() {
             cancel_turn,
             stop_goal,
             stop_subagent,
+            remove_queued,
             respond_approval,
             scan_imports,
             import_threads,

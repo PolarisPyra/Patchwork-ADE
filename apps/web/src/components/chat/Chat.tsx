@@ -15,6 +15,7 @@ import {
   type AccessMode,
   type AgentKind,
   type Attachment,
+  type BackgroundTask,
   type FileChange,
   type Message,
   type Project,
@@ -29,6 +30,8 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import ChoicePanel from "~/components/chat/ChoicePanel";
 import { parseChoices } from "~/components/chat/choices";
 import GoalBanner, { currentActivity } from "~/components/chat/GoalBanner";
+import BackgroundTasks from "~/components/chat/BackgroundTasks";
+import QueuedMessages from "~/components/chat/QueuedMessages";
 import LineageCard from "~/components/chat/LineageCard";
 import type { HistoryEntry } from "~/components/chat/Composer";
 import Messages, { ShellContext } from "~/components/chat/Messages";
@@ -64,7 +67,12 @@ interface ChatProps {
   onOpenFolder: () => void;
   onOpenCanvas: (path: string, message: Message | null, tab: CanvasTab) => void;
   onShowChanges: (paths: string[]) => void;
-  onSend: (text: string, attachments: Attachment[], draft: NewThreadOptions) => Promise<void>;
+  onSend: (
+    text: string,
+    attachments: Attachment[],
+    draft: NewThreadOptions,
+    queue: boolean,
+  ) => Promise<void>;
   onCancel: (threadId: string) => Promise<void>;
   onSetModel: (threadId: string, agent: AgentKind, model: string | null) => Promise<void>;
   onSetAccessMode: (threadId: string, mode: AccessMode) => Promise<void>;
@@ -149,6 +157,11 @@ export default function Chat({
     effort: lastEffort(defaultAgent),
   };
   const empty = !thread || thread.messages.length === 0;
+  const queued = useMemo(() => thread?.messages.filter((m) => m.queued) ?? [], [thread?.messages]);
+  const background = useMemo(
+    () => thread?.messages.flatMap((m) => m.background) ?? [],
+    [thread?.messages],
+  );
   const agent = thread?.agent ?? newOpts.agent;
   const model = thread ? thread.model : newOpts.model;
   const accessMode = thread?.accessMode ?? newOpts.accessMode;
@@ -221,12 +234,17 @@ export default function Chat({
     };
   }, []);
 
-  async function dispatch(text: string, files: Attachment[], restoreOnError: boolean) {
+  async function dispatch(
+    text: string,
+    files: Attachment[],
+    restoreOnError: boolean,
+    queue = false,
+  ) {
     const sentKey = key;
     setError(null);
     setSending(true);
     try {
-      await onSend(text, files, newOpts);
+      await onSend(text, files, newOpts, queue);
     } catch (e) {
       setError(errorText(e));
       if (restoreOnError) {
@@ -265,7 +283,7 @@ export default function Chat({
     void dispatch("/compact", [], true);
   }
 
-  function submit() {
+  function submit(queue: boolean) {
     const text = draft.trim();
     if (text === "/clear" && attachments.length === 0) {
       void clearChat();
@@ -295,7 +313,26 @@ export default function Chat({
     }
     setDraft("");
     setAttachments([]);
-    void dispatch(text, attachments, true);
+    void dispatch(text, attachments, true, queue);
+  }
+
+  // Takes a queued message back from the agent's queue. Editing puts its text and attachments in
+  // the composer; it only does so once the server has taken the message back.
+  function takeBack(message: Message, edit: boolean) {
+    if (!thread) return;
+    api
+      .removeQueued(thread.id, message.id)
+      .then(() => {
+        if (!edit) return;
+        setDraft(message.text);
+        setAttachments(message.attachments);
+      })
+      .catch((e: unknown) => setError(errorText(e)));
+  }
+
+  function stopBackground(task: BackgroundTask) {
+    if (!thread) return;
+    api.stopSubagent(thread.id, task.toolId).catch((e: unknown) => setError(errorText(e)));
   }
 
   // Answers the resume prompt. Compacting leaves the draft in the composer, so the message
@@ -405,8 +442,11 @@ export default function Chat({
     if (choiceSource) setDismissedChoices(choiceSource.id);
     void dispatch(option, [], true);
   };
-  const writeOwnAnswer = () => {
+  const dismissChoices = () => {
     if (choiceSource) setDismissedChoices(choiceSource.id);
+  };
+  const writeOwnAnswer = () => {
+    dismissChoices();
     document.querySelector<HTMLElement>(".composer-editor .ProseMirror")?.focus();
   };
   const isNew = !thread || empty;
@@ -479,9 +519,17 @@ export default function Chat({
             options={choices}
             onPick={answerChoice}
             onOwn={writeOwnAnswer}
+            onDismiss={dismissChoices}
             draftEmpty={!draft.trim() && attachments.length === 0}
           />
         )}
+        <BackgroundTasks tasks={background} onStop={stopBackground} />
+        <QueuedMessages
+          messages={queued}
+          canEdit={!draft.trim() && attachments.length === 0}
+          onEdit={(message) => takeBack(message, true)}
+          onRemove={(message) => takeBack(message, false)}
+        />
         {thread?.goal && goalKey !== dismissedGoal && (
           <GoalBanner
             goal={thread.goal}

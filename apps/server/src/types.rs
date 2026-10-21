@@ -160,6 +160,16 @@ pub struct ToolCall {
     pub ended_at: Option<u64>,
 }
 
+/// A shell command the agent started in the background, still running.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundTask {
+    /// The id of the tool call that started it; stops it.
+    pub tool_id: String,
+    /// What the command does, as the agent described it.
+    pub description: String,
+}
+
 /// A subagent an agent started, e.g. with Claude Code's Task tool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -306,6 +316,12 @@ pub struct Message {
     /// Sent while a turn was running, to steer that turn rather than start one.
     #[serde(default)]
     pub steer: bool,
+    /// Sent while a turn was running and still waiting for it to end; then it starts the next turn.
+    #[serde(default)]
+    pub queued: bool,
+    /// Background shell commands still running after the reply ended; they keep the turn going.
+    #[serde(default)]
+    pub background: Vec<BackgroundTask>,
     /// The agent's reasoning while it works. Live only: it is not stored.
     #[serde(default)]
     pub thinking: String,
@@ -507,6 +523,25 @@ pub enum AgentEvent {
     Usage {
         message_id: String,
         usage: TokenUsage,
+    },
+    /// A message sent mid-turn is now waiting for the turn to end (`queued`), or no longer is.
+    MessageQueued {
+        message_id: String,
+        queued: bool,
+    },
+    /// A queued message was taken back, so it leaves the thread.
+    MessageRemoved {
+        message_id: String,
+    },
+    /// A background shell command started and is still running.
+    BackgroundTaskStarted {
+        message_id: String,
+        task: BackgroundTask,
+    },
+    /// A background shell command ended.
+    BackgroundTaskEnded {
+        message_id: String,
+        tool_id: String,
     },
     /// Terminal event for a turn. `status` is complete | error | cancelled.
     TurnCompleted {

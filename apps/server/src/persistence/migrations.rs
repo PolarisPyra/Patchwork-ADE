@@ -76,6 +76,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE messages ADD COLUMN finished_at INTEGER;",
     // 11: the tokens a reply used, as JSON; NULL for agents that do not report usage.
     "ALTER TABLE messages ADD COLUMN usage TEXT;",
+    // 12: a message held in the queue when the app closed. The agent never read it.
+    "ALTER TABLE messages ADD COLUMN queued INTEGER NOT NULL DEFAULT 0;",
 ];
 
 /// Brings the schema up to date. Returns the version the database was at before.

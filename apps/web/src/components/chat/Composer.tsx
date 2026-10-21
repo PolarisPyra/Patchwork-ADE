@@ -18,7 +18,8 @@ interface ComposerProps {
   /** The draft as Markdown. */
   value: string;
   onChange: (text: string) => void;
-  onSubmit: () => void;
+  /** Sends the draft; `queue` holds it for after the running turn instead of steering the turn. */
+  onSubmit: (queue: boolean) => void;
   onStop: () => void;
   working: boolean;
   error: string | null;
@@ -191,7 +192,12 @@ export default function Composer({
         .slice(0, MENTION_LIMIT)
         .map((path) => ({ id: path, label: path }));
     },
-    render: () => ({
+    render: mentionMenuRender,
+  };
+
+  // The @ menu's list and its keys.
+  function mentionMenuRender(): ReturnType<NonNullable<MentionSuggestion["render"]>> {
+    return {
       onStart: (props) => {
         mentionOpen.current = true;
         mentionIndex.current = 0;
@@ -223,13 +229,16 @@ export default function Composer({
         return false;
       },
       onExit: closeMention,
-    }),
-  };
+    };
+  }
 
   // Event handlers are read through refs, so the editor always calls the current ones.
   const changed = useRef(onChange);
   changed.current = onChange;
   const keyDown = useRef<(event: KeyboardEvent) => boolean>(() => false);
+
+  // Holds the next message for after the running turn. Cleared by each send.
+  const [queueNext, setQueueNext] = useState(false);
 
   const editor = useEditor({
     extensions: composerExtensions("Reply or describe the next change…", mentionSuggestion),
@@ -339,13 +348,18 @@ export default function Composer({
     // Enter sends, unless the draft is over the limit; Shift+Enter continues a list, or starts a
     // new line (the editor's default) elsewhere.
     if (event.key === "Enter" && !event.shiftKey) {
-      if (overBy <= 0) onSubmit();
+      if (overBy <= 0) sendDraft();
       return true;
     }
     if (event.key === "Enter" && continueList(editor)) return true;
     return false;
   }
   keyDown.current = handleKey;
+
+  function sendDraft() {
+    onSubmit(working && queueNext);
+    setQueueNext(false);
+  }
 
   return (
     <div
@@ -422,13 +436,31 @@ export default function Composer({
             <SquareIcon size={12} weight="fill" />
           </button>
         )}
+        {working && (
+          <button
+            className="h-8 flex-none cursor-pointer rounded-[var(--radius)] border border-border bg-transparent px-2 text-[length:var(--fs-sm)] text-fg-muted hover:bg-hover aria-[pressed=true]:bg-selected-muted aria-[pressed=true]:text-fg"
+            onClick={() => setQueueNext(!queueNext)}
+            aria-pressed={queueNext}
+            title={
+              queueNext
+                ? "Sends after the running turn ends. Click to steer the turn instead."
+                : "Steers the running turn. Click to send after it ends instead."
+            }
+          >
+            {queueNext ? "Queue" : "Steer"}
+          </button>
+        )}
         {(!working || value.trim() || attachments.length > 0) && (
           <button
             className="grid h-8 w-8 flex-none cursor-pointer place-items-center rounded-[var(--radius)] border-none bg-accent text-on-accent enabled:hover:bg-accent-hover disabled:cursor-default disabled:bg-selected-muted disabled:text-fg-subtle"
-            onClick={onSubmit}
+            onClick={sendDraft}
             disabled={(!value.trim() && attachments.length === 0) || overBy > 0}
-            title={working ? "Steer the running turn" : "Send"}
-            aria-label={working ? "Steer the running turn" : "Send"}
+            title={
+              working ? (queueNext ? "Queue for after the turn" : "Steer the running turn") : "Send"
+            }
+            aria-label={
+              working ? (queueNext ? "Queue for after the turn" : "Steer the running turn") : "Send"
+            }
           >
             <ArrowUpIcon size={16} />
           </button>
